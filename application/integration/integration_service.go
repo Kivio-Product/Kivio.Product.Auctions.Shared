@@ -8,7 +8,6 @@ import (
 	"github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/dto"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/integration"
 	infraIntegration "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/integration"
-	infraSheets "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/sheets"
 	"github.com/google/uuid"
 )
 
@@ -23,10 +22,10 @@ type IntegrationService interface {
 
 type integrationService struct {
 	integrationRepo infraIntegration.IntegrationRepository
-	googleSheetRepo infraSheets.GoogleSheetsRepository
+	googleSheetRepo infraIntegration.GoogleSheetsRepository
 }
 
-func NewIntegrationService(repo infraIntegration.IntegrationRepository, gsRepo infraSheets.GoogleSheetsRepository) IntegrationService {
+func NewIntegrationService(repo infraIntegration.IntegrationRepository, gsRepo infraIntegration.GoogleSheetsRepository) IntegrationService {
 	return &integrationService{
 		integrationRepo: repo,
 		googleSheetRepo: gsRepo,

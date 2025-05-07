@@ -1,4 +1,4 @@
-package sharedinfrastructure
+package infrastructure
 
 import (
 	"bufio"
