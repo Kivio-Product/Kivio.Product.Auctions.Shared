@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 
-	offer "github.com/Kivio-Product/Kivio.Product.Auctions.Domain.Shared/offer"
+	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/offer_specification"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
@@ -19,7 +19,7 @@ type OfferSpecificationRepository struct {
 }
 
 type IOfferSpecificationRepository interface {
-	SaveOfferSpecification(ctx context.Context, spec *offer.OfferSpecification) error
+	SaveOfferSpecification(ctx context.Context, spec *domain.OfferSpecification) error
 }
 
 func NewOfferSpecificationRepository() IOfferSpecificationRepository {
@@ -40,7 +40,7 @@ func NewOfferSpecificationRepository() IOfferSpecificationRepository {
 	}
 }
 
-func (r *OfferSpecificationRepository) SaveOfferSpecification(ctx context.Context, spec *offer.OfferSpecification) error {
+func (r *OfferSpecificationRepository) SaveOfferSpecification(ctx context.Context, spec *domain.OfferSpecification) error {
 	item, err := dynamodbattribute.MarshalMap(spec)
 	if err != nil {
 		return fmt.Errorf("failed to map offer specification: %w", err)

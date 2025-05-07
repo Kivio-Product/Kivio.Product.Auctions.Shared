@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 
-	pointofsale "github.com/Kivio-Product/Kivio.Product.Auctions.Offers/internal/domain/pointOfSale"
+	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/point_of_sale"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
@@ -20,11 +20,10 @@ type PosRepository struct {
 }
 
 type IPosRepository interface {
-	SavePointOfSale(ctx context.Context, pointOfSale *pointofsale.PointOfSale) error
-	GetAllPos() ([]pointofsale.PointOfSale, error)
-	GetUserPos(id string) ([]pointofsale.PointOfSale, error)
-	GetPosUser(id string) ([]pointofsale.UserByPos, error)
-	GetPosById(ctx context.Context, posId string) (*pointofsale.PointOfSale, error)
+	SavePointOfSale(ctx context.Context, pointOfSale *domain.PointOfSale) error
+	GetAllPos() ([]domain.PointOfSale, error)
+	GetUserPos(id string) ([]domain.PointOfSale, error)
+	GetPosById(ctx context.Context, posId string) (*domain.PointOfSale, error)
 	DeletePos(ctx context.Context, posId string) error
 }
 
@@ -52,17 +51,17 @@ func NewPosRepository() IPosRepository {
 	}
 }
 
-func (r *PosRepository) GetAllPos() ([]pointofsale.PointOfSale, error) {
+func (r *PosRepository) GetAllPos() ([]domain.PointOfSale, error) {
 	result, err := r.client.Scan(&dynamodb.ScanInput{
 		TableName: aws.String(r.pointOfSaleTable),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan table %s: %w", r.pointOfSaleTable, err)
 	}
-	var pos []pointofsale.PointOfSale
+	var pos []domain.PointOfSale
 
 	for _, item := range result.Items {
-		var fitems pointofsale.PointOfSale
+		var fitems domain.PointOfSale
 		err := dynamodbattribute.UnmarshalMap(item, &fitems)
 		if err != nil {
 			log.Printf("failed to get table items: %v", err)
@@ -74,7 +73,7 @@ func (r *PosRepository) GetAllPos() ([]pointofsale.PointOfSale, error) {
 	return pos, nil
 }
 
-func (r *PosRepository) GetPosById(ctx context.Context, posId string) (*pointofsale.PointOfSale, error) {
+func (r *PosRepository) GetPosById(ctx context.Context, posId string) (*domain.PointOfSale, error) {
 	result, err := r.client.GetItemWithContext(ctx, &dynamodb.GetItemInput{
 		TableName: aws.String(r.pointOfSaleTable),
 		Key: map[string]*dynamodb.AttributeValue{
@@ -92,7 +91,7 @@ func (r *PosRepository) GetPosById(ctx context.Context, posId string) (*pointofs
 		return nil, fmt.Errorf("pos with ID %s not found", posId)
 	}
 
-	var item pointofsale.PointOfSale
+	var item domain.PointOfSale
 	err = dynamodbattribute.UnmarshalMap(result.Item, &item)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal pos with ID %s: %w", posId, err)
@@ -101,17 +100,17 @@ func (r *PosRepository) GetPosById(ctx context.Context, posId string) (*pointofs
 	return &item, nil
 }
 
-func (r *PosRepository) GetUserPos(userId string) ([]pointofsale.PointOfSale, error) {
+func (r *PosRepository) GetUserPos(userId string) ([]domain.PointOfSale, error) {
 	result, err := r.client.Scan(&dynamodb.ScanInput{
 		TableName: aws.String(r.pointOfSaleTable),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan table %s: %w", r.pointOfSaleTable, err)
 	}
-	var pos []pointofsale.PointOfSale
+	var pos []domain.PointOfSale
 
 	for _, item := range result.Items {
-		var fitems pointofsale.PointOfSale
+		var fitems domain.PointOfSale
 		err := dynamodbattribute.UnmarshalMap(item, &fitems)
 		if err != nil {
 			log.Printf("Failed to get table items: %v", err)
@@ -125,31 +124,7 @@ func (r *PosRepository) GetUserPos(userId string) ([]pointofsale.PointOfSale, er
 	return pos, nil
 }
 
-func (r *PosRepository) GetPosUser(posId string) ([]pointofsale.UserByPos, error) {
-	result, err := r.client.Scan(&dynamodb.ScanInput{
-		TableName: aws.String(r.userByPosTable),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to scan table %s: %w", r.userByPosTable, err)
-	}
-	var user []pointofsale.UserByPos
-
-	for _, item := range result.Items {
-		var fitems pointofsale.UserByPos
-		err := dynamodbattribute.UnmarshalMap(item, &fitems)
-		if err != nil {
-			log.Printf("Failed to get table items: %v", err)
-			continue
-		}
-		if fitems.PosId == posId {
-			user = append(user, fitems)
-		}
-	}
-
-	return user, nil
-}
-
-func (r *PosRepository) SavePointOfSale(ctx context.Context, pointOfSale *pointofsale.PointOfSale) error {
+func (r *PosRepository) SavePointOfSale(ctx context.Context, pointOfSale *domain.PointOfSale) error {
 	item, err := dynamodbattribute.MarshalMap(pointOfSale)
 	if err != nil {
 		return fmt.Errorf("failed to map point of sale: %w", err)

@@ -3,42 +3,41 @@ package services
 import (
 	"context"
 
-	pointofsale "github.com/Kivio-Product/Kivio.Product.Auctions.Offers/internal/domain/pointOfSale"
-	"github.com/Kivio-Product/Kivio.Product.Auctions.Offers/internal/infrastructure"
+	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/point_of_sale"
+	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/point_of_sale"
 )
 
 type IPosService interface {
-	GeneratePointOfSale(ctx context.Context, description, name, userId string) (*pointofsale.PointOfSale, error)
-	GetPosByUserId(ctx context.Context, id string) ([]pointofsale.PointOfSale, error)
-	GetPosById(ctx context.Context, id string) (*pointofsale.PointOfSale, error)
+	GeneratePointOfSale(ctx context.Context, description, name, userId string) (*domain.PointOfSale, error)
+	GetPosByUserId(ctx context.Context, id string) ([]domain.PointOfSale, error)
+	GetPosById(ctx context.Context, id string) (*domain.PointOfSale, error)
 	DeletePosById(ctx context.Context, id string) error
 	UpdatePointOfSale(ctx context.Context, name, description, pointOfSaleId, userId string) error
-	GetPos(ctx context.Context) ([]pointofsale.PointOfSale, error)
-	GetusersById(ctx context.Context, id string) ([]pointofsale.UserByPos, error)
+	GetPos(ctx context.Context) ([]domain.PointOfSale, error)
 }
 
 type PosService struct {
 	repo       infrastructure.IPosRepository
-	posFactory pointofsale.PosFactory
+	posFactory domain.PosFactory
 }
 
-func NewPosService(repo infrastructure.IPosRepository, posFactory pointofsale.PosFactory) IPosService {
+func NewPosService(repo infrastructure.IPosRepository, posFactory domain.PosFactory) IPosService {
 	return &PosService{repo: repo, posFactory: posFactory}
 }
 
-func (s *PosService) GeneratePointOfSale(ctx context.Context, description, name, userId string) (*pointofsale.PointOfSale, error) {
+func (s *PosService) GeneratePointOfSale(ctx context.Context, description, name, userId string) (*domain.PointOfSale, error) {
 	pointOfSale, err := s.posFactory.CreatePointOfSale(description, name, userId)
 	if err != nil {
-		return &pointofsale.PointOfSale{}, err
+		return &domain.PointOfSale{}, err
 	}
-	pointOfSale = pointofsale.GenerateCreatedState(pointOfSale)
+	pointOfSale = domain.GenerateCreatedState(pointOfSale)
 	if err := s.repo.SavePointOfSale(ctx, pointOfSale); err != nil {
 		return nil, err
 	}
 	return pointOfSale, nil
 }
 
-func (s *PosService) GetPos(ctx context.Context) ([]pointofsale.PointOfSale, error) {
+func (s *PosService) GetPos(ctx context.Context) ([]domain.PointOfSale, error) {
 	pos, err := s.repo.GetAllPos()
 	if err != nil {
 		return nil, err
@@ -55,7 +54,7 @@ func (s *PosService) UpdatePointOfSale(ctx context.Context, name, description, p
 	return s.repo.SavePointOfSale(ctx, pointOfSale)
 }
 
-func (s *PosService) GetPosByUserId(ctx context.Context, id string) ([]pointofsale.PointOfSale, error) {
+func (s *PosService) GetPosByUserId(ctx context.Context, id string) ([]domain.PointOfSale, error) {
 	items, err := s.repo.GetUserPos(id)
 	if err != nil {
 		return nil, err
@@ -63,18 +62,10 @@ func (s *PosService) GetPosByUserId(ctx context.Context, id string) ([]pointofsa
 	return items, nil
 }
 
-func (s *PosService) GetPosById(ctx context.Context, id string) (*pointofsale.PointOfSale, error) {
+func (s *PosService) GetPosById(ctx context.Context, id string) (*domain.PointOfSale, error) {
 	items, err := s.repo.GetPosById(ctx, id)
 	if err != nil {
-		return &pointofsale.PointOfSale{}, err
-	}
-	return items, nil
-}
-
-func (s *PosService) GetusersById(ctx context.Context, id string) ([]pointofsale.UserByPos, error) {
-	items, err := s.repo.GetPosUser(id)
-	if err != nil {
-		return nil, err
+		return &domain.PointOfSale{}, err
 	}
 	return items, nil
 }

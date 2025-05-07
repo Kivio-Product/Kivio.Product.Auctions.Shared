@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 
-	offer "github.com/Kivio-Product/Kivio.Product.Auctions.Domain.Shared/offer"
+	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/offer"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
@@ -19,10 +19,10 @@ type OfferRepository struct {
 }
 
 type IOfferRepository interface {
-	SaveOffer(ctx context.Context, offer *offer.Offer) error
-	GetAllOffers() ([]offer.Offer, error)
-	GetPosOffers(posId string, limit int, lastKey map[string]*dynamodb.AttributeValue) ([]offer.Offer, map[string]*dynamodb.AttributeValue, error)
-	GetOfferById(ctx context.Context, offerId string) (*offer.Offer, error)
+	SaveOffer(ctx context.Context, offer *domain.Offer) error
+	GetAllOffers() ([]domain.Offer, error)
+	GetPosOffers(posId string, limit int, lastKey map[string]*dynamodb.AttributeValue) ([]domain.Offer, map[string]*dynamodb.AttributeValue, error)
+	GetOfferById(ctx context.Context, offerId string) (*domain.Offer, error)
 	DeleteOffer(ctx context.Context, offerId string) error
 }
 
@@ -44,7 +44,7 @@ func NewOfferRepository() IOfferRepository {
 	}
 }
 
-func (r *OfferRepository) SaveOffer(ctx context.Context, offer *offer.Offer) error {
+func (r *OfferRepository) SaveOffer(ctx context.Context, offer *domain.Offer) error {
 	item, err := dynamodbattribute.MarshalMap(offer)
 	if err != nil {
 		return fmt.Errorf("failed to map offer: %w", err)
@@ -76,17 +76,17 @@ func (r *OfferRepository) DeleteOffer(ctx context.Context, offerId string) error
 	return err
 }
 
-func (r *OfferRepository) GetAllOffers() ([]offer.Offer, error) {
+func (r *OfferRepository) GetAllOffers() ([]domain.Offer, error) {
 	result, err := r.client.Scan(&dynamodb.ScanInput{
 		TableName: aws.String(r.offerTable),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan table %s: %w", r.offerTable, err)
 	}
-	var offers []offer.Offer
+	var offers []domain.Offer
 
 	for _, item := range result.Items {
-		var offer offer.Offer
+		var offer domain.Offer
 		err := dynamodbattribute.UnmarshalMap(item, &offer)
 		if err != nil {
 			log.Printf("failed to get table items: %v", err)
@@ -98,7 +98,7 @@ func (r *OfferRepository) GetAllOffers() ([]offer.Offer, error) {
 	return offers, nil
 }
 
-func (r *OfferRepository) GetPosOffers(posId string, limit int, lastKey map[string]*dynamodb.AttributeValue) ([]offer.Offer, map[string]*dynamodb.AttributeValue, error) {
+func (r *OfferRepository) GetPosOffers(posId string, limit int, lastKey map[string]*dynamodb.AttributeValue) ([]domain.Offer, map[string]*dynamodb.AttributeValue, error) {
 	input := &dynamodb.QueryInput{
 		TableName:              aws.String(r.offerTable),
 		IndexName:              aws.String("PosId-index"),
@@ -118,7 +118,7 @@ func (r *OfferRepository) GetPosOffers(posId string, limit int, lastKey map[stri
 		return nil, nil, fmt.Errorf("failed to query offers for PosId %s: %w", posId, err)
 	}
 
-	var offers []offer.Offer
+	var offers []domain.Offer
 	err = dynamodbattribute.UnmarshalListOfMaps(result.Items, &offers)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to unmarshal offers: %w", err)
@@ -127,7 +127,7 @@ func (r *OfferRepository) GetPosOffers(posId string, limit int, lastKey map[stri
 	return offers, result.LastEvaluatedKey, nil
 }
 
-func (r *OfferRepository) GetOfferById(ctx context.Context, offerId string) (*offer.Offer, error) {
+func (r *OfferRepository) GetOfferById(ctx context.Context, offerId string) (*domain.Offer, error) {
 	result, err := r.client.GetItemWithContext(ctx, &dynamodb.GetItemInput{
 		TableName: aws.String(r.offerTable),
 		Key: map[string]*dynamodb.AttributeValue{
@@ -145,7 +145,7 @@ func (r *OfferRepository) GetOfferById(ctx context.Context, offerId string) (*of
 		return nil, fmt.Errorf("offer with ID %s not found", offerId)
 	}
 
-	var item offer.Offer
+	var item domain.Offer
 	err = dynamodbattribute.UnmarshalMap(result.Item, &item)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal offer with ID %s: %w", offerId, err)

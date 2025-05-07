@@ -1,4 +1,4 @@
-package pointofsale
+package domain
 
 import (
 	"errors"
