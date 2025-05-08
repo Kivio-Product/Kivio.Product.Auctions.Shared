@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/Kivio-Product/Kivio.Product.Auctions.Services/internal/domain"
+	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item_specification"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
@@ -87,7 +87,7 @@ func (r *itemSpecificationRepository) Get() ([]domain.ItemSpecification, error) 
 }
 
 func (r *itemSpecificationRepository) GetById(ctx context.Context, itemId string) (*domain.ItemSpecification, error) {
-	item, err := r.client.GetItem( &dynamodb.GetItemInput{
+	item, err := r.client.GetItem(&dynamodb.GetItemInput{
 		TableName: aws.String(r.itemSpecificationTable),
 		Key: map[string]*dynamodb.AttributeValue{
 			"Id": {

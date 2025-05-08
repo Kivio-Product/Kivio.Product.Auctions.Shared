@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/Kivio-Product/Kivio.Product.Auctions.Services/internal/domain"
+	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
