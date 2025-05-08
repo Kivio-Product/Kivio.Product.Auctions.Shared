@@ -10,7 +10,10 @@ import (
 	"strconv"
 	"strings"
 
+	itemDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
+	itemSpecDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item_specification"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/offer"
+	orderDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
@@ -19,15 +22,19 @@ import (
 
 type IEmailSender interface {
 	SendEmail(ctx context.Context, offer *domain.Offer, auctionURL string) error
+	SendOrderEmail(ctx context.Context, order *orderDomain.Order, itemSpec *itemSpecDomain.ItemSpecification, item *itemDomain.Item, state string) error
 }
 
 type SESEmailSender struct {
-	sesClient   *ses.SES
-	s3Client    *s3.S3
-	sender      string
-	s3Bucket    string
-	s3Key       string
-	templateKey string
+	sesClient           *ses.SES
+	s3Client            *s3.S3
+	sender              string
+	s3Bucket            string
+	s3Key               string
+	templateKey         string
+	templateKeyApproved string
+	templateKeyRejected string
+	templateKeyQuick    string
 }
 
 func NewSESEmailSender() (IEmailSender, error) {
@@ -95,6 +102,53 @@ func (s *SESEmailSender) getCustomerEmails(ctx context.Context) ([]string, error
 	}
 
 	return emails, nil
+}
+
+func (s *SESEmailSender) SendOrderEmail(ctx context.Context, order *orderDomain.Order, itemSpec *itemSpecDomain.ItemSpecification, item *itemDomain.Item, state string) error {
+	if s.sesClient == nil {
+		return fmt.Errorf("SES client is not initialized")
+	}
+
+	template, err := s.getTemplate2(ctx, state)
+	if err != nil {
+		return err
+	}
+
+	email := order.CustomerId
+
+	body := strings.ReplaceAll(template, "{{ITEM_NAME}}", item.Name)
+	body = strings.ReplaceAll(body, "{{ITEM_DESCRIPTION}}", item.Description)
+	body = strings.ReplaceAll(body, "{{AMOUNT}}", strconv.FormatInt(order.OfferedAmount, 10))
+
+	var subject string
+	switch state {
+	case "Approved":
+		subject = fmt.Sprintf("🎉 ¡Felicidades! Has ganado la subasta de: %s", item.Name)
+	case "Rejected":
+		subject = fmt.Sprintf("Resultado de la subasta: %s", item.Name)
+	case "Quick":
+		subject = fmt.Sprintf("Oferta obtenida: %s", item.Name)
+	}
+
+	input := &ses.SendEmailInput{
+		Source: aws.String(s.sender),
+		Destination: &ses.Destination{
+			ToAddresses: aws.StringSlice([]string{email}),
+		},
+		Message: &ses.Message{
+			Subject: &ses.Content{Data: aws.String(subject)},
+			Body:    &ses.Body{Html: &ses.Content{Data: aws.String(body)}},
+		},
+	}
+
+	_, err = s.sesClient.SendEmailWithContext(ctx, input)
+	if err != nil {
+		fmt.Printf("Error al enviar correo a %s: %v\n", email, err)
+	} else {
+		fmt.Printf("Correo enviado correctamente a %s\n", email)
+	}
+
+	return nil
 }
 
 func (s *SESEmailSender) getTemplate(ctx context.Context) (string, error) {
@@ -179,4 +233,41 @@ func (s *SESEmailSender) SendEmail(ctx context.Context, offer *domain.Offer, auc
 	}
 
 	return nil
+}
+
+func (s *SESEmailSender) getTemplate2(ctx context.Context, state string) (string, error) {
+	var key string
+
+	switch state {
+	case "Approved":
+		key = s.templateKeyApproved
+	case "Rejected":
+		key = s.templateKeyRejected
+	case "Quick":
+		key = s.templateKeyQuick
+	default:
+		return "", fmt.Errorf("estado inválido: %s", state)
+	}
+
+	if key == "" {
+		return "", fmt.Errorf("error clave vacía para el estado %s", state)
+	}
+
+	input := &s3.GetObjectInput{
+		Bucket: aws.String(s.s3Bucket),
+		Key:    aws.String(key),
+	}
+
+	result, err := s.s3Client.GetObjectWithContext(ctx, input)
+	if err != nil {
+		return "", fmt.Errorf("error al obtener la plantilla de S3: %w", err)
+	}
+	defer result.Body.Close()
+
+	body, err := io.ReadAll(result.Body)
+	if err != nil {
+		return "", fmt.Errorf("error al leer la plantilla de S3: %w", err)
+	}
+
+	return string(body), nil
 }
