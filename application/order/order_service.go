@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/Kivio-Product/Kivio.Product.Auctions.Services/internal/domain"
-	"github.com/Kivio-Product/Kivio.Product.Auctions.Services/internal/infrastructure"
+	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
+	itemInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/item"
+	itemSpecInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/item_specification"
+	orderInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/order"
 )
 
 type OrderService interface {
@@ -23,13 +25,13 @@ type OrderService interface {
 }
 
 type orderService struct {
-	repo         infrastructure.OrderRepository
+	repo         orderInfrastructure.OrderRepository
 	orderFactory domain.OrderFactory
-	itemSpecRepo infrastructure.ItemSpecificationRepository
-	itemRepo     infrastructure.ItemRepository
+	itemSpecRepo itemSpecInfrastructure.ItemSpecificationRepository
+	itemRepo     itemInfrastructure.ItemRepository
 }
 
-func NewOrderService(repo infrastructure.OrderRepository, orderFactory domain.OrderFactory, itemSpecRepo infrastructure.ItemSpecificationRepository, itemRepo infrastructure.ItemRepository) OrderService {
+func NewOrderService(repo orderInfrastructure.OrderRepository, orderFactory domain.OrderFactory, itemSpecRepo itemSpecInfrastructure.ItemSpecificationRepository, itemRepo itemInfrastructure.ItemRepository) OrderService {
 	return &orderService{repo: repo, orderFactory: orderFactory, itemSpecRepo: itemSpecRepo, itemRepo: itemRepo}
 }
 

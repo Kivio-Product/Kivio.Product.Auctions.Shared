@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	sharedinfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Infrastructure.Shared"
-	"github.com/Kivio-Product/Kivio.Product.Auctions.Services/internal/domain"
-	"github.com/Kivio-Product/Kivio.Product.Auctions.Services/internal/infrastructure"
+	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
+	integrationInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/integration"
+	itemInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/item"
 )
 
 type ItemService interface {
@@ -21,14 +21,14 @@ type ItemService interface {
 }
 
 type itemService struct {
-	repo                   infrastructure.ItemRepository
-	integrationRepository  sharedinfrastructure.IntegrationRepository
-	googleSheetsRepository sharedinfrastructure.GoogleSheetsRepository
+	repo                   itemInfrastructure.ItemRepository
+	integrationRepository  integrationInfrastructure.IntegrationRepository
+	googleSheetsRepository integrationInfrastructure.GoogleSheetsRepository
 	itemFactory            domain.ItemFactory
 }
 
-func NewItemService(repo infrastructure.ItemRepository, itemFactory domain.ItemFactory, integrationRepository sharedinfrastructure.IntegrationRepository,
-	googleSheetsRepository sharedinfrastructure.GoogleSheetsRepository) ItemService {
+func NewItemService(repo itemInfrastructure.ItemRepository, itemFactory domain.ItemFactory, integrationRepository integrationInfrastructure.IntegrationRepository,
+	googleSheetsRepository integrationInfrastructure.GoogleSheetsRepository) ItemService {
 	return &itemService{repo: repo, itemFactory: itemFactory, integrationRepository: integrationRepository, googleSheetsRepository: googleSheetsRepository}
 }
 

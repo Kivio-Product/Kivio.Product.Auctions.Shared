@@ -11,8 +11,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Kivio-Product/Kivio.Product.Auctions.Services/internal/domain"
-	"github.com/Kivio-Product/Kivio.Product.Auctions.Services/internal/infrastructure"
+	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/billing"
+	orderDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
+	paymentDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/payment"
+
+	emailService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
+
+	billingInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/billing"
+	itemInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/item"
+	itemSpecInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/item_specification"
+	orderInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/order"
 )
 
 type BillingService interface {
@@ -20,26 +28,26 @@ type BillingService interface {
 	GetAllBillings(ctx context.Context) ([]domain.Billing, error)
 	GetBillingById(ctx context.Context, id string) (*domain.Billing, error)
 	GetAllBillingsWithDetail(ctx context.Context) ([]domain.BillingDetailResponse, error)
-	ConfirmPayUResponse(ctx context.Context, res *domain.ConfirmationResponse, secretKey string) error
-	GetPaginatedBillingsWithDetails(ctx context.Context, params domain.PaginationParams) (*domain.PaginatedBillingDetailsResponse, error)
+	ConfirmPayUResponse(ctx context.Context, res *paymentDomain.ConfirmationResponse, secretKey string) error
+	GetPaginatedBillingsWithDetails(ctx context.Context, params orderDomain.PaginationParams) (*domain.PaginatedBillingDetailsResponse, error)
 }
 
 type billingService struct {
-	repo           infrastructure.BillingRepository
+	repo           billingInfrastructure.BillingRepository
 	billingFactory domain.BillingFactory
-	orderRepo      infrastructure.OrderRepository
-	itemSpecRepo   infrastructure.ItemSpecificationRepository
-	itemRepo       infrastructure.ItemRepository
-	emailService   EmailService
+	orderRepo      orderInfrastructure.OrderRepository
+	itemSpecRepo   itemSpecInfrastructure.ItemSpecificationRepository
+	itemRepo       itemInfrastructure.ItemRepository
+	emailService   emailService.EmailService
 }
 
 func NewBillingService(
-	repo infrastructure.BillingRepository,
+	repo billingInfrastructure.BillingRepository,
 	billingFactory domain.BillingFactory,
-	orderRepo infrastructure.OrderRepository,
-	itemSpecRepo infrastructure.ItemSpecificationRepository,
-	itemRepo infrastructure.ItemRepository,
-	emailService EmailService,
+	orderRepo orderInfrastructure.OrderRepository,
+	itemSpecRepo itemSpecInfrastructure.ItemSpecificationRepository,
+	itemRepo itemInfrastructure.ItemRepository,
+	emailService emailService.EmailService,
 ) BillingService {
 	return &billingService{
 		repo:           repo,
@@ -147,7 +155,7 @@ func (s *billingService) GetAllBillingsWithDetail(ctx context.Context) ([]domain
 	return billingDetails, nil
 }
 
-func (s *billingService) GetPaginatedBillingsWithDetails(ctx context.Context, params domain.PaginationParams) (*domain.PaginatedBillingDetailsResponse, error) {
+func (s *billingService) GetPaginatedBillingsWithDetails(ctx context.Context, params orderDomain.PaginationParams) (*domain.PaginatedBillingDetailsResponse, error) {
 	if params.PageSize < 1 {
 		params.PageSize = 10
 	}
@@ -236,7 +244,7 @@ func (s *billingService) GetOrdersByBillingId(ctx context.Context, id string) ([
 	return billing, nil
 }
 
-func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *domain.ConfirmationResponse, secretKey string) error {
+func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDomain.ConfirmationResponse, secretKey string) error {
 	fmt.Println("Iniciando ConfirmPayUResponse")
 
 	if res == nil || res.ReferenceSale == "" {
@@ -302,7 +310,7 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *domain.Co
 		orderIDs = append(orderIDs, order.OrderId)
 	}
 
-	var validOrders []*domain.Order
+	var validOrders []*orderDomain.Order
 
 	for _, id := range orderIDs {
 		order, err := s.orderRepo.GetIdOrder(ctx, id)

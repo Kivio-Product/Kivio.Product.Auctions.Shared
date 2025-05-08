@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Kivio-Product/Kivio.Product.Auctions.Services/internal/domain"
-	"github.com/Kivio-Product/Kivio.Product.Auctions.Services/internal/infrastructure"
+	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item_specification"
+	itemSpecInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/item_specification"
 )
 
 type ItemSpecificationService interface {
@@ -20,11 +20,11 @@ type ItemSpecificationService interface {
 }
 
 type itemSpecificationService struct {
-	repo                     infrastructure.ItemSpecificationRepository
+	repo                     itemSpecInfrastructure.ItemSpecificationRepository
 	itemSpecificationFactory domain.ItemSpecificationFactory
 }
 
-func NewItemSpecificationService(repo infrastructure.ItemSpecificationRepository, itemSpecificationFactory domain.ItemSpecificationFactory) ItemSpecificationService {
+func NewItemSpecificationService(repo itemSpecInfrastructure.ItemSpecificationRepository, itemSpecificationFactory domain.ItemSpecificationFactory) ItemSpecificationService {
 	return &itemSpecificationService{repo: repo, itemSpecificationFactory: itemSpecificationFactory}
 }
 

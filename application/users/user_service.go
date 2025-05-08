@@ -1,4 +1,4 @@
-package service
+package services
 
 import (
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/user"
