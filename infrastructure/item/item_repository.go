@@ -1,0 +1,218 @@
+package infrastructure
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"github.com/Kivio-Product/Kivio.Product.Auctions.Services/internal/domain"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/dynamodb"
+	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
+)
+
+type ItemRepository interface {
+	SaveItem(ctx context.Context, item *domain.Item) error
+	GetAllItems() ([]domain.Item, error)
+	GetItemById(ctx context.Context, itemId string) (*domain.Item, error)
+	DeleteItem(ctx context.Context, itemId string) error
+	GetItemsByPosId(id string) ([]domain.Item, error)
+	GetItemsByUserID(userID string) ([]domain.Item, error)
+}
+
+type itemRepository struct {
+	client     *dynamodb.DynamoDB
+	itemTable  string
+	orderTable string
+}
+
+var (
+	itemTable = "Item"
+)
+
+func NewItemRepository() ItemRepository {
+	sess, err := session.NewSession(&aws.Config{
+		Region: aws.String("us-east-2")})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return &itemRepository{
+		client:     dynamodb.New(sess),
+		itemTable:  itemTable,
+		orderTable: orderTable,
+	}
+}
+
+func (r *itemRepository) SaveItem(ctx context.Context, i *domain.Item) error {
+	item, err := dynamodbattribute.MarshalMap(i)
+	if err != nil {
+		return fmt.Errorf("failed to map item")
+	}
+
+	input := &dynamodb.PutItemInput{
+		TableName: aws.String(r.itemTable),
+		Item:      item,
+	}
+
+	_, err = r.client.PutItemWithContext(ctx, input)
+
+	if err != nil {
+		fmt.Print(err)
+		return fmt.Errorf("failed to put item in DynamoDB")
+	}
+
+	return nil
+}
+
+func (r *itemRepository) GetAllItems() ([]domain.Item, error) {
+	result, err := r.client.Scan(&dynamodb.ScanInput{
+		TableName: aws.String(r.itemTable),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan table %s", r.itemTable)
+	}
+	var items []domain.Item
+
+	for _, item := range result.Items {
+		var fitems domain.Item
+		err := dynamodbattribute.UnmarshalMap(item, &fitems)
+		if err != nil {
+			log.Printf("Failed to get table items")
+			continue
+		}
+		items = append(items, fitems)
+	}
+
+	return items, nil
+}
+
+func (r *itemRepository) GetItemById(ctx context.Context, itemId string) (*domain.Item, error) {
+	result, err := r.client.GetItem(&dynamodb.GetItemInput{
+		TableName: aws.String(r.itemTable),
+		Key: map[string]*dynamodb.AttributeValue{
+			"ItemId": {
+				S: aws.String(itemId),
+			},
+		},
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get item with ID %s", itemId)
+	}
+
+	if result.Item == nil {
+		return nil, fmt.Errorf("item with ID %s not found", itemId)
+	}
+
+	var item domain.Item
+	err = dynamodbattribute.UnmarshalMap(result.Item, &item)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal item with ID %s", itemId)
+	}
+
+	return &item, nil
+}
+
+func (r *itemRepository) GetItemsByPosId(posId string) ([]domain.Item, error) {
+	input := &dynamodb.QueryInput{
+		TableName:              aws.String(r.itemTable),
+		IndexName:              aws.String("PointOfSaleId-index"),
+		KeyConditionExpression: aws.String("PointOfSaleId = :posId"),
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":posId": {S: aws.String(posId)},
+		},
+	}
+
+	result, err := r.client.Query(input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query items for PosId %s: %w", posId, err)
+	}
+
+	var items []domain.Item
+	err = dynamodbattribute.UnmarshalListOfMaps(result.Items, &items)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal items: %w", err)
+	}
+
+	return items, nil
+}
+
+func (r *itemRepository) GetItemsByUserID(userID string) ([]domain.Item, error) {
+
+	input := &dynamodb.QueryInput{
+		TableName:              aws.String("PointOfSale"),
+		IndexName:              aws.String("UserId-index"),
+		KeyConditionExpression: aws.String("UserId = :userId"),
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":userId": {S: aws.String(userID)},
+		},
+	}
+
+	result, err := r.client.Query(input)
+	if err != nil {
+		return nil, err
+	}
+
+	var pointOfSaleIDs []string
+	for _, item := range result.Items {
+		var pos struct {
+			ID string `json:"PointOfSaleId"`
+		}
+		err = dynamodbattribute.UnmarshalMap(item, &pos)
+		if err != nil {
+			return nil, err
+		}
+		pointOfSaleIDs = append(pointOfSaleIDs, pos.ID)
+	}
+
+	if len(pointOfSaleIDs) == 0 {
+		return nil, nil
+	}
+
+	var items []domain.Item
+	for _, posID := range pointOfSaleIDs {
+		input := &dynamodb.QueryInput{
+			TableName:              aws.String("Item"),
+			IndexName:              aws.String("PointOfSaleId-index"),
+			KeyConditionExpression: aws.String("PointOfSaleId = :posID"),
+			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+				":posID": {S: aws.String(posID)},
+			},
+		}
+
+		result, err := r.client.Query(input)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, item := range result.Items {
+			var it domain.Item
+			err = dynamodbattribute.UnmarshalMap(item, &it)
+			if err != nil {
+				return nil, err
+			}
+			items = append(items, it)
+		}
+	}
+
+	return items, nil
+}
+
+func (r *itemRepository) DeleteItem(ctx context.Context, itemId string) error {
+	_, err := r.client.DeleteItemWithContext(ctx, &dynamodb.DeleteItemInput{
+		TableName: aws.String(r.itemTable),
+		Key: map[string]*dynamodb.AttributeValue{
+			"ItemId": {
+				S: aws.String(itemId),
+			},
+		},
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to delete item from DynamoDB")
+	}
+
+	return nil
+}
