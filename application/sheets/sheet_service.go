@@ -3,29 +3,29 @@ package services
 import (
 	"fmt"
 
-	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Domain.Shared/sheets"
-	sharedinfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Infrastructure.Shared"
-	internalDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Rules/internal/domain"
+	ruleDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/rule"
+	sheetsDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/sheets"
+	integrationInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/integration"
 )
 
 type SheetService interface {
-	FetchSheetData(pointOfSaleId string) (domain.SheetData, error)
-	InferFields(sheetData domain.SheetData) []domain.RuleField
+	FetchSheetData(pointOfSaleId string) (sheetsDomain.SheetData, error)
+	InferFields(sheetData sheetsDomain.SheetData) []sheetsDomain.RuleField
 }
 
 type sheetService struct {
-	repo                  sharedinfrastructure.GoogleSheetsRepository
-	integrationRepository sharedinfrastructure.IntegrationRepository
+	repo                  integrationInfrastructure.GoogleSheetsRepository
+	integrationRepository integrationInfrastructure.IntegrationRepository
 }
 
-func NewSheetService(repo sharedinfrastructure.GoogleSheetsRepository, integrationRepository sharedinfrastructure.IntegrationRepository) SheetService {
+func NewSheetService(repo integrationInfrastructure.GoogleSheetsRepository, integrationRepository integrationInfrastructure.IntegrationRepository) SheetService {
 	return &sheetService{repo: repo, integrationRepository: integrationRepository}
 }
 
-func (s *sheetService) FetchSheetData(pointOfSaleId string) (domain.SheetData, error) {
+func (s *sheetService) FetchSheetData(pointOfSaleId string) (sheetsDomain.SheetData, error) {
 	integrations, err := s.integrationRepository.GetIntegrationsByPosID(pointOfSaleId)
 	if err != nil {
-		return domain.SheetData{}, err
+		return sheetsDomain.SheetData{}, err
 	}
 
 	var spreadsheetId, readRange string
@@ -41,21 +41,21 @@ func (s *sheetService) FetchSheetData(pointOfSaleId string) (domain.SheetData, e
 	}
 
 	if spreadsheetId == "" || readRange == "" {
-		return domain.SheetData{}, fmt.Errorf("missing Google Sheets configuration for pointOfSaleId %s", pointOfSaleId)
+		return sheetsDomain.SheetData{}, fmt.Errorf("missing Google Sheets configuration for pointOfSaleId %s", pointOfSaleId)
 	}
 	return s.repo.GetSheetData(spreadsheetId, readRange)
 }
 
-func (s *sheetService) InferFields(sheetData domain.SheetData) []domain.RuleField {
+func (s *sheetService) InferFields(sheetData sheetsDomain.SheetData) []sheetsDomain.RuleField {
 	headers := sheetData.Values[0]
 	sampleData := sheetData.Values[1:]
 
-	var fields []domain.RuleField
+	var fields []sheetsDomain.RuleField
 	for colIndex, h := range headers {
-		values := internalDomain.ExtractColumnValues(sampleData, colIndex)
-		typeDetected := internalDomain.InferType(values)
-		operators := domain.TypeToOperators[typeDetected]
-		fields = append(fields, domain.RuleField{
+		values := ruleDomain.ExtractColumnValues(sampleData, colIndex)
+		typeDetected := ruleDomain.InferType(values)
+		operators := sheetsDomain.TypeToOperators[typeDetected]
+		fields = append(fields, sheetsDomain.RuleField{
 			Field:         fmt.Sprintf("%v", h),
 			ParameterType: typeDetected,
 			Operators:     operators,
