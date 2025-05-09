@@ -14,6 +14,7 @@ type Order struct {
 	ExternalId          string
 	ItemSpecificationId string
 	State               string
+	SortKey             string
 }
 
 type OrderDetail struct {
@@ -80,5 +81,6 @@ func (o *Order) Update(customerId, externalId, itemSpecificationId, state string
 	o.ItemSpecificationId = itemSpecificationId
 	o.OfferedAmount = offeredAmount
 	o.State = state
+	o.SortKey = "ACTIVE"
 	return nil
 }

@@ -67,7 +67,16 @@ func (r *ruleRepository) SaveRule(ctx context.Context, rule *domain.Rule) error 
 }
 
 func (r *ruleRepository) DeleteRule(ctx context.Context, ruleId string) error {
-	_, err := r.client.DeleteItemWithContext(ctx, &dynamodb.DeleteItemInput{
+	if ruleId == "" {
+		return fmt.Errorf("invalid rule ID: cannot be empty")
+	}
+
+	_, err := r.GetRuleById(ctx, ruleId)
+	if err != nil {
+		return fmt.Errorf("cannot delete rule: %w", err)
+	}
+
+	_, err = r.client.DeleteItemWithContext(ctx, &dynamodb.DeleteItemInput{
 		TableName: aws.String(r.ruleTable),
 		Key: map[string]*dynamodb.AttributeValue{
 			"RuleId": {

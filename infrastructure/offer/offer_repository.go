@@ -101,16 +101,16 @@ func (r *OfferRepository) GetAllOffers() ([]domain.Offer, error) {
 func (r *OfferRepository) GetPosOffers(posId string, limit int, lastKey map[string]*dynamodb.AttributeValue) ([]domain.Offer, map[string]*dynamodb.AttributeValue, error) {
 	input := &dynamodb.QueryInput{
 		TableName:              aws.String(r.offerTable),
-		IndexName:              aws.String("PosId-index"),
-		KeyConditionExpression: aws.String("PosId = :posId"),
+		IndexName:              aws.String("PosId-CreatedAt-index"),
+		Limit:                  aws.Int64(int64(limit)),
+		ExclusiveStartKey:      lastKey,
+		ScanIndexForward:       aws.Bool(false),
+		KeyConditionExpression: aws.String("PosId = :posIdValue"),
 		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-			":posId": {S: aws.String(posId)},
+			":posIdValue": {
+				S: aws.String(posId),
+			},
 		},
-		Limit: aws.Int64(int64(limit)),
-	}
-
-	if lastKey != nil {
-		input.ExclusiveStartKey = lastKey
 	}
 
 	result, err := r.client.Query(input)
@@ -119,9 +119,11 @@ func (r *OfferRepository) GetPosOffers(posId string, limit int, lastKey map[stri
 	}
 
 	var offers []domain.Offer
-	err = dynamodbattribute.UnmarshalListOfMaps(result.Items, &offers)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to unmarshal offers: %w", err)
+	if len(result.Items) > 0 {
+		err = dynamodbattribute.UnmarshalListOfMaps(result.Items, &offers)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to unmarshal offers: %w", err)
+		}
 	}
 
 	return offers, result.LastEvaluatedKey, nil

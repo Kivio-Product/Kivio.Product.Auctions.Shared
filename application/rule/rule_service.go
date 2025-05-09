@@ -2,8 +2,10 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
+	ruleSpecService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/rule_specification"
 	ruleDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/rule"
 	ruleSpecificationDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/rule_specification"
 	sheetsDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/sheets"
@@ -24,12 +26,13 @@ type RuleService interface {
 	GetCategorizedRules(fields []sheetsDomain.RuleField) map[string][]sheetsDomain.RuleField
 }
 type ruleService struct {
-	repo        infrastructure.RuleRepository
-	RuleFactory ruleDomain.RuleFactory
+	repo                     infrastructure.RuleRepository
+	RuleFactory              ruleDomain.RuleFactory
+	ruleSpecificationService ruleSpecService.RuleSpecificationService
 }
 
-func NewRuleService(repo infrastructure.RuleRepository, ruleFactory ruleDomain.RuleFactory) RuleService {
-	return &ruleService{repo: repo, RuleFactory: ruleFactory}
+func NewRuleService(repo infrastructure.RuleRepository, ruleFactory ruleDomain.RuleFactory, ruleSpecificationService ruleSpecService.RuleSpecificationService) RuleService {
+	return &ruleService{repo: repo, RuleFactory: ruleFactory, ruleSpecificationService: ruleSpecificationService}
 }
 
 type Response[T any] struct {
@@ -75,8 +78,15 @@ func (s *ruleService) UpdateRule(ctx context.Context, ruleId, externalId, itemId
 }
 
 func (s *ruleService) DeleteRuleById(ctx context.Context, id string) error {
-	err := s.repo.DeleteRule(ctx, id)
-	return err
+	if err := s.repo.DeleteRule(ctx, id); err != nil {
+		return fmt.Errorf("failed to delete rule with ID %s: %w", id, err)
+	}
+
+	if err := s.ruleSpecificationService.DeleteRuleSpecByRuleId(ctx, id); err != nil {
+		return fmt.Errorf("failed to delete rule specifications for rule ID %s: %w", id, err)
+	}
+
+	return nil
 }
 
 func (s *ruleService) GetRuleById(ctx context.Context, id string) (*ruleDomain.Rule, error) {
@@ -158,7 +168,7 @@ func (s *ruleService) GetCategorizedRules(fields []sheetsDomain.RuleField) map[s
 	if !dateExists {
 		dateOperators := []string{"=", ">", "<", ">=", "<=", "!="}
 		localRules = append(localRules, sheetsDomain.RuleField{
-			Field:         "date",
+			Field:         "current date",
 			ParameterType: "numérico",
 			Operators:     dateOperators,
 		})

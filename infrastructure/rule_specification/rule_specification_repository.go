@@ -18,6 +18,7 @@ type RuleSpecificationRepository interface {
 	GetRuleSpecificationById(ctx context.Context, rulespecificationId string) (*domain.RuleSpecification, error)
 	GetRuleSpecificationByOfferId(ctx context.Context, offerId string) ([]domain.RuleSpecification, error)
 	GetRuleSpecificationsByRuleId(id string) ([]domain.RuleSpecification, error)
+	HasRuleSpecificationsForOffer(ctx context.Context, offerId string) (bool, error)
 }
 
 type ruleSpecificationRepository struct {
@@ -143,4 +144,24 @@ func (r *ruleSpecificationRepository) GetRuleSpecificationByOfferId(ctx context.
 	}
 
 	return specifications, nil
+}
+
+func (r *ruleSpecificationRepository) HasRuleSpecificationsForOffer(ctx context.Context, offerId string) (bool, error) {
+	input := &dynamodb.QueryInput{
+		TableName:              aws.String(r.specificationTable),
+		IndexName:              aws.String("OfferId-index"),
+		KeyConditionExpression: aws.String("OfferId = :offerId"),
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":offerId": {S: aws.String(offerId)},
+		},
+		Select: aws.String("COUNT"),
+		Limit:  aws.Int64(1),
+	}
+
+	result, err := r.client.QueryWithContext(ctx, input)
+	if err != nil {
+		return false, fmt.Errorf("error al verificar reglas para offerId %s: %w", offerId, err)
+	}
+
+	return *result.Count > 0, nil
 }

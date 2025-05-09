@@ -39,6 +39,7 @@ func (f *DefaultOrderFactory) CreateOrder(customerId, externalId, itemSpecificat
 		CustomerId:          customerId,
 		ExternalId:          externalId,
 		ItemSpecificationId: itemSpecificationId,
+		SortKey:             "ACTIVE",
 	}, nil
 }
 

@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/rule_specification"
 	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/rule_specification"
@@ -14,6 +15,8 @@ type RuleSpecificationService interface {
 	DeleteRuleSpecificationById(ctx context.Context, id string) error
 	GetRuleSpecificationByRuleId(ctx context.Context, id string) ([]domain.RuleSpecification, error)
 	UpdateRuleSpecification(ctx context.Context, ruleSpecificationId, typer, operator, parameter string) error
+	DeleteRuleSpecByRuleId(ctx context.Context, ruleId string) error
+	HasRuleSpecificationByOfferId(ctx context.Context, offerId string) (bool, error)
 }
 
 type ruleSpecificationService struct {
@@ -76,4 +79,32 @@ func (s *ruleSpecificationService) GetRuleSpecificationByRuleId(ctx context.Cont
 		return nil, err
 	}
 	return items, nil
+}
+
+func (s *ruleSpecificationService) HasRuleSpecificationByOfferId(ctx context.Context, offerId string) (bool, error) {
+	result, err := s.repo.HasRuleSpecificationsForOffer(ctx, offerId)
+	if err != nil {
+		return false, err
+	}
+	return result, nil
+}
+
+func (s *ruleSpecificationService) DeleteRuleSpecByRuleId(ctx context.Context, ruleId string) error {
+	specs, err := s.GetRuleSpecificationByRuleId(ctx, ruleId)
+	if err != nil {
+		return fmt.Errorf("failed to get rule specifications for rule ID %s: %w", ruleId, err)
+	}
+
+	if len(specs) == 0 {
+		return fmt.Errorf("no rule specifications found for rule ID %s", ruleId)
+	}
+
+	for _, spec := range specs {
+		err = s.repo.DeleteRuleSpecification(ctx, spec.RuleSpecificationId)
+		if err != nil {
+			return fmt.Errorf("failed to delete rule specification %s: %w", spec.RuleSpecificationId, err)
+		}
+	}
+
+	return nil
 }

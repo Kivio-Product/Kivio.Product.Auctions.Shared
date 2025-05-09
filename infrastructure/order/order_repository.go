@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"maps"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 	"github.com/aws/aws-sdk-go/aws"
@@ -201,9 +202,8 @@ func (r *orderRepository) UpdateOrder(ctx context.Context, order *domain.Order) 
 }
 
 func (r *orderRepository) GetOrdersPaginated(ctx context.Context, params domain.PaginationParams) (*domain.OrderRepositoryResult, error) {
-	var allOrders []domain.Order
+	var orders []domain.Order
 	var lastEvaluatedKey map[string]*dynamodb.AttributeValue
-	var totalScannedCount int64
 
 	if params.NextToken != "" {
 		if err := json.Unmarshal([]byte(params.NextToken), &lastEvaluatedKey); err != nil {
@@ -225,111 +225,114 @@ func (r *orderRepository) GetOrdersPaginated(ctx context.Context, params domain.
 		filterExpression = &expr
 	}
 
-	for len(allOrders) < params.PageSize {
-		input := &dynamodb.ScanInput{
-			TableName:              aws.String(orderTable),
-			Limit:                  aws.Int64(int64(params.PageSize)),
-			ReturnConsumedCapacity: aws.String("TOTAL"),
-			ExclusiveStartKey:      lastEvaluatedKey,
-		}
+	indexName := "SortKey-CreatedAt-index"
 
-		if filterExpression != nil {
-			input.FilterExpression = filterExpression.Filter()
-			input.ExpressionAttributeNames = filterExpression.Names()
-			input.ExpressionAttributeValues = filterExpression.Values()
-		}
+	input := &dynamodb.QueryInput{
+		TableName:              aws.String(orderTable),
+		IndexName:              aws.String(indexName),
+		Limit:                  aws.Int64(int64(params.PageSize)),
+		ReturnConsumedCapacity: aws.String("TOTAL"),
+		ExclusiveStartKey:      lastEvaluatedKey,
+		ScanIndexForward:       aws.Bool(false),
+		KeyConditionExpression: aws.String("SortKey = :sortKeyValue"),
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":sortKeyValue": {
+				S: aws.String("ACTIVE"),
+			},
+		},
+	}
 
-		result, err := r.client.ScanWithContext(ctx, input)
+	if filterExpression != nil {
+		input.FilterExpression = filterExpression.Filter()
+		for k, v := range filterExpression.Names() {
+			if input.ExpressionAttributeNames == nil {
+				input.ExpressionAttributeNames = make(map[string]*string)
+			}
+			input.ExpressionAttributeNames[k] = v
+		}
+		maps.Copy(input.ExpressionAttributeValues, filterExpression.Values())
+	}
+
+	result, err := r.client.QueryWithContext(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("error al consultar tabla de órdenes: %w", err)
+	}
+
+	if len(result.Items) > 0 {
+		err = dynamodbattribute.UnmarshalListOfMaps(result.Items, &orders)
 		if err != nil {
-			return nil, fmt.Errorf("error al escanear tabla de órdenes: %w", err)
-		}
-
-		var batchOrders []domain.Order
-		if len(result.Items) > 0 {
-			err = dynamodbattribute.UnmarshalListOfMaps(result.Items, &batchOrders)
-			if err != nil {
-				return nil, fmt.Errorf("error al deserializar órdenes del batch: %w", err)
-			}
-		}
-
-		allOrders = append(allOrders, batchOrders...)
-
-		lastEvaluatedKey = result.LastEvaluatedKey
-
-		if result.LastEvaluatedKey == nil {
-			log.Printf("DynamoDB Scan finished. Scanned %d items.", totalScannedCount+*result.ScannedCount)
-			break
-		}
-
-		totalScannedCount += *result.ScannedCount
-
-		if len(allOrders) >= params.PageSize {
-			break
+			return nil, fmt.Errorf("error al deserializar órdenes: %w", err)
 		}
 	}
-	var currentPageOrders []domain.Order
+
 	var nextToken string
-
-	if len(allOrders) > params.PageSize {
-		currentPageOrders = allOrders[:params.PageSize]
-		if lastEvaluatedKey != nil {
-			tokenBytes, err := json.Marshal(lastEvaluatedKey)
-			if err != nil {
-				return nil, fmt.Errorf("error al serializar token de paginación: %w", err)
-			}
-			nextToken = string(tokenBytes)
+	if result.LastEvaluatedKey != nil {
+		tokenBytes, err := json.Marshal(result.LastEvaluatedKey)
+		if err != nil {
+			return nil, fmt.Errorf("error al serializar token de paginación: %w", err)
 		}
-
-	} else {
-		currentPageOrders = allOrders
-		if lastEvaluatedKey != nil {
-			tokenBytes, err := json.Marshal(lastEvaluatedKey)
-			if err != nil {
-				return nil, fmt.Errorf("error al serializar token de paginación: %w", err)
-			}
-			nextToken = string(tokenBytes)
-		} else {
-			nextToken = ""
-		}
+		nextToken = string(tokenBytes)
 	}
 
-	var totalFilteredCount int64
+	var totalCount int64
 	if params.Search != "" {
-		countInput := &dynamodb.ScanInput{
-			TableName: aws.String(orderTable),
-			Select:    aws.String("COUNT"),
+		countInput := &dynamodb.QueryInput{
+			TableName:              aws.String(orderTable),
+			IndexName:              aws.String(indexName),
+			Select:                 aws.String("COUNT"),
+			KeyConditionExpression: aws.String("SortKey = :sortKeyValue"),
+			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+				":sortKeyValue": {
+					S: aws.String("ACTIVE"),
+				},
+			},
 		}
+
 		if filterExpression != nil {
 			countInput.FilterExpression = filterExpression.Filter()
-			countInput.ExpressionAttributeNames = filterExpression.Names()
-			countInput.ExpressionAttributeValues = filterExpression.Values()
+			for k, v := range filterExpression.Names() {
+				if countInput.ExpressionAttributeNames == nil {
+					countInput.ExpressionAttributeNames = make(map[string]*string)
+				}
+				countInput.ExpressionAttributeNames[k] = v
+			}
+			maps.Copy(countInput.ExpressionAttributeValues, filterExpression.Values())
 		}
-		log.Println("Performing separate Scan with COUNT for total filtered count (can be slow/expensive)")
-		countResult, err := r.client.ScanWithContext(ctx, countInput)
+
+		log.Println("Realizando consulta COUNT separada para obtener el total filtrado")
+		countResult, err := r.client.QueryWithContext(ctx, countInput)
 		if err != nil {
-			log.Printf("Warning: Error getting total filtered count: %v", err)
-			totalFilteredCount = 0
+			log.Printf("Advertencia: Error al obtener conteo total filtrado: %v", err)
+			totalCount = int64(len(orders))
 		} else {
-			totalFilteredCount = *countResult.Count
-			log.Printf("Total filtered count found: %d", totalFilteredCount)
+			totalCount = *countResult.Count
+			log.Printf("Total de elementos filtrados encontrados: %d", totalCount)
 		}
 	} else {
-		countInput := &dynamodb.ScanInput{
-			TableName: aws.String(orderTable),
-			Select:    aws.String("COUNT"),
+		countInput := &dynamodb.QueryInput{
+			TableName:              aws.String(orderTable),
+			IndexName:              aws.String(indexName),
+			Select:                 aws.String("COUNT"),
+			KeyConditionExpression: aws.String("SortKey = :sortKeyValue"),
+			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+				":sortKeyValue": {
+					S: aws.String("ACTIVE"),
+				},
+			},
 		}
-		countResult, err := r.client.ScanWithContext(ctx, countInput)
+
+		countResult, err := r.client.QueryWithContext(ctx, countInput)
 		if err != nil {
 			return nil, fmt.Errorf("error al obtener conteo total sin filtro: %w", err)
 		}
-		totalFilteredCount = *countResult.Count
+		totalCount = *countResult.Count
 	}
 
-	log.Printf("DynamoDB collected %d filtered items, returning page with %d items. Next page likely: %v", len(allOrders), len(currentPageOrders), nextToken != "")
+	log.Printf("DynamoDB devolvió %d elementos ordenados por fecha (más recientes primero). Próxima página disponible: %v", len(orders), nextToken != "")
 
 	return &domain.OrderRepositoryResult{
-		Orders:     currentPageOrders,
+		Orders:     orders,
 		NextToken:  nextToken,
-		TotalCount: totalFilteredCount,
+		TotalCount: totalCount,
 	}, nil
 }
