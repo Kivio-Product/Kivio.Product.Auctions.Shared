@@ -23,13 +23,22 @@ type ItemService interface {
 type itemService struct {
 	repo                   itemInfrastructure.ItemRepository
 	integrationRepository  integrationInfrastructure.IntegrationRepository
-	googleSheetsRepository integrationInfrastructure.GoogleSheetsRepository
 	itemFactory            domain.ItemFactory
+	itemIntegrationFactory *itemInfrastructure.ItemIntegrationFactory
 }
 
-func NewItemService(repo itemInfrastructure.ItemRepository, itemFactory domain.ItemFactory, integrationRepository integrationInfrastructure.IntegrationRepository,
-	googleSheetsRepository integrationInfrastructure.GoogleSheetsRepository) ItemService {
-	return &itemService{repo: repo, itemFactory: itemFactory, integrationRepository: integrationRepository, googleSheetsRepository: googleSheetsRepository}
+func NewItemService(
+	repo itemInfrastructure.ItemRepository,
+	itemFactory domain.ItemFactory,
+	integrationRepository integrationInfrastructure.IntegrationRepository,
+	itemIntegrationFactory *itemInfrastructure.ItemIntegrationFactory,
+) ItemService {
+	return &itemService{
+		repo:                   repo,
+		itemFactory:            itemFactory,
+		integrationRepository:  integrationRepository,
+		itemIntegrationFactory: itemIntegrationFactory,
+	}
 }
 
 func (s *itemService) CreateItem(ctx context.Context, name, description, externalId, pointOfSaleId, url string) (*domain.Item, error) {
@@ -87,61 +96,19 @@ func (s *itemService) GetItemsByPosId(ctx context.Context, id string) ([]domain.
 		return nil, err
 	}
 
-	var spreadsheetId, readRange string
-
 	for _, integration := range integrations {
-		for _, config := range integration.Configs {
-			if config.Key == "spreadsheetId" {
-				spreadsheetId = config.Value
-			} else if config.Key == "readRange" {
-				readRange = config.Value
-			}
-		}
-	}
-
-	var sheetItems []domain.Item
-
-	if spreadsheetId != "" && readRange != "" {
-		sheetData, err := s.googleSheetsRepository.GetSheetData(spreadsheetId, readRange)
+		strategy, err := s.itemIntegrationFactory.GetStrategy(integration.Type)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get sheet data: %w", err)
+			continue
 		}
 
-		if sheetData.Values == nil {
-			return nil, fmt.Errorf("sheet data or values are nil")
+		integrationItems, err := strategy.GetItems(id)
+		if err != nil {
+			continue
 		}
 
-		for i, row := range sheetData.Values {
-			if i == 0 {
-				continue
-			}
-
-			if len(row) > 2 {
-				itemId, ok1 := row[0].(string)
-				name, ok2 := row[2].(string)
-				description := ""
-				if len(row) > 3 {
-					description, _ = row[3].(string)
-				}
-
-				if ok1 && ok2 {
-					item := domain.Item{
-						ItemId:        itemId,
-						Name:          name,
-						Description:   description,
-						Source:        "google sheets",
-						PointOfSaleId: id,
-						ExternalId:    itemId,
-					}
-					sheetItems = append(sheetItems, item)
-				} else {
-					fmt.Printf("invalid row data: %v\n", row)
-				}
-			}
-		}
+		items = append(items, integrationItems...)
 	}
-
-	items = append(sheetItems, items...)
 
 	return items, nil
 }
@@ -152,61 +119,23 @@ func (s *itemService) GetExternalItemById(ctx context.Context, itemId string, po
 		return nil, err
 	}
 
-	var spreadsheetId, readRange string
-
 	for _, integration := range integrations {
-		for _, config := range integration.Configs {
-			if config.Key == "spreadsheetId" {
-				spreadsheetId = config.Value
-			} else if config.Key == "readRange" {
-				readRange = config.Value
-			}
+		strategy, err := s.itemIntegrationFactory.GetStrategy(integration.Type)
+		if err != nil {
+			continue
+		}
+
+		item, err := strategy.GetItemById(itemId, pointOfSaleId)
+		if err != nil {
+			continue
+		}
+
+		if item != nil {
+			return item, nil
 		}
 	}
 
-	if spreadsheetId == "" || readRange == "" {
-		return nil, fmt.Errorf("missing Google Sheets configuration for pointOfSaleId %s", pointOfSaleId)
-	}
-
-	sheetData, err := s.googleSheetsRepository.GetSheetData(spreadsheetId, readRange)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get sheet data: %w", err)
-	}
-
-	if sheetData.Values == nil {
-		return nil, fmt.Errorf("sheet data or values are nil")
-	}
-
-	for i, row := range sheetData.Values {
-		if i == 0 {
-			continue // Skip header row
-		}
-
-		if len(row) > 2 {
-			rowItemId, ok1 := row[0].(string)
-
-			if ok1 && rowItemId == itemId {
-				name, ok2 := row[2].(string)
-				description := ""
-				if len(row) > 3 {
-					description, _ = row[3].(string)
-				}
-
-				if ok2 {
-					return &domain.Item{
-						ItemId:        itemId,
-						Name:          name,
-						Description:   description,
-						Source:        "google sheets",
-						PointOfSaleId: pointOfSaleId,
-						ExternalId:    itemId,
-					}, nil
-				}
-			}
-		}
-	}
-
-	return nil, fmt.Errorf("item with id %s not found in Google Sheets", itemId)
+	return nil, fmt.Errorf("item with id %s not found in any integration", itemId)
 }
 
 func (s *itemService) UpdateItem(ctx context.Context, id, name, description, externalId, pointOfSaleId, url string) error {
