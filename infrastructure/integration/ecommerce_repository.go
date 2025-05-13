@@ -84,7 +84,7 @@ func (r *ecommerceRepository) GetApiKey(username, password, tokenUrl string) (st
 }
 
 func (r *ecommerceRepository) GetItems(baseUrl, apiKey string) ([]itemDomain.Item, error) {
-	url := fmt.Sprintf("%s/api/products", baseUrl)
+	url := fmt.Sprintf("%s/api/products?Limit=2", baseUrl)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -108,13 +108,10 @@ func (r *ecommerceRepository) GetItems(baseUrl, apiKey string) ([]itemDomain.Ite
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	// Define the structure of the API response
 	type Product struct {
-		ID          int     `json:"id"`
-		Name        string  `json:"name"`
-		Description string  `json:"short_description"`
-		Price       float64 `json:"price"`
-		ImageURL    string  `json:"images"`
+		ID          int    `json:"id"`
+		Name        string `json:"name"`
+		Description string `json:"short_description"`
 	}
 
 	type ApiResponse struct {
@@ -132,7 +129,6 @@ func (r *ecommerceRepository) GetItems(baseUrl, apiKey string) ([]itemDomain.Ite
 			ItemId:      strconv.Itoa(product.ID),
 			Name:        product.Name,
 			Description: product.Description,
-			Url:         product.ImageURL,
 		}
 		items = append(items, item)
 	}
