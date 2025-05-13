@@ -1,10 +1,12 @@
 package infrastructure
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/http"
-	"os"
 	"time"
 
 	customerDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/customer"
@@ -12,146 +14,147 @@ import (
 )
 
 type EcommerceRepository interface {
-	GetItems() ([]itemDomain.Item, error)
-	GetItemByID(id string) (*itemDomain.Item, error)
-	GetCustomers() ([]customerDomain.Customer, error)
-	GetCustomerByID(id string) (*customerDomain.Customer, error)
+	GetItems(baseUrl, apiKey string) ([]itemDomain.Item, error)
+	GetItemByID(baseUrl, apiKey, itemId string) (*itemDomain.Item, error)
+	GetCustomers(baseUrl, apiKey string) ([]customerDomain.Customer, error)
+	GetCustomerByID(baseUrl, apiKey, id string) (*customerDomain.Customer, error)
+	GetApiKey(username, password, tokenUrl string) (string, error)
 }
 
 type ecommerceRepository struct {
-	baseURL    string
-	apiKey     string
 	httpClient *http.Client
 }
 
-func NewEcommerceRepository() (EcommerceRepository, error) {
-	baseURL := os.Getenv("KIVIO_ECOMMERCE_API_URL")
-	if baseURL == "" {
-		return nil, fmt.Errorf("KIVIO_ECOMMERCE_API_URL environment variable is required")
-	}
-
-	apiKey := os.Getenv("KIVIO_ECOMMERCE_API_KEY")
-	if apiKey == "" {
-		return nil, fmt.Errorf("KIVIO_ECOMMERCE_API_KEY environment variable is required")
-	}
-
+func NewEcommerceRepository() EcommerceRepository {
 	return &ecommerceRepository{
-		baseURL: baseURL,
-		apiKey:  apiKey,
 		httpClient: &http.Client{
 			Timeout: time.Second * 30,
 		},
-	}, nil
+	}
 }
 
-func (r *ecommerceRepository) GetItems() ([]itemDomain.Item, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/products", r.baseURL), nil)
-	if err != nil {
-		return nil, fmt.Errorf("error creating request: %w", err)
+func (r *ecommerceRepository) GetApiKey(username, password, tokenUrl string) (string, error) {
+	payload := map[string]interface{}{
+		"guest":       true,
+		"username":    username,
+		"password":    password,
+		"remember_me": true,
 	}
 
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", r.apiKey))
-	req.Header.Set("Content-Type", "application/json")
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", tokenUrl, bytes.NewBuffer(body))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("accept", "text/plain")
+	req.Header.Set("Content-Type", "application/json-patch+json")
 
 	resp, err := r.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("error making request: %w", err)
+		return "", fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return "", fmt.Errorf("failed to get API key, status code: %d", resp.StatusCode)
 	}
 
-	var apiProducts []struct {
-		ID          string    `json:"id"`
-		Name        string    `json:"name"`
-		Description string    `json:"description"`
-		Price       float64   `json:"price"`
-		SKU         string    `json:"sku"`
-		Stock       int       `json:"stock"`
-		CreatedAt   time.Time `json:"createdAt"`
-		UpdatedAt   time.Time `json:"updatedAt"`
+	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&apiProducts); err != nil {
-		return nil, fmt.Errorf("error decoding response: %w", err)
+	var result map[string]interface{}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return "", fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
-	items := make([]itemDomain.Item, len(apiProducts))
-	for i, p := range apiProducts {
-		items[i] = itemDomain.Item{
-			ItemId:        p.ID,
-			Name:          p.Name,
-			Description:   p.Description,
-			ExternalId:    p.SKU,
-			PointOfSaleId: "ecommerce", // You might want to make this configurable
-			Url:           fmt.Sprintf("%s/products/%s", r.baseURL, p.ID),
-			Source:        "ecommerce",
-		}
+	apiKey, ok := result["token"].(string)
+	if !ok {
+		return "", errors.New("API key not found in response")
+	}
+
+	return apiKey, nil
+}
+
+func (r *ecommerceRepository) GetItems(baseUrl, apiKey string) ([]itemDomain.Item, error) {
+	url := fmt.Sprintf("%s/items", baseUrl)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
+
+	resp, err := r.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to get items, status code: %d", resp.StatusCode)
+	}
+
+	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	var items []itemDomain.Item
+	if err := json.Unmarshal(respBody, &items); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal items: %w", err)
 	}
 
 	return items, nil
 }
 
-func (r *ecommerceRepository) GetItemByID(id string) (*itemDomain.Item, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/products/%s", r.baseURL, id), nil)
+func (r *ecommerceRepository) GetItemByID(baseUrl, apiKey, itemId string) (*itemDomain.Item, error) {
+	url := fmt.Sprintf("%s/items/%s", baseUrl, itemId)
+
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("error creating request: %w", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", r.apiKey))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
 
 	resp, err := r.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("error making request: %w", err)
+		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, fmt.Errorf("product not found")
-	}
-
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return nil, fmt.Errorf("failed to get item, status code: %d", resp.StatusCode)
 	}
 
-	var apiProduct struct {
-		ID          string    `json:"id"`
-		Name        string    `json:"name"`
-		Description string    `json:"description"`
-		Price       float64   `json:"price"`
-		SKU         string    `json:"sku"`
-		Stock       int       `json:"stock"`
-		CreatedAt   time.Time `json:"createdAt"`
-		UpdatedAt   time.Time `json:"updatedAt"`
+	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&apiProduct); err != nil {
-		return nil, fmt.Errorf("error decoding response: %w", err)
+	var item itemDomain.Item
+	if err := json.Unmarshal(respBody, &item); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal item: %w", err)
 	}
 
-	item := &itemDomain.Item{
-		ItemId:        apiProduct.ID,
-		Name:          apiProduct.Name,
-		Description:   apiProduct.Description,
-		ExternalId:    apiProduct.SKU,
-		PointOfSaleId: "ecommerce", // You might want to make this configurable
-		Url:           fmt.Sprintf("%s/products/%s", r.baseURL, apiProduct.ID),
-		Source:        "ecommerce",
-	}
-
-	return item, nil
+	return &item, nil
 }
 
-func (r *ecommerceRepository) GetCustomers() ([]customerDomain.Customer, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/customers", r.baseURL), nil)
+func (r *ecommerceRepository) GetCustomers(baseUrl, apiKey string) ([]customerDomain.Customer, error) {
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/customers", baseUrl), nil)
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %w", err)
 	}
 
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", r.apiKey))
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := r.httpClient.Do(req)
@@ -172,13 +175,13 @@ func (r *ecommerceRepository) GetCustomers() ([]customerDomain.Customer, error) 
 	return customers, nil
 }
 
-func (r *ecommerceRepository) GetCustomerByID(id string) (*customerDomain.Customer, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/customers/%s", r.baseURL, id), nil)
+func (r *ecommerceRepository) GetCustomerByID(baseUrl, apiKey, id string) (*customerDomain.Customer, error) {
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/customers/%s", baseUrl, id), nil)
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %w", err)
 	}
 
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", r.apiKey))
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := r.httpClient.Do(req)

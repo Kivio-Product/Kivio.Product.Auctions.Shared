@@ -18,7 +18,7 @@ func NewItemIntegrationFactory(
 ) *ItemIntegrationFactory {
 	return &ItemIntegrationFactory{
 		googleSheetsStrategy: NewGoogleSheetsStrategy(googleSheetsRepo, integrationRepo),
-		ecommerceStrategy:    NewEcommerceStrategy(ecommerceRepo),
+		ecommerceStrategy:    NewEcommerceStrategy(ecommerceRepo, integrationRepo),
 	}
 }
 

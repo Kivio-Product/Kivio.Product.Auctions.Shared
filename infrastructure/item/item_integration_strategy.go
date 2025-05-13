@@ -1,6 +1,8 @@
 package infrastructure
 
 import (
+	"fmt"
+
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
 	integrationRepository "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/integration"
 )
@@ -137,40 +139,77 @@ func (s *GoogleSheetsStrategy) GetItemById(itemId string, pointOfSaleId string) 
 }
 
 type EcommerceStrategy struct {
-	ecommerceRepository integrationRepository.EcommerceRepository
+	ecommerceRepository   integrationRepository.EcommerceRepository
+	integrationRepository integrationRepository.IntegrationRepository
 }
 
-func NewEcommerceStrategy(ecommerceRepo integrationRepository.EcommerceRepository) *EcommerceStrategy {
+func NewEcommerceStrategy(ecommerceRepo integrationRepository.EcommerceRepository, integrationRepo integrationRepository.IntegrationRepository) *EcommerceStrategy {
 	return &EcommerceStrategy{
-		ecommerceRepository: ecommerceRepo,
+		ecommerceRepository:   ecommerceRepo,
+		integrationRepository: integrationRepo,
 	}
 }
 
 func (s *EcommerceStrategy) GetItems(pointOfSaleId string) ([]domain.Item, error) {
-	items, err := s.ecommerceRepository.GetItems()
+	integrations, err := s.integrationRepository.GetIntegrationsByPosID(pointOfSaleId)
 	if err != nil {
 		return nil, err
 	}
 
-	var filteredItems []domain.Item
-	for _, item := range items {
-		if item.PointOfSaleId == pointOfSaleId {
-			filteredItems = append(filteredItems, item)
+	var baseUrl, username, password string
+	for _, integration := range integrations {
+		for _, config := range integration.Configs {
+			switch config.Key {
+			case "apiUrl":
+				baseUrl = config.Value
+			case "username":
+				username = config.Value
+			case "password":
+				password = config.Value
+			}
 		}
 	}
 
-	return filteredItems, nil
+	if baseUrl == "" || username == "" || password == "" {
+		return nil, fmt.Errorf("missing integration configuration for pointOfSaleId: %s", pointOfSaleId)
+	}
+
+	apiKey, err := s.ecommerceRepository.GetApiKey(username, password, fmt.Sprintf("%s/token", baseUrl))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get API key: %w", err)
+	}
+
+	return s.ecommerceRepository.GetItems(baseUrl, apiKey)
 }
 
 func (s *EcommerceStrategy) GetItemById(itemId string, pointOfSaleId string) (*domain.Item, error) {
-	item, err := s.ecommerceRepository.GetItemByID(itemId)
+	integrations, err := s.integrationRepository.GetIntegrationsByPosID(pointOfSaleId)
 	if err != nil {
 		return nil, err
 	}
 
-	if item.PointOfSaleId != pointOfSaleId {
-		return nil, nil
+	var baseUrl, username, password string
+	for _, integration := range integrations {
+		for _, config := range integration.Configs {
+			switch config.Key {
+			case "apiUrl":
+				baseUrl = config.Value
+			case "username":
+				username = config.Value
+			case "password":
+				password = config.Value
+			}
+		}
 	}
 
-	return item, nil
+	if baseUrl == "" || username == "" || password == "" {
+		return nil, fmt.Errorf("missing integration configuration for pointOfSaleId: %s", pointOfSaleId)
+	}
+
+	apiKey, err := s.ecommerceRepository.GetApiKey(username, password, fmt.Sprintf("%s/token", baseUrl))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get API key: %w", err)
+	}
+
+	return s.ecommerceRepository.GetItemByID(baseUrl, apiKey, itemId)
 }
