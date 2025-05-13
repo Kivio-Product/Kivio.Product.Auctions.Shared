@@ -18,17 +18,20 @@ type IntegrationService interface {
 	UpdateIntegration(ctx context.Context, id string, req *dto.UpdateIntegrationRequest) (*dto.IntegrationResponse, error)
 	DeleteIntegration(ctx context.Context, id string) error
 	ConnectAndReadSheet(ctx context.Context, integrationID string, spreadsheetID string, readRange string) error
+	ConnectToEcommerce(username, password, apiUrl string) (string, error)
 }
 
 type integrationService struct {
-	integrationRepo infraIntegration.IntegrationRepository
-	googleSheetRepo infraIntegration.GoogleSheetsRepository
+	integrationRepo     infraIntegration.IntegrationRepository
+	googleSheetRepo     infraIntegration.GoogleSheetsRepository
+	ecommerceRepository infraIntegration.EcommerceRepository
 }
 
-func NewIntegrationService(repo infraIntegration.IntegrationRepository, gsRepo infraIntegration.GoogleSheetsRepository) IntegrationService {
+func NewIntegrationService(repo infraIntegration.IntegrationRepository, gsRepo infraIntegration.GoogleSheetsRepository, ecommerRepo infraIntegration.EcommerceRepository) IntegrationService {
 	return &integrationService{
-		integrationRepo: repo,
-		googleSheetRepo: gsRepo,
+		integrationRepo:     repo,
+		googleSheetRepo:     gsRepo,
+		ecommerceRepository: ecommerRepo,
 	}
 }
 
@@ -154,4 +157,17 @@ func (s *integrationService) ConnectAndReadSheet(ctx context.Context, integratio
 	fmt.Println("Successfully connected to Google Sheet and updated integration status to Connected.")
 
 	return nil
+}
+
+func (s *integrationService) ConnectToEcommerce(username, password, apiUrl string) (string, error) {
+	apiKey, err := s.ecommerceRepository.GetApiKey(username, password, fmt.Sprintf("%s/token", apiUrl))
+	if err != nil {
+		return "", fmt.Errorf("failed to connect to ecommerce: %w", err)
+	}
+
+	if apiKey == "" {
+		return "", fmt.Errorf("failed to connect to ecommerce: no API key returned")
+	}
+
+	return fmt.Sprintf("Successfully connected to ecommerce. API Key: %s", apiKey), nil
 }
