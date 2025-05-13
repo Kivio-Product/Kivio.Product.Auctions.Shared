@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"time"
 
 	customerDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/customer"
@@ -74,7 +75,7 @@ func (r *ecommerceRepository) GetApiKey(username, password, tokenUrl string) (st
 		return "", fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
-	apiKey, ok := result["token"].(string)
+	apiKey, ok := result["access_token"].(string)
 	if !ok {
 		return "", errors.New("API key not found in response")
 	}
@@ -83,7 +84,7 @@ func (r *ecommerceRepository) GetApiKey(username, password, tokenUrl string) (st
 }
 
 func (r *ecommerceRepository) GetItems(baseUrl, apiKey string) ([]itemDomain.Item, error) {
-	url := fmt.Sprintf("%s/items", baseUrl)
+	url := fmt.Sprintf("%s/api/products", baseUrl)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -107,9 +108,33 @@ func (r *ecommerceRepository) GetItems(baseUrl, apiKey string) ([]itemDomain.Ite
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	var items []itemDomain.Item
-	if err := json.Unmarshal(respBody, &items); err != nil {
+	// Define the structure of the API response
+	type Product struct {
+		ID          int     `json:"id"`
+		Name        string  `json:"name"`
+		Description string  `json:"short_description"`
+		Price       float64 `json:"price"`
+		ImageURL    string  `json:"images"`
+	}
+
+	type ApiResponse struct {
+		Products []Product `json:"products"`
+	}
+
+	var apiResponse ApiResponse
+	if err := json.Unmarshal(respBody, &apiResponse); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal items: %w", err)
+	}
+
+	var items []itemDomain.Item
+	for _, product := range apiResponse.Products {
+		item := itemDomain.Item{
+			ItemId:      strconv.Itoa(product.ID),
+			Name:        product.Name,
+			Description: product.Description,
+			Url:         product.ImageURL,
+		}
+		items = append(items, item)
 	}
 
 	return items, nil

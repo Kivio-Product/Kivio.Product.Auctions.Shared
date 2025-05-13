@@ -26,7 +26,7 @@ func (f *ItemIntegrationFactory) GetStrategy(integrationType string) (ItemIntegr
 	switch integrationType {
 	case "google_sheets":
 		return f.googleSheetsStrategy, nil
-	case "ecommerce":
+	case "kivio_ecommerce":
 		return f.ecommerceStrategy, nil
 	default:
 		return nil, fmt.Errorf("unsupported integration type: %s", integrationType)
