@@ -18,7 +18,7 @@ type IntegrationService interface {
 	UpdateIntegration(ctx context.Context, id string, req *dto.UpdateIntegrationRequest) (*dto.IntegrationResponse, error)
 	DeleteIntegration(ctx context.Context, id string) error
 	ConnectAndReadSheet(ctx context.Context, integrationID string, spreadsheetID string, readRange string) error
-	ConnectToEcommerce(username, password, apiUrl string) (string, error)
+	ConnectToEcommerce(username, password, apiUrl, integrationID string) (string, error)
 }
 
 type integrationService struct {
@@ -159,7 +159,8 @@ func (s *integrationService) ConnectAndReadSheet(ctx context.Context, integratio
 	return nil
 }
 
-func (s *integrationService) ConnectToEcommerce(username, password, apiUrl string) (string, error) {
+func (s *integrationService) ConnectToEcommerce(username, password, apiUrl, integrationID string) (string, error) {
+	integration, err := s.integrationRepo.GetIntegrationByID(integrationID)
 	apiKey, err := s.ecommerceRepository.GetApiKey(username, password, fmt.Sprintf("%s/token", apiUrl))
 	if err != nil {
 		return "", fmt.Errorf("failed to connect to ecommerce: %w", err)
@@ -167,6 +168,12 @@ func (s *integrationService) ConnectToEcommerce(username, password, apiUrl strin
 
 	if apiKey == "" {
 		return "", fmt.Errorf("failed to connect to ecommerce: no API key returned")
+	}
+
+	integration.Status = domain.Active
+	err = s.integrationRepo.UpdateIntegration(integration)
+	if err != nil {
+		return "", fmt.Errorf("error updating integration status: %w", err)
 	}
 
 	return fmt.Sprintf("Successfully connected to ecommerce. API Key: %s", apiKey), nil
