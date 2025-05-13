@@ -179,7 +179,17 @@ func (s *EcommerceStrategy) GetItems(pointOfSaleId string) ([]domain.Item, error
 		return nil, fmt.Errorf("failed to get API key: %w", err)
 	}
 
-	return s.ecommerceRepository.GetItems(baseUrl, apiKey)
+	items, err := s.ecommerceRepository.GetItems(baseUrl, apiKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get items from ecommerce: %w", err)
+	}
+
+	for i := range items {
+		items[i].PointOfSaleId = pointOfSaleId
+		items[i].Source = "Kivio ecommerce"
+	}
+
+	return items, nil
 }
 
 func (s *EcommerceStrategy) GetItemById(itemId string, pointOfSaleId string) (*domain.Item, error) {
