@@ -33,13 +33,23 @@ func NewIntegrationService(repo infraIntegration.IntegrationRepository, gsRepo i
 }
 
 func (s *integrationService) CreateIntegration(ctx context.Context, req *dto.CreateIntegrationRequest) (*dto.IntegrationResponse, error) {
-	integration := req.ToDomainIntegration()
+	existingIntegrations, err := s.integrationRepo.GetIntegrationsByPosID(req.PosID)
+	if err != nil {
+		return nil, fmt.Errorf("error checking existing integrations: %w", err)
+	}
 
+	for _, integration := range existingIntegrations {
+		if integration.Type == req.Type {
+			return nil, fmt.Errorf("an integration with type '%s' already exists for PointOfSaleID '%s'", req.Type, req.PosID)
+		}
+	}
+
+	integration := req.ToDomainIntegration()
 	integration.IntegrationID = uuid.New().String()
 	integration.CreatedAt = time.Now()
 	integration.LastSync = time.Now()
 
-	err := s.integrationRepo.SaveIntegration(integration)
+	err = s.integrationRepo.SaveIntegration(integration)
 	if err != nil {
 		return nil, fmt.Errorf("error saving integration: %w", err)
 	}

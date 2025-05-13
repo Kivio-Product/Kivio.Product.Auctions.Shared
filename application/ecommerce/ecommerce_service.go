@@ -26,17 +26,25 @@ func NewEcommerceService(repo infrastructure.EcommerceRepository) EcommerceServi
 }
 
 func (s *ecommerceService) GetItems(ctx context.Context) ([]itemDomain.Item, error) {
-	return s.repo.GetItems()
+	arg2 := "defaultArg2" // TODO: Replace with actual logic to get arg2
+	arg3 := "defaultArg3" // TODO: Replace with actual logic to get arg3
+	return s.repo.GetItems(arg2, arg3)
 }
 
 func (s *ecommerceService) GetItemByID(ctx context.Context, id string) (*itemDomain.Item, error) {
-	return s.repo.GetItemByID(id)
+	arg2 := "defaultArg2"
+	arg3 := "defaultArg3"
+	return s.repo.GetItemByID(id, arg2, arg3)
 }
 
 func (s *ecommerceService) GetCustomers(ctx context.Context) ([]customerDomain.Customer, error) {
-	return s.repo.GetCustomers()
+	arg2 := "defaultArg2"
+	arg3 := "defaultArg3"
+	return s.repo.GetCustomers(arg2, arg3)
 }
 
 func (s *ecommerceService) GetCustomerByID(ctx context.Context, id string) (*customerDomain.Customer, error) {
-	return s.repo.GetCustomerByID(id)
+	arg2 := "defaultArg2"
+	arg3 := "defaultArg3"
+	return s.repo.GetCustomerByID(id, arg2, arg3)
 }
