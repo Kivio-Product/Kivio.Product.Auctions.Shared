@@ -66,12 +66,12 @@ func (s *GoogleSheetsStrategy) GetItems(pointOfSaleId string) ([]domain.Item, er
 
 			if ok1 && ok2 {
 				item := domain.Item{
-					ItemId:        itemId,
+					ItemId:        fmt.Sprintf("kivio-ecommerce∼%d", itemId),
 					Name:          name,
 					Description:   description,
 					Source:        "google sheets",
 					PointOfSaleId: pointOfSaleId,
-					ExternalId:    itemId,
+					ExternalId:    fmt.Sprintf("kivio-ecommerce∼%d", itemId),
 				}
 				items = append(items, item)
 			}

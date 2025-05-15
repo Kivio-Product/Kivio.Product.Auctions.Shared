@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"strconv"
 	"time"
 
 	customerDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/customer"
@@ -126,9 +125,10 @@ func (r *ecommerceRepository) GetItems(baseUrl, apiKey string) ([]itemDomain.Ite
 	var items []itemDomain.Item
 	for _, product := range apiResponse.Products {
 		item := itemDomain.Item{
-			ItemId:      strconv.Itoa(product.ID),
+			ItemId:      fmt.Sprintf("kivio-ecommerce∼%d", product.ID),
 			Name:        product.Name,
 			Description: product.Description,
+			ExternalId:  fmt.Sprintf("kivio-ecommerce∼%d", product.ID),
 		}
 		items = append(items, item)
 	}
