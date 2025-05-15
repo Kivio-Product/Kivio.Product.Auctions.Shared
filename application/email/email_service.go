@@ -17,8 +17,12 @@ type emailService struct {
 	emailSender infrastructure.IEmailSender
 }
 
-func NewEmailService(emailSender infrastructure.IEmailSender) EmailService {
-	return &emailService{emailSender: emailSender}
+func NewEmailService(emailSource infrastructure.EmailSourceStrategy) (EmailService, error) {
+	emailSender, err := infrastructure.NewSESEmailSender(emailSource)
+	if err != nil {
+		return nil, err
+	}
+	return &emailService{emailSender: emailSender}, nil
 }
 
 func (s *emailService) SendEmail(ctx context.Context, state string, order *domain.Order, itemSpec *itemSpecDomain.ItemSpecification, item *itemDomain.Item) error {

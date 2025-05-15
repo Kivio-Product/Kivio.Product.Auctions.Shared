@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"regexp"
 	"strconv"
@@ -35,34 +36,40 @@ type SESEmailSender struct {
 	templateKeyApproved string
 	templateKeyRejected string
 	templateKeyQuick    string
+	emailSource         EmailSourceStrategy
 }
 
-func NewSESEmailSender() (IEmailSender, error) {
-	fmt.Println("SES Email Sender inicializado correctamente")
+func NewSESEmailSender(emailSource EmailSourceStrategy) (IEmailSender, error) {
 	sess, err := session.NewSession(&aws.Config{
 		Region: aws.String("us-east-2"),
 	})
-
 	if err != nil {
-		return nil, fmt.Errorf("error creando sesión de AWS: %v", err)
+		return nil, fmt.Errorf("error creando sesión de AWS: %w", err)
 	}
 
-	sesClient := ses.New(sess)
-	s3Client := s3.New(sess)
+	sender := os.Getenv("SES_SENDER_EMAIL")
+	bucket := os.Getenv("S3_BUCKET_NAME")
+	s3Key := os.Getenv("S3_EMAILS_FILE")
+	template := os.Getenv("S3_TEMPLATE_FILE")
+	templateApproved := os.Getenv("S3_TEMPLATE_APPROVED")
+	templateRejected := os.Getenv("S3_TEMPLATE_REJECTED")
+	templateQuick := os.Getenv("S3_TEMPLATE_QUICK")
 
-	if sesClient == nil || s3Client == nil {
-		return nil, fmt.Errorf("no se pudo crear el cliente SES o S3")
+	if sender == "" || bucket == "" || s3Key == "" || template == "" {
+		return nil, fmt.Errorf("faltan variables de entorno requeridas")
 	}
-
-	fmt.Println("SES Email Sender inicializado correctamente")
 
 	return &SESEmailSender{
-		sesClient:   sesClient,
-		s3Client:    s3Client,
-		sender:      os.Getenv("SES_SENDER_EMAIL"),
-		s3Bucket:    os.Getenv("S3_BUCKET_NAME"),
-		s3Key:       os.Getenv("S3_EMAILS_FILE"),
-		templateKey: os.Getenv("S3_TEMPLATE_FILE"),
+		sesClient:           ses.New(sess),
+		s3Client:            s3.New(sess),
+		sender:              sender,
+		s3Bucket:            bucket,
+		s3Key:               s3Key,
+		templateKey:         template,
+		templateKeyApproved: templateApproved,
+		templateKeyRejected: templateRejected,
+		templateKeyQuick:    templateQuick,
+		emailSource:         emailSource,
 	}, nil
 }
 
@@ -84,7 +91,6 @@ func (s *SESEmailSender) getCustomerEmails(ctx context.Context) ([]string, error
 
 	for scanner.Scan() {
 		line := scanner.Text()
-
 		possibleEmails := strings.FieldsFunc(line, func(r rune) bool {
 			return r == ';' || r == ',' || r == ' ' || r == '\t'
 		})
@@ -104,155 +110,7 @@ func (s *SESEmailSender) getCustomerEmails(ctx context.Context) ([]string, error
 	return emails, nil
 }
 
-func (s *SESEmailSender) SendOrderEmail(ctx context.Context, order *orderDomain.Order, itemSpec *itemSpecDomain.ItemSpecification, item *itemDomain.Item, state string) error {
-	if s.sesClient == nil {
-		return fmt.Errorf("SES client is not initialized")
-	}
-
-	template, err := s.getTemplate2(ctx, state)
-	if err != nil {
-		return err
-	}
-
-	email := order.CustomerId
-
-	body := strings.ReplaceAll(template, "{{ITEM_NAME}}", item.Name)
-	body = strings.ReplaceAll(body, "{{ITEM_DESCRIPTION}}", item.Description)
-	body = strings.ReplaceAll(body, "{{AMOUNT}}", strconv.FormatInt(order.OfferedAmount, 10))
-
-	var subject string
-	switch state {
-	case "Approved":
-		subject = fmt.Sprintf("🎉 ¡Felicidades! Has ganado la subasta de: %s", item.Name)
-	case "Rejected":
-		subject = fmt.Sprintf("Resultado de la subasta: %s", item.Name)
-	case "Quick":
-		subject = fmt.Sprintf("Oferta obtenida: %s", item.Name)
-	}
-
-	input := &ses.SendEmailInput{
-		Source: aws.String(s.sender),
-		Destination: &ses.Destination{
-			ToAddresses: aws.StringSlice([]string{email}),
-		},
-		Message: &ses.Message{
-			Subject: &ses.Content{Data: aws.String(subject)},
-			Body:    &ses.Body{Html: &ses.Content{Data: aws.String(body)}},
-		},
-	}
-
-	_, err = s.sesClient.SendEmailWithContext(ctx, input)
-	if err != nil {
-		fmt.Printf("Error al enviar correo a %s: %v\n", email, err)
-	} else {
-		fmt.Printf("Correo enviado correctamente a %s\n", email)
-	}
-
-	return nil
-}
-
-func (s *SESEmailSender) getTemplate(ctx context.Context) (string, error) {
-	input := &s3.GetObjectInput{
-		Bucket: aws.String(s.s3Bucket),
-		Key:    aws.String(s.templateKey),
-	}
-
-	result, err := s.s3Client.GetObjectWithContext(ctx, input)
-	if err != nil {
-		return "", fmt.Errorf("error al obtener la plantilla de S3: %w", err)
-	}
-	defer result.Body.Close()
-
-	body, err := io.ReadAll(result.Body)
-	if err != nil {
-		return "", fmt.Errorf("error al leer la plantilla de S3: %w", err)
-	}
-
-	return string(body), nil
-}
-
-func (s *SESEmailSender) SendEmail(ctx context.Context, offer *domain.Offer, auctionURL string) error {
-	if s.sesClient == nil {
-		return fmt.Errorf("SES client is not initialized")
-	}
-
-	emails, err := s.getCustomerEmails(ctx)
-	if err != nil {
-		return err
-	}
-
-	cleanedEmails := make([]string, 0, len(emails))
-	for _, email := range emails {
-		cleaned := strings.TrimSpace(email)
-		if cleaned != "" {
-			cleanedEmails = append(cleanedEmails, cleaned)
-		}
-	}
-
-	fmt.Println("Correos obtenidos correctamente", emails)
-	fmt.Printf("%q", emails)
-	fmt.Printf("%q", cleanedEmails)
-
-	if len(cleanedEmails) == 0 {
-		return fmt.Errorf("no hay correos en la lista")
-	}
-
-	template, err := s.getTemplate(ctx)
-	if err != nil {
-		return err
-	}
-
-	for _, email := range cleanedEmails {
-		personalizedURL := auctionURL + "&email=" + email
-
-		body := strings.ReplaceAll(template, "{{OFFER_NAME}}", offer.Name)
-		body = strings.ReplaceAll(body, "{{OFFER_DESCRIPTION}}", offer.Description)
-		body = strings.ReplaceAll(body, "{{DISCOUNT}}", "50%")
-		body = strings.ReplaceAll(body, "{{AUCTION_TIME}}", strconv.FormatInt(offer.AuctionTime, 10))
-		body = strings.ReplaceAll(body, "{{AUCTION_URL}}", personalizedURL)
-
-		subject := fmt.Sprintf("🔥 Oferta Especial: %s", offer.Name)
-
-		input := &ses.SendEmailInput{
-			Source: aws.String(s.sender),
-			Destination: &ses.Destination{
-				ToAddresses: aws.StringSlice([]string{email}),
-			},
-			Message: &ses.Message{
-				Subject: &ses.Content{Data: aws.String(subject)},
-				Body:    &ses.Body{Html: &ses.Content{Data: aws.String(body)}},
-			},
-		}
-
-		_, err := s.sesClient.SendEmailWithContext(ctx, input)
-		if err != nil {
-			fmt.Printf("Error al enviar correo a %s: %v\n", email, err)
-		} else {
-			fmt.Printf("Correo enviado correctamente a %s\n", email)
-		}
-	}
-
-	return nil
-}
-
-func (s *SESEmailSender) getTemplate2(ctx context.Context, state string) (string, error) {
-	var key string
-
-	switch state {
-	case "Approved":
-		key = s.templateKeyApproved
-	case "Rejected":
-		key = s.templateKeyRejected
-	case "Quick":
-		key = s.templateKeyQuick
-	default:
-		return "", fmt.Errorf("estado inválido: %s", state)
-	}
-
-	if key == "" {
-		return "", fmt.Errorf("error clave vacía para el estado %s", state)
-	}
-
+func (s *SESEmailSender) readTemplateFromS3(ctx context.Context, key string) (string, error) {
 	input := &s3.GetObjectInput{
 		Bucket: aws.String(s.s3Bucket),
 		Key:    aws.String(key),
@@ -270,4 +128,130 @@ func (s *SESEmailSender) getTemplate2(ctx context.Context, state string) (string
 	}
 
 	return string(body), nil
+}
+
+func replaceTemplateVars(template string, vars map[string]string) string {
+	for key, value := range vars {
+		template = strings.ReplaceAll(template, fmt.Sprintf("{{%s}}", key), value)
+	}
+	return template
+}
+
+func (s *SESEmailSender) SendEmail(ctx context.Context, offer *domain.Offer, auctionURL string) error {
+	if s.sesClient == nil {
+		return fmt.Errorf("SES client is not initialized")
+	}
+
+	emails, err := s.emailSource.GetEmails(ctx)
+	if err != nil {
+		return err
+	}
+
+	if len(emails) == 0 {
+		return fmt.Errorf("no hay correos en la lista")
+	}
+
+	template, err := s.readTemplateFromS3(ctx, s.templateKey)
+	if err != nil {
+		return err
+	}
+
+	for _, email := range emails {
+		personalizedURL := auctionURL + "&email=" + email
+
+		vars := map[string]string{
+			"OFFER_NAME":        offer.Name,
+			"OFFER_DESCRIPTION": offer.Description,
+			"DISCOUNT":          "50%",
+			"AUCTION_TIME":      strconv.FormatInt(offer.AuctionTime, 10),
+			"AUCTION_URL":       personalizedURL,
+		}
+		body := replaceTemplateVars(template, vars)
+
+		subject := fmt.Sprintf("🔥 Oferta Especial: %s", offer.Name)
+
+		input := &ses.SendEmailInput{
+			Source: aws.String(s.sender),
+			Destination: &ses.Destination{
+				ToAddresses: aws.StringSlice([]string{email}),
+			},
+			Message: &ses.Message{
+				Subject: &ses.Content{Data: aws.String(subject)},
+				Body:    &ses.Body{Html: &ses.Content{Data: aws.String(body)}},
+			},
+		}
+
+		_, err := s.sesClient.SendEmailWithContext(ctx, input)
+		if err != nil {
+			log.Printf("Error al enviar correo a %s: %v", email, err)
+		} else {
+			log.Printf("Correo enviado correctamente a %s", email)
+		}
+	}
+
+	return nil
+}
+
+func (s *SESEmailSender) SendOrderEmail(ctx context.Context, order *orderDomain.Order, itemSpec *itemSpecDomain.ItemSpecification, item *itemDomain.Item, state string) error {
+	if s.sesClient == nil {
+		return fmt.Errorf("SES client is not initialized")
+	}
+
+	var templateKey string
+	switch state {
+	case "Approved":
+		templateKey = s.templateKeyApproved
+	case "Rejected":
+		templateKey = s.templateKeyRejected
+	case "Quick":
+		templateKey = s.templateKeyQuick
+	default:
+		return fmt.Errorf("estado inválido: %s", state)
+	}
+
+	if templateKey == "" {
+		return fmt.Errorf("no se configuró la plantilla para el estado %s", state)
+	}
+
+	template, err := s.readTemplateFromS3(ctx, templateKey)
+	if err != nil {
+		return err
+	}
+
+	vars := map[string]string{
+		"ITEM_NAME":        item.Name,
+		"ITEM_DESCRIPTION": item.Description,
+		"AMOUNT":           strconv.FormatInt(order.OfferedAmount, 10),
+	}
+	body := replaceTemplateVars(template, vars)
+
+	var subject string
+	switch state {
+	case "Approved":
+		subject = fmt.Sprintf("🎉 ¡Felicidades! Has ganado la subasta de: %s", item.Name)
+	case "Rejected":
+		subject = fmt.Sprintf("Resultado de la subasta: %s", item.Name)
+	case "Quick":
+		subject = fmt.Sprintf("Oferta obtenida: %s", item.Name)
+	}
+
+	input := &ses.SendEmailInput{
+		Source: aws.String(s.sender),
+		Destination: &ses.Destination{
+			ToAddresses: aws.StringSlice([]string{order.CustomerId}),
+		},
+		Message: &ses.Message{
+			Subject: &ses.Content{Data: aws.String(subject)},
+			Body:    &ses.Body{Html: &ses.Content{Data: aws.String(body)}},
+		},
+	}
+
+	_, err = s.sesClient.SendEmailWithContext(ctx, input)
+	if err != nil {
+		log.Printf("Error al enviar correo a %s: %v", order.CustomerId, err)
+	} else {
+		log.Printf("Correo enviado correctamente a %s", order.CustomerId)
+	}
+
+	return nil
 }
