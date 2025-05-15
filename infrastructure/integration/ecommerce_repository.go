@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strings"
 	"time"
 
 	customerDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/customer"
@@ -137,7 +138,12 @@ func (r *ecommerceRepository) GetItems(baseUrl, apiKey string) ([]itemDomain.Ite
 }
 
 func (r *ecommerceRepository) GetItemByID(baseUrl, apiKey, itemId string) (*itemDomain.Item, error) {
-	url := fmt.Sprintf("%s/items/%s", baseUrl, itemId)
+
+	itemId = strings.TrimPrefix(itemId, "kivio-ecommerce∼")
+
+	fmt.Println("itemId", itemId)
+
+	url := fmt.Sprintf("%s/api/products/%s", baseUrl, itemId)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -151,6 +157,8 @@ func (r *ecommerceRepository) GetItemByID(baseUrl, apiKey, itemId string) (*item
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
+
+	fmt.Println("resp.StatusCode", resp.StatusCode)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to get item, status code: %d", resp.StatusCode)
