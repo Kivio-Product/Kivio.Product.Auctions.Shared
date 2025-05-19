@@ -17,8 +17,8 @@ type emailService struct {
 	emailSender infrastructure.IEmailSender
 }
 
-func NewEmailService(emailSource infrastructure.EmailSourceStrategy) (EmailService, error) {
-	emailSender, err := infrastructure.NewSESEmailSender(emailSource)
+func NewEmailService(emailSource infrastructure.EmailSourceStrategy, ecommerceSource infrastructure.EcommerceEmailSourceStrategy) (EmailService, error) {
+	emailSender, err := infrastructure.NewSESEmailSender(emailSource, ecommerceSource)
 	if err != nil {
 		return nil, err
 	}

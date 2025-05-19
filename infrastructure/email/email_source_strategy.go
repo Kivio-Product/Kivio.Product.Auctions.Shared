@@ -4,16 +4,22 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 
 	integrationInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/integration"
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 )
 
 type EmailSourceStrategy interface {
 	GetEmails(ctx context.Context) ([]string, error)
+}
+
+type EcommerceEmailSourceStrategy interface {
+	GetEmails(ctx context.Context, baseUrl, apiKey string) ([]string, error)
 }
 
 type S3EmailSource struct {
@@ -24,23 +30,34 @@ type S3EmailSource struct {
 
 type EcommerceEmailSource struct {
 	ecommerceRepo integrationInfrastructure.EcommerceRepository
-	baseUrl       string
-	apiKey        string
 }
 
-func NewS3EmailSource(s3Client *s3.S3, bucket, key string) EmailSourceStrategy {
+func NewS3EmailSource() (EmailSourceStrategy, error) {
+	bucket := os.Getenv("S3_BUCKET_NAME")
+	key := os.Getenv("S3_EMAILS_FILE")
+	sess, err := session.NewSession(&aws.Config{
+		Region: aws.String("us-east-2"),
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("error creando sesión de AWS: %v", err)
+	}
+	s3Client := s3.New(sess)
+
+	if bucket == "" || key == "" {
+		return nil, fmt.Errorf("faltan variables de entorno requeridas para S3EmailSource")
+	}
+
 	return &S3EmailSource{
 		s3Client: s3Client,
 		bucket:   bucket,
 		key:      key,
-	}
+	}, nil
 }
 
-func NewEcommerceEmailSource(ecommerceRepo integrationInfrastructure.EcommerceRepository, baseUrl, apiKey string) EmailSourceStrategy {
+func NewEcommerceEmailSource(ecommerceRepo integrationInfrastructure.EcommerceRepository) EcommerceEmailSourceStrategy {
 	return &EcommerceEmailSource{
 		ecommerceRepo: ecommerceRepo,
-		baseUrl:       baseUrl,
-		apiKey:        apiKey,
 	}
 }
 
@@ -81,8 +98,8 @@ func (s *S3EmailSource) GetEmails(ctx context.Context) ([]string, error) {
 	return emails, nil
 }
 
-func (e *EcommerceEmailSource) GetEmails(ctx context.Context) ([]string, error) {
-	customers, err := e.ecommerceRepo.GetCustomers(e.baseUrl, e.apiKey)
+func (e *EcommerceEmailSource) GetEmails(ctx context.Context, baseUrl, apiKey string) ([]string, error) {
+	customers, err := e.ecommerceRepo.GetCustomers(baseUrl, apiKey)
 	if err != nil {
 		return nil, fmt.Errorf("error al obtener clientes del ecommerce: %w", err)
 	}

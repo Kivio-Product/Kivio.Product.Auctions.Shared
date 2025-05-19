@@ -37,9 +37,10 @@ type SESEmailSender struct {
 	templateKeyRejected string
 	templateKeyQuick    string
 	emailSource         EmailSourceStrategy
+	ecommerceSource     EcommerceEmailSourceStrategy
 }
 
-func NewSESEmailSender(emailSource EmailSourceStrategy) (IEmailSender, error) {
+func NewSESEmailSender(emailSource EmailSourceStrategy, ecommerceSource EcommerceEmailSourceStrategy) (IEmailSender, error) {
 	sess, err := session.NewSession(&aws.Config{
 		Region: aws.String("us-east-2"),
 	})
@@ -70,6 +71,7 @@ func NewSESEmailSender(emailSource EmailSourceStrategy) (IEmailSender, error) {
 		templateKeyRejected: templateRejected,
 		templateKeyQuick:    templateQuick,
 		emailSource:         emailSource,
+		ecommerceSource:     ecommerceSource,
 	}, nil
 }
 
@@ -142,7 +144,17 @@ func (s *SESEmailSender) SendEmail(ctx context.Context, offer *domain.Offer, auc
 		return fmt.Errorf("SES client is not initialized")
 	}
 
-	emails, err := s.emailSource.GetEmails(ctx)
+	var emails []string
+	var err error
+
+	if s.ecommerceSource != nil {
+		baseUrl := os.Getenv("ECOMMERCE_BASE_URL")
+		apiKey := os.Getenv("ECOMMERCE_API_KEY")
+		emails, err = s.ecommerceSource.GetEmails(ctx, baseUrl, apiKey)
+	} else {
+		emails, err = s.emailSource.GetEmails(ctx)
+	}
+
 	if err != nil {
 		return err
 	}
