@@ -2,7 +2,7 @@ package services
 
 import (
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/user"
-	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/user"
+	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/user"
 )
 
 type UserService interface {

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item_specification"
-	itemSpecInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/item_specification"
+	itemSpecInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item_specification"
 )
 
 type ItemSpecificationService interface {

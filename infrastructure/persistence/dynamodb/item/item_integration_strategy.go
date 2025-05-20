@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
-	integrationRepository "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/integration"
+	integrationRepository "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/integration"
 )
 
 type ItemIntegrationStrategy interface {

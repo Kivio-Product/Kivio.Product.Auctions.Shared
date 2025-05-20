@@ -1,17 +1,14 @@
 package infrastructure
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"os"
 	"regexp"
 	"strings"
 
-	integrationInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/integration"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
+	integrationInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/integration"
+	s3Storage "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/s3"
 )
 
 type EmailSourceStrategy interface {
@@ -23,9 +20,8 @@ type EcommerceEmailSourceStrategy interface {
 }
 
 type S3EmailSource struct {
-	s3Client *s3.S3
-	bucket   string
-	key      string
+	fileStorage *s3Storage.S3FileStorage
+	key         string
 }
 
 type EcommerceEmailSource struct {
@@ -35,23 +31,19 @@ type EcommerceEmailSource struct {
 func NewS3EmailSource() (EmailSourceStrategy, error) {
 	bucket := os.Getenv("S3_BUCKET_NAME")
 	key := os.Getenv("S3_EMAILS_FILE")
-	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String("us-east-2"),
-	})
-
-	if err != nil {
-		return nil, fmt.Errorf("error creando sesión de AWS: %v", err)
-	}
-	s3Client := s3.New(sess)
 
 	if bucket == "" || key == "" {
 		return nil, fmt.Errorf("faltan variables de entorno requeridas para S3EmailSource")
 	}
 
+	fileStorage, err := s3Storage.NewS3FileStorage(bucket)
+	if err != nil {
+		return nil, fmt.Errorf("error creating S3 file storage: %w", err)
+	}
+
 	return &S3EmailSource{
-		s3Client: s3Client,
-		bucket:   bucket,
-		key:      key,
+		fileStorage: fileStorage,
+		key:         key,
 	}, nil
 }
 
@@ -62,23 +54,15 @@ func NewEcommerceEmailSource(ecommerceRepo integrationInfrastructure.EcommerceRe
 }
 
 func (s *S3EmailSource) GetEmails(ctx context.Context) ([]string, error) {
-	input := &s3.GetObjectInput{
-		Bucket: aws.String(s.bucket),
-		Key:    aws.String(s.key),
-	}
-
-	result, err := s.s3Client.GetObjectWithContext(ctx, input)
+	lines, err := s.fileStorage.ReadFileLines(ctx, s.key)
 	if err != nil {
-		return nil, fmt.Errorf("error al obtener el archivo de S3: %w", err)
+		return nil, fmt.Errorf("error reading emails file: %w", err)
 	}
-	defer result.Body.Close()
 
-	scanner := bufio.NewScanner(result.Body)
 	var emails []string
 	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
 
-	for scanner.Scan() {
-		line := scanner.Text()
+	for _, line := range lines {
 		possibleEmails := strings.FieldsFunc(line, func(r rune) bool {
 			return r == ';' || r == ',' || r == ' ' || r == '\t'
 		})
@@ -89,10 +73,6 @@ func (s *S3EmailSource) GetEmails(ctx context.Context) ([]string, error) {
 				emails = append(emails, cleaned)
 			}
 		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("error al leer el archivo de S3: %w", err)
 	}
 
 	return emails, nil

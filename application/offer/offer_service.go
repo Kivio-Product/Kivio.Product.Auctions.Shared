@@ -5,8 +5,8 @@ import (
 	"strconv"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/offer"
-	email "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/email"
-	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/offer"
+	email "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/notifier/email"
+	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/offer"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
 

@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/point_of_sale"
-	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/point_of_sale"
+	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/point_of_sale"
 )
 
 type IPosService interface {

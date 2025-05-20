@@ -3,7 +3,7 @@ package infrastructure
 import (
 	"fmt"
 
-	integrationRepository "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/integration"
+	integrationRepository "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/integration"
 )
 
 type ItemIntegrationFactory struct {

@@ -3,7 +3,6 @@ package infrastructure
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"strconv"
@@ -13,9 +12,9 @@ import (
 	itemSpecDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item_specification"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/offer"
 	orderDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
+	s3Storage "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/s3"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/ses"
 )
 
@@ -26,10 +25,8 @@ type IEmailSender interface {
 
 type SESEmailSender struct {
 	sesClient           *ses.SES
-	s3Client            *s3.S3
+	fileStorage         *s3Storage.S3FileStorage
 	sender              string
-	s3Bucket            string
-	s3Key               string
 	templateKey         string
 	templateKeyApproved string
 	templateKeyRejected string
@@ -48,22 +45,24 @@ func NewSESEmailSender(emailSource EmailSourceStrategy, ecommerceSource Ecommerc
 
 	sender := os.Getenv("SES_SENDER_EMAIL")
 	bucket := os.Getenv("S3_BUCKET_NAME")
-	s3Key := os.Getenv("S3_EMAILS_FILE")
 	template := os.Getenv("S3_TEMPLATE_FILE")
 	templateApproved := os.Getenv("S3_TEMPLATE_APPROVED")
 	templateRejected := os.Getenv("S3_TEMPLATE_REJECTED")
 	templateQuick := os.Getenv("S3_TEMPLATE_QUICK")
 
-	if sender == "" || bucket == "" || s3Key == "" || template == "" {
+	if sender == "" || bucket == "" || template == "" {
 		return nil, fmt.Errorf("faltan variables de entorno requeridas")
+	}
+
+	fileStorage, err := s3Storage.NewS3FileStorage(bucket)
+	if err != nil {
+		return nil, fmt.Errorf("error creating S3 file storage: %w", err)
 	}
 
 	return &SESEmailSender{
 		sesClient:           ses.New(sess),
-		s3Client:            s3.New(sess),
+		fileStorage:         fileStorage,
 		sender:              sender,
-		s3Bucket:            bucket,
-		s3Key:               s3Key,
 		templateKey:         template,
 		templateKeyApproved: templateApproved,
 		templateKeyRejected: templateRejected,
@@ -74,23 +73,7 @@ func NewSESEmailSender(emailSource EmailSourceStrategy, ecommerceSource Ecommerc
 }
 
 func (s *SESEmailSender) readTemplateFromS3(ctx context.Context, key string) (string, error) {
-	input := &s3.GetObjectInput{
-		Bucket: aws.String(s.s3Bucket),
-		Key:    aws.String(key),
-	}
-
-	result, err := s.s3Client.GetObjectWithContext(ctx, input)
-	if err != nil {
-		return "", fmt.Errorf("error al obtener la plantilla de S3: %w", err)
-	}
-	defer result.Body.Close()
-
-	body, err := io.ReadAll(result.Body)
-	if err != nil {
-		return "", fmt.Errorf("error al leer la plantilla de S3: %w", err)
-	}
-
-	return string(body), nil
+	return s.fileStorage.ReadFile(ctx, key)
 }
 
 func replaceTemplateVars(template string, vars map[string]string) string {

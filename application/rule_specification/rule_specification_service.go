@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/rule_specification"
-	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/rule_specification"
+	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/rule_specification"
 )
 
 type RuleSpecificationService interface {

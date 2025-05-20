@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
-	integrationInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/integration"
-	itemInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/item"
+	integrationInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/integration"
+	itemInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item"
 )
 
 type ItemService interface {

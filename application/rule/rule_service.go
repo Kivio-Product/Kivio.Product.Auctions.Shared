@@ -9,7 +9,7 @@ import (
 	ruleDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/rule"
 	ruleSpecificationDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/rule_specification"
 	sheetsDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/sheets"
-	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/rule"
+	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/rule"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
 

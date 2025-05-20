@@ -7,7 +7,7 @@ import (
 
 	"github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/dto"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/integration"
-	infraIntegration "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/integration"
+	infraIntegration "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/integration"
 	"github.com/google/uuid"
 )
 

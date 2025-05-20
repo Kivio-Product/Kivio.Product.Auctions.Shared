@@ -5,7 +5,7 @@ import (
 
 	ruleDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/rule"
 	sheetsDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/sheets"
-	integrationInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/integration"
+	integrationInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/integration"
 )
 
 type SheetService interface {

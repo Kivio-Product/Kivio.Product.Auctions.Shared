@@ -6,7 +6,7 @@ import (
 	itemDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
 	itemSpecDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item_specification"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
-	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/email"
+	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/notifier/email"
 )
 
 type EmailService interface {

@@ -5,7 +5,7 @@ import (
 
 	customerDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/customer"
 	itemDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
-	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/integration"
+	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/integration"
 )
 
 type EcommerceService interface {

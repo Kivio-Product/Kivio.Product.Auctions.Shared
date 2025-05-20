@@ -4,7 +4,7 @@ import (
 	"context"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/offer_specification"
-	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/offer_specification"
+	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/offer_specification"
 )
 
 type IOfferSpecificationService interface {
