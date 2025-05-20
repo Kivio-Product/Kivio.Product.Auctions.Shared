@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/point_of_sale"
 	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/point_of_sale"
@@ -26,14 +27,26 @@ func NewPosService(repo infrastructure.IPosRepository, posFactory domain.PosFact
 }
 
 func (s *PosService) GeneratePointOfSale(ctx context.Context, description, name, userId string) (*domain.PointOfSale, error) {
+	existingPos, err := s.repo.GetPosByUser(userId)
+	if err != nil {
+		return nil, fmt.Errorf("error checking existing PointOfSale for user: %w", err)
+	}
+
+	if len(existingPos) > 0 {
+		return nil, fmt.Errorf("user '%s' already has a PointOfSale", userId)
+	}
+
 	pointOfSale, err := s.posFactory.CreatePointOfSale(description, name, userId)
 	if err != nil {
-		return &domain.PointOfSale{}, err
+		return nil, err
 	}
+
 	pointOfSale = domain.GenerateCreatedState(pointOfSale)
+
 	if err := s.repo.SavePointOfSale(ctx, pointOfSale); err != nil {
 		return nil, err
 	}
+
 	return pointOfSale, nil
 }
 
@@ -55,7 +68,7 @@ func (s *PosService) UpdatePointOfSale(ctx context.Context, name, description, p
 }
 
 func (s *PosService) GetPosByUserId(ctx context.Context, id string) ([]domain.PointOfSale, error) {
-	items, err := s.repo.GetUserPos(id)
+	items, err := s.repo.GetPosByUser(id)
 	if err != nil {
 		return nil, err
 	}

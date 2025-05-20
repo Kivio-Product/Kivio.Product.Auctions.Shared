@@ -1,13 +1,11 @@
 package infrastructure
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
 	"log"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -73,43 +71,6 @@ func NewSESEmailSender(emailSource EmailSourceStrategy, ecommerceSource Ecommerc
 		emailSource:         emailSource,
 		ecommerceSource:     ecommerceSource,
 	}, nil
-}
-
-func (s *SESEmailSender) getCustomerEmails(ctx context.Context) ([]string, error) {
-	input := &s3.GetObjectInput{
-		Bucket: aws.String(s.s3Bucket),
-		Key:    aws.String(s.s3Key),
-	}
-
-	result, err := s.s3Client.GetObjectWithContext(ctx, input)
-	if err != nil {
-		return nil, fmt.Errorf("error al obtener el archivo de S3: %w", err)
-	}
-	defer result.Body.Close()
-
-	scanner := bufio.NewScanner(result.Body)
-	var emails []string
-	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		possibleEmails := strings.FieldsFunc(line, func(r rune) bool {
-			return r == ';' || r == ',' || r == ' ' || r == '\t'
-		})
-
-		for _, email := range possibleEmails {
-			cleaned := strings.TrimSpace(email)
-			if emailRegex.MatchString(cleaned) {
-				emails = append(emails, cleaned)
-			}
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("error al leer el archivo de S3: %w", err)
-	}
-
-	return emails, nil
 }
 
 func (s *SESEmailSender) readTemplateFromS3(ctx context.Context, key string) (string, error) {

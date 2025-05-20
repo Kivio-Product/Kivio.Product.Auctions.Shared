@@ -22,7 +22,7 @@ type PosRepository struct {
 type IPosRepository interface {
 	SavePointOfSale(ctx context.Context, pointOfSale *domain.PointOfSale) error
 	GetAllPos() ([]domain.PointOfSale, error)
-	GetUserPos(id string) ([]domain.PointOfSale, error)
+	GetPosByUser(id string) ([]domain.PointOfSale, error)
 	GetPosById(ctx context.Context, posId string) (*domain.PointOfSale, error)
 	DeletePos(ctx context.Context, posId string) error
 }
@@ -100,7 +100,7 @@ func (r *PosRepository) GetPosById(ctx context.Context, posId string) (*domain.P
 	return &item, nil
 }
 
-func (r *PosRepository) GetUserPos(userId string) ([]domain.PointOfSale, error) {
+func (r *PosRepository) GetPosByUser(userId string) ([]domain.PointOfSale, error) {
 	result, err := r.client.Scan(&dynamodb.ScanInput{
 		TableName: aws.String(r.pointOfSaleTable),
 	})
