@@ -8,6 +8,11 @@ import (
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 )
 
+type EmailServiceInterface interface {
+	NotifyOffer(ctx context.Context, auctionURL string, offerName string) error
+	NotifyOrder(ctx context.Context, state string, order *domain.Order, itemSpec *itemSpecDomain.ItemSpecification, item *itemDomain.Item) error
+}
+
 type EmailService struct {
 	notifyOffer        *NotifyOfferUseCase
 	notifyOrderUseCase *NotifyOrderUseCase
@@ -23,8 +28,8 @@ func NewEmailService(
 	}
 }
 
-func (s *EmailService) NotifyOffer(ctx context.Context, auctionURL string, offerID string) error {
-	return s.notifyOffer.Execute(ctx, auctionURL, offerID)
+func (s *EmailService) NotifyOffer(ctx context.Context, auctionURL string, offerName string) error {
+	return s.notifyOffer.Execute(ctx, auctionURL, offerName)
 }
 
 func (s *EmailService) NotifyOrder(ctx context.Context, state string, order *domain.Order, itemSpec *itemSpecDomain.ItemSpecification, item *itemDomain.Item) error {
