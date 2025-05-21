@@ -9,11 +9,19 @@ import (
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/repository"
 )
 
+type IFileStorageService interface {
+	UploadFile(ctx context.Context, key string, content io.Reader) error
+	GetFileURL(ctx context.Context, key string, expiration time.Duration) (string, error)
+	DeleteFile(ctx context.Context, key string) error
+	ReadFile(ctx context.Context, key string) (string, error)
+	ReadFileLines(ctx context.Context, key string) ([]string, error)
+}
+
 type FileStorageService struct {
 	fileStorage domain.FileStorage
 }
 
-func NewFileStorageService(fileStorage domain.FileStorage) *FileStorageService {
+func NewFileStorageService(fileStorage domain.FileStorage) IFileStorageService {
 	return &FileStorageService{
 		fileStorage: fileStorage,
 	}

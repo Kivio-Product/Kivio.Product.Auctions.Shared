@@ -12,10 +12,10 @@ import (
 
 type NotifyOfferUseCase struct {
 	notifier           domain.Notifier
-	fileStorageService *application.FileStorageService
+	fileStorageService application.IFileStorageService
 }
 
-func NewNotifyOfferUseCase(notifier domain.Notifier, fileStorageService *application.FileStorageService) *NotifyOfferUseCase {
+func NewNotifyOfferUseCase(notifier domain.Notifier, fileStorageService application.IFileStorageService) *NotifyOfferUseCase {
 	return &NotifyOfferUseCase{
 		notifier:           notifier,
 		fileStorageService: fileStorageService,
