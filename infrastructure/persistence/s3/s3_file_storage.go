@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -17,7 +18,8 @@ type S3FileStorage struct {
 	bucket   string
 }
 
-func NewS3FileStorage(bucket string) (*S3FileStorage, error) {
+func NewS3FileStorage() (*S3FileStorage, error) {
+	bucket := os.Getenv("S3_BUCKET_NAME")
 	sess, err := session.NewSession(&aws.Config{
 		Region: aws.String("us-east-2"),
 	})
