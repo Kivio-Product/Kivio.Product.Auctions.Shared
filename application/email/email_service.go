@@ -21,7 +21,7 @@ type EmailService struct {
 func NewEmailService(
 	notifyOfferUC *NotifyOfferUseCase,
 	notifyOrderUC *NotifyOrderUseCase,
-) *EmailService {
+) EmailServiceInterface {
 	return &EmailService{
 		notifyOffer:        notifyOfferUC,
 		notifyOrderUseCase: notifyOrderUC,
