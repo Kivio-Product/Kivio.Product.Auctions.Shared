@@ -4,8 +4,8 @@ import (
 	"context"
 	"strconv"
 
+	emailService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/offer"
-	email "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/notifier/email"
 	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/offer"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
@@ -23,11 +23,11 @@ type IOfferService interface {
 
 type OfferService struct {
 	repo         infrastructure.IOfferRepository
-	emailSender  email.IEmailSender
+	emailSender  emailService.EmailService
 	offerFactory domain.OfferFactory
 }
 
-func NewofferService(repo infrastructure.IOfferRepository, offerFactory domain.OfferFactory, emailSender email.IEmailSender) IOfferService {
+func NewofferService(repo infrastructure.IOfferRepository, offerFactory domain.OfferFactory, emailSender emailService.EmailService) IOfferService {
 	return &OfferService{
 		repo:         repo,
 		offerFactory: offerFactory,
@@ -36,12 +36,7 @@ func NewofferService(repo infrastructure.IOfferRepository, offerFactory domain.O
 }
 
 func (s *OfferService) SendOfferEmail(ctx context.Context, auctionURL string, offerID string) error {
-	offer, err := s.repo.GetOfferById(ctx, offerID)
-	if err != nil {
-		return err
-	}
-
-	return s.emailSender.SendEmail(ctx, offer, auctionURL)
+	return s.emailSender.NotifyOffer(ctx, offerID, auctionURL)
 }
 
 func (s *OfferService) GenerateOffer(ctx context.Context, name, description, posId, typer string, auctionTime int64) (*domain.Offer, error) {

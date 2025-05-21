@@ -359,7 +359,7 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 				return fmt.Errorf("no se pudo actualizar el item specification %s: %v", order.ItemSpecificationId, err)
 			}
 
-			err = s.emailService.SendEmail(ctx, typer, order, itemSpec, item)
+			err = s.emailService.NotifyOrder(ctx, typer, order, itemSpec, item)
 			if err != nil {
 				fmt.Printf("No se puedo enviar el correo: %s\n", err)
 			}

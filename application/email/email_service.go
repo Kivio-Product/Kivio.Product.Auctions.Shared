@@ -6,25 +6,33 @@ import (
 	itemDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
 	itemSpecDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item_specification"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
-	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/notifier/email"
 )
 
-type EmailService interface {
-	SendEmail(ctx context.Context, state string, order *domain.Order, itemSpec *itemSpecDomain.ItemSpecification, item *itemDomain.Item) error
+type EmailService struct {
+	notifyOffer        *NotifyOfferUseCase
+	notifyOrderUseCase *NotifyOrderUseCase
 }
 
-type emailService struct {
-	emailSender infrastructure.IEmailSender
-}
-
-func NewEmailService(emailSource infrastructure.EmailSourceStrategy, ecommerceSource infrastructure.EcommerceEmailSourceStrategy) (EmailService, error) {
-	emailSender, err := infrastructure.NewSESEmailSender(emailSource, ecommerceSource)
-	if err != nil {
-		return nil, err
+func NewEmailService(
+	notifyOfferUC *NotifyOfferUseCase,
+	notifyOrderUC *NotifyOrderUseCase,
+) *EmailService {
+	return &EmailService{
+		notifyOffer:        notifyOfferUC,
+		notifyOrderUseCase: notifyOrderUC,
 	}
-	return &emailService{emailSender: emailSender}, nil
 }
 
-func (s *emailService) SendEmail(ctx context.Context, state string, order *domain.Order, itemSpec *itemSpecDomain.ItemSpecification, item *itemDomain.Item) error {
-	return s.emailSender.SendOrderEmail(ctx, order, itemSpec, item, state)
+func (s *EmailService) NotifyOffer(ctx context.Context, auctionURL string, offerID string) error {
+	return s.notifyOffer.Execute(ctx, auctionURL, offerID)
+}
+
+func (s *EmailService) NotifyOrder(ctx context.Context, state string, order *domain.Order, itemSpec *itemSpecDomain.ItemSpecification, item *itemDomain.Item) error {
+	return s.notifyOrderUseCase.Execute(
+		state,
+		order.CustomerId,
+		item.Name,
+		order.OfferedAmount,
+		item.Description,
+	)
 }

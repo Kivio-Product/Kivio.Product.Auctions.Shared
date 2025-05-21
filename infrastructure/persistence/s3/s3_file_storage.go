@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -28,6 +29,42 @@ func NewS3FileStorage(bucket string) (*S3FileStorage, error) {
 		s3Client: s3.New(sess),
 		bucket:   bucket,
 	}, nil
+}
+
+func (s *S3FileStorage) Upload(ctx context.Context, key string, content io.Reader) error {
+	_, err := s.s3Client.PutObjectWithContext(ctx, &s3.PutObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+		Body:   aws.ReadSeekCloser(content),
+	})
+	if err != nil {
+		return fmt.Errorf("error uploading file to S3: %w", err)
+	}
+	return nil
+}
+
+func (s *S3FileStorage) GetURL(ctx context.Context, key string, expiration time.Duration) (string, error) {
+	req, _ := s.s3Client.GetObjectRequest(&s3.GetObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+	})
+
+	url, err := req.Presign(expiration)
+	if err != nil {
+		return "", fmt.Errorf("error generating presigned URL: %w", err)
+	}
+	return url, nil
+}
+
+func (s *S3FileStorage) Delete(ctx context.Context, key string) error {
+	_, err := s.s3Client.DeleteObjectWithContext(ctx, &s3.DeleteObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return fmt.Errorf("error deleting file from S3: %w", err)
+	}
+	return nil
 }
 
 func (s *S3FileStorage) ReadFile(ctx context.Context, key string) (string, error) {
