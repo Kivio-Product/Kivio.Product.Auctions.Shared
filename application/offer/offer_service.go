@@ -23,11 +23,11 @@ type IOfferService interface {
 
 type OfferService struct {
 	repo         infrastructure.IOfferRepository
-	emailSender  emailService.EmailService
+	emailSender  emailService.EmailServiceInterface
 	offerFactory domain.OfferFactory
 }
 
-func NewofferService(repo infrastructure.IOfferRepository, offerFactory domain.OfferFactory, emailSender emailService.EmailService) IOfferService {
+func NewofferService(repo infrastructure.IOfferRepository, offerFactory domain.OfferFactory, emailSender emailService.EmailServiceInterface) IOfferService {
 	return &OfferService{
 		repo:         repo,
 		offerFactory: offerFactory,
