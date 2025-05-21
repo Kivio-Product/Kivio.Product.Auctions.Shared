@@ -38,7 +38,7 @@ type billingService struct {
 	orderRepo      orderInfrastructure.OrderRepository
 	itemSpecRepo   itemSpecInfrastructure.ItemSpecificationRepository
 	itemRepo       itemInfrastructure.ItemRepository
-	emailService   emailService.EmailService
+	emailService   emailService.EmailServiceInterface
 }
 
 func NewBillingService(
@@ -47,7 +47,7 @@ func NewBillingService(
 	orderRepo orderInfrastructure.OrderRepository,
 	itemSpecRepo itemSpecInfrastructure.ItemSpecificationRepository,
 	itemRepo itemInfrastructure.ItemRepository,
-	emailService emailService.EmailService,
+	emailService emailService.EmailServiceInterface,
 ) BillingService {
 	return &billingService{
 		repo:           repo,
