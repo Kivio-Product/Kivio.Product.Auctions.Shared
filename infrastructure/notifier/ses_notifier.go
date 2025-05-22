@@ -1,6 +1,7 @@
 package infrastructure
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -55,21 +56,21 @@ func (n *SESNotifier) SendEmail(email, subject, body string) error {
 }
 
 func (n *SESNotifier) SendTemplatedEmail(email, templateName string, templateData map[string]string) error {
-	awsTemplateData := make(map[string]*string)
-	for k, v := range templateData {
-		awsTemplateData[k] = aws.String(v)
+	jsonData, err := json.Marshal(templateData)
+	if err != nil {
+		return fmt.Errorf("error marshaling template data: %w", err)
 	}
 
 	input := &ses.SendTemplatedEmailInput{
 		Source:       aws.String(n.sender),
 		Template:     aws.String(templateName),
-		TemplateData: aws.String(fmt.Sprintf("%v", awsTemplateData)),
+		TemplateData: aws.String(string(jsonData)),
 		Destination: &ses.Destination{
 			ToAddresses: aws.StringSlice([]string{email}),
 		},
 	}
 
-	_, err := n.sesClient.SendTemplatedEmail(input)
+	_, err = n.sesClient.SendTemplatedEmail(input)
 	if err != nil {
 		return fmt.Errorf("error sending templated email: %w", err)
 	}
