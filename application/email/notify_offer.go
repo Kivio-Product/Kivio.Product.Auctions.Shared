@@ -43,8 +43,10 @@ func (uc *NotifyOfferUseCase) Execute(ctx context.Context, auctionURL string, of
 
 	for _, email := range emails {
 		templateData := map[string]string{
-			"AuctionURL": auctionURL,
-			"OfferName":  offerName,
+			"AUCTION_URL":       auctionURL,
+			"OFFER_DESCRIPTION": offerName,
+			"DISCOUNT":          "20%",
+			"EXPIRATION_DATE":   "31 de diciembre de 2025",
 		}
 		err := uc.notifier.SendTemplatedEmail(email, "OfertaGeneral", templateData)
 		if err != nil {
