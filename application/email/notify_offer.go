@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	application "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/file_storage"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/repository"
@@ -41,12 +42,13 @@ func (uc *NotifyOfferUseCase) Execute(ctx context.Context, auctionURL string, of
 		}
 	}
 
+	expirationDate := time.Now().Add(24 * time.Hour).Format("02 de enero de 2006")
+
 	for _, email := range emails {
 		templateData := map[string]string{
 			"AUCTION_URL":       auctionURL,
 			"OFFER_DESCRIPTION": offerName,
-			"DISCOUNT":          "20%",
-			"EXPIRATION_DATE":   "31 de diciembre de 2025",
+			"EXPIRATION_DATE":   expirationDate,
 		}
 		err := uc.notifier.SendTemplatedEmail(email, "OfertaGeneral", templateData)
 		if err != nil {

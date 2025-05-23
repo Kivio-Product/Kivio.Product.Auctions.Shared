@@ -36,7 +36,11 @@ func NewofferService(repo infrastructure.IOfferRepository, offerFactory domain.O
 }
 
 func (s *OfferService) SendOfferEmail(ctx context.Context, auctionURL string, offerID string) error {
-	return s.emailSender.NotifyOffer(ctx, offerID, auctionURL)
+	offer, err := s.GetOfferById(ctx, offerID)
+	if err != nil {
+		return err
+	}
+	return s.emailSender.NotifyOffer(ctx, auctionURL, offer.Name)
 }
 
 func (s *OfferService) GenerateOffer(ctx context.Context, name, description, posId, typer string, auctionTime int64) (*domain.Offer, error) {
