@@ -45,8 +45,10 @@ func (uc *NotifyOfferUseCase) Execute(ctx context.Context, auctionURL string, of
 	expirationDate := time.Now().Add(24 * time.Hour).Format("02 de enero de 2006")
 
 	for _, email := range emails {
+		finalURL := addCustomerIdParam(auctionURL, email)
+
 		templateData := map[string]string{
-			"AUCTION_URL":       auctionURL + "?customerId=" + email,
+			"AUCTION_URL":       finalURL,
 			"OFFER_DESCRIPTION": offerName,
 			"EXPIRATION_DATE":   expirationDate,
 		}
@@ -57,4 +59,12 @@ func (uc *NotifyOfferUseCase) Execute(ctx context.Context, auctionURL string, of
 	}
 
 	return nil
+}
+
+func addCustomerIdParam(url, email string) string {
+	sep := "?"
+	if strings.Contains(url, "?") {
+		sep = "&"
+	}
+	return url + sep + "customerId=" + email
 }
