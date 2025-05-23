@@ -95,10 +95,13 @@ func (s *OfferService) DeleteOfferById(ctx context.Context, id string) error {
 }
 
 func (s *OfferService) GetOffersByPosId(ctx context.Context, id string, limit string, lastEvaluatedKey map[string]*dynamodb.AttributeValue) ([]domain.Offer, map[string]*dynamodb.AttributeValue, error) {
-
-	limitInt, err := strconv.Atoi(limit)
-	if err != nil {
-		return nil, nil, err
+	limitInt := 0
+	if limit != "" {
+		var err error
+		limitInt, err = strconv.Atoi(limit)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
 	offers, lastKey, err := s.repo.GetPosOffers(id, limitInt, lastEvaluatedKey)
