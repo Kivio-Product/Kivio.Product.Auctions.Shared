@@ -46,7 +46,7 @@ func (uc *NotifyOfferUseCase) Execute(ctx context.Context, auctionURL string, of
 
 	for _, email := range emails {
 		templateData := map[string]string{
-			"AUCTION_URL":       auctionURL,
+			"AUCTION_URL":       auctionURL + "?customerId=" + email,
 			"OFFER_DESCRIPTION": offerName,
 			"EXPIRATION_DATE":   expirationDate,
 		}
