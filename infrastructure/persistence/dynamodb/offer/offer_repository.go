@@ -102,7 +102,6 @@ func (r *OfferRepository) GetPosOffers(posId string, limit int, lastKey map[stri
 	input := &dynamodb.QueryInput{
 		TableName:              aws.String(r.offerTable),
 		IndexName:              aws.String("PosId-CreatedAt-index"),
-		Limit:                  aws.Int64(int64(limit)),
 		ExclusiveStartKey:      lastKey,
 		ScanIndexForward:       aws.Bool(false),
 		KeyConditionExpression: aws.String("PosId = :posIdValue"),
@@ -111,6 +110,10 @@ func (r *OfferRepository) GetPosOffers(posId string, limit int, lastKey map[stri
 				S: aws.String(posId),
 			},
 		},
+	}
+
+	if limit > 0 {
+		input.Limit = aws.Int64(int64(limit))
 	}
 
 	result, err := r.client.Query(input)
