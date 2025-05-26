@@ -9,7 +9,7 @@ import (
 )
 
 type EmailServiceInterface interface {
-	NotifyOffer(ctx context.Context, auctionURL string, offerName string) error
+	NotifyOffer(ctx context.Context, auctionURL string, offerName string, posId string) error
 	NotifyOrder(ctx context.Context, state string, order *domain.Order, itemSpec *itemSpecDomain.ItemSpecification, item *itemDomain.Item) error
 }
 
@@ -28,8 +28,8 @@ func NewEmailService(
 	}
 }
 
-func (s *EmailService) NotifyOffer(ctx context.Context, auctionURL string, offerName string) error {
-	return s.notifyOffer.Execute(ctx, auctionURL, offerName)
+func (s *EmailService) NotifyOffer(ctx context.Context, auctionURL string, offerName string, posId string) error {
+	return s.notifyOffer.Execute(ctx, auctionURL, offerName, posId)
 }
 
 func (s *EmailService) NotifyOrder(ctx context.Context, state string, order *domain.Order, itemSpec *itemSpecDomain.ItemSpecification, item *itemDomain.Item) error {

@@ -11,8 +11,9 @@ import (
 type EcommerceService interface {
 	GetItems(ctx context.Context) ([]itemDomain.Item, error)
 	GetItemByID(ctx context.Context, id string) (*itemDomain.Item, error)
-	GetCustomers(ctx context.Context) ([]customerDomain.Customer, error)
+	GetCustomers(ctx context.Context, apiUrl, apiKey string) ([]customerDomain.Customer, error)
 	GetCustomerByID(ctx context.Context, id string) (*customerDomain.Customer, error)
+	GetApiKey(ctx context.Context, username, password, tokenUrl string) (string, error)
 }
 
 type ecommerceService struct {
@@ -37,14 +38,16 @@ func (s *ecommerceService) GetItemByID(ctx context.Context, id string) (*itemDom
 	return s.repo.GetItemByID(id, arg2, arg3)
 }
 
-func (s *ecommerceService) GetCustomers(ctx context.Context) ([]customerDomain.Customer, error) {
-	arg2 := "defaultArg2"
-	arg3 := "defaultArg3"
-	return s.repo.GetCustomers(arg2, arg3)
+func (s *ecommerceService) GetCustomers(ctx context.Context, apiUrl, apiKey string) ([]customerDomain.Customer, error) {
+	return s.repo.GetCustomers(apiUrl, apiKey)
 }
 
 func (s *ecommerceService) GetCustomerByID(ctx context.Context, id string) (*customerDomain.Customer, error) {
 	arg2 := "defaultArg2"
 	arg3 := "defaultArg3"
 	return s.repo.GetCustomerByID(id, arg2, arg3)
+}
+
+func (s *ecommerceService) GetApiKey(ctx context.Context, username, password, tokenUrl string) (string, error) {
+	return s.repo.GetApiKey(username, password, tokenUrl)
 }

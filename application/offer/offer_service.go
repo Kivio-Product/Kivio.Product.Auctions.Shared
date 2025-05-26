@@ -40,7 +40,7 @@ func (s *OfferService) SendOfferEmail(ctx context.Context, auctionURL string, of
 	if err != nil {
 		return err
 	}
-	return s.emailSender.NotifyOffer(ctx, auctionURL, offer.Name)
+	return s.emailSender.NotifyOffer(ctx, auctionURL, offer.Name, offer.PosId)
 }
 
 func (s *OfferService) GenerateOffer(ctx context.Context, name, description, posId, typer string, auctionTime int64) (*domain.Offer, error) {
