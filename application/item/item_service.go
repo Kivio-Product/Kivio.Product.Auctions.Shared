@@ -3,6 +3,8 @@ package services
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strings"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
 	integrationInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/integration"
@@ -114,6 +116,20 @@ func (s *itemService) GetItemsByPosId(ctx context.Context, id string) ([]domain.
 }
 
 func (s *itemService) GetExternalItemById(ctx context.Context, itemId string, pointOfSaleId string) (*domain.Item, error) {
+	var cleanedItemId string
+
+	decodedId, err := url.QueryUnescape(itemId)
+	if err != nil {
+		return nil, err
+	}
+
+	if strings.Contains(decodedId, "∼") {
+		parts := strings.Split(decodedId, "∼")
+		cleanedItemId = parts[len(parts)-1]
+	} else {
+		cleanedItemId = decodedId
+	}
+
 	integrations, err := s.integrationRepository.GetIntegrationsByPosID(pointOfSaleId)
 	if err != nil {
 		return nil, err
@@ -125,7 +141,7 @@ func (s *itemService) GetExternalItemById(ctx context.Context, itemId string, po
 			continue
 		}
 
-		item, err := strategy.GetItemById(itemId, pointOfSaleId)
+		item, err := strategy.GetItemById(cleanedItemId, pointOfSaleId)
 		if err != nil {
 			continue
 		}
