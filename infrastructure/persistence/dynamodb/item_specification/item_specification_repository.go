@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item_specification"
 	"github.com/aws/aws-sdk-go/aws"
@@ -27,15 +28,16 @@ type itemSpecificationRepository struct {
 	itemSpecificationTable string
 }
 
-var (
-	itemSpecificationTable = "ItemSpecification"
-)
-
 func NewItemSpecificationRepository() ItemSpecificationRepository {
 	sess, err := session.NewSession(&aws.Config{
 		Region: aws.String("us-east-2")})
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	itemSpecificationTable := os.Getenv("DYNAMODB_ITEM_SPECIFICATIONS_TABLE")
+	if itemSpecificationTable == "" {
+		itemSpecificationTable = "ItemSpecification"
 	}
 
 	return &itemSpecificationRepository{

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
 	"github.com/aws/aws-sdk-go/aws"
@@ -27,16 +28,21 @@ type itemRepository struct {
 	orderTable string
 }
 
-var (
-	itemTable  = "Item"
-	orderTable = "Order"
-)
-
 func NewItemRepository() ItemRepository {
 	sess, err := session.NewSession(&aws.Config{
 		Region: aws.String("us-east-2")})
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	itemTable := os.Getenv("DYNAMODB_ITEMS_TABLE")
+	if itemTable == "" {
+		itemTable = "Item"
+	}
+
+	orderTable := os.Getenv("DYNAMODB_ORDERS_TABLE")
+	if orderTable == "" {
+		orderTable = "Order"
 	}
 
 	return &itemRepository{

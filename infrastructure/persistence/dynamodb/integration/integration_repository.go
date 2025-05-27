@@ -2,6 +2,7 @@ package infrastructure
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/integration"
@@ -38,10 +39,20 @@ func NewDynamoDBIntegrationRepository() (IntegrationRepository, error) {
 
 	dynamoClient := dynamodb.New(sess)
 
+	integrationsTable := os.Getenv("DYNAMODB_INTEGRATIONS_TABLE")
+	if integrationsTable == "" {
+		integrationsTable = "Integrations"
+	}
+
+	configsTable := os.Getenv("DYNAMODB_INTEGRATION_CONFIG_TABLE")
+	if configsTable == "" {
+		configsTable = "IntegrationConfig"
+	}
+
 	return &dynamoDBIntegrationRepository{
 		dynamoClient:      dynamoClient,
-		integrationsTable: "Integrations",
-		configsTable:      "IntegrationConfig",
+		integrationsTable: integrationsTable,
+		configsTable:      configsTable,
 	}, nil
 }
 

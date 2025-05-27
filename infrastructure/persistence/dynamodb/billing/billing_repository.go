@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/billing"
 	orderDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
@@ -39,10 +40,20 @@ func NewBillingRepository() BillingRepository {
 		log.Fatal(err)
 	}
 
+	billingTable := os.Getenv("DYNAMODB_BILLINGS_TABLE")
+	if billingTable == "" {
+		billingTable = "Billing"
+	}
+
+	relationTable := os.Getenv("DYNAMODB_BILLING_BY_ORDER_TABLE")
+	if relationTable == "" {
+		relationTable = "BillingByOrder"
+	}
+
 	return &billingRepository{
 		client:        dynamodb.New(sess),
-		billingTable:  "Billing",
-		relationTable: "BillingByOrder",
+		billingTable:  billingTable,
+		relationTable: relationTable,
 	}
 }
 

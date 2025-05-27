@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/rule_specification"
 	"github.com/aws/aws-sdk-go/aws"
@@ -26,10 +27,6 @@ type ruleSpecificationRepository struct {
 	specificationTable string
 }
 
-var (
-	ruleSpecificationTable = "RuleSpecification"
-)
-
 func NewRuleSpecificationRepository() RuleSpecificationRepository {
 	sess, err := session.NewSession(&aws.Config{
 		Region: aws.String("us-east-2")})
@@ -37,9 +34,14 @@ func NewRuleSpecificationRepository() RuleSpecificationRepository {
 		log.Fatal(err)
 	}
 
+	specificationTable := os.Getenv("DYNAMODB_RULE_SPECIFICATIONS_TABLE")
+	if specificationTable == "" {
+		specificationTable = "RuleSpecification"
+	}
+
 	return &ruleSpecificationRepository{
 		client:             dynamodb.New(sess),
-		specificationTable: ruleSpecificationTable,
+		specificationTable: specificationTable,
 	}
 }
 

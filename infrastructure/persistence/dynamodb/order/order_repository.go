@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"maps"
+	"os"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 	"github.com/aws/aws-sdk-go/aws"
@@ -31,15 +32,16 @@ type orderRepository struct {
 	orderTable string
 }
 
-var (
-	orderTable = "Order"
-)
-
 func NewOrderRepository() OrderRepository {
 	sess, err := session.NewSession(&aws.Config{
 		Region: aws.String("us-east-2")})
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	orderTable := os.Getenv("DYNAMODB_ORDERS_TABLE")
+	if orderTable == "" {
+		orderTable = "Order"
 	}
 
 	return &orderRepository{
@@ -228,7 +230,7 @@ func (r *orderRepository) GetOrdersPaginated(ctx context.Context, params domain.
 	indexName := "SortKey-CreatedAt-index"
 
 	input := &dynamodb.QueryInput{
-		TableName:              aws.String(orderTable),
+		TableName:              aws.String(r.orderTable),
 		IndexName:              aws.String(indexName),
 		Limit:                  aws.Int64(int64(params.PageSize)),
 		ReturnConsumedCapacity: aws.String("TOTAL"),
@@ -277,7 +279,7 @@ func (r *orderRepository) GetOrdersPaginated(ctx context.Context, params domain.
 	var totalCount int64
 	if params.Search != "" {
 		countInput := &dynamodb.QueryInput{
-			TableName:              aws.String(orderTable),
+			TableName:              aws.String(r.orderTable),
 			IndexName:              aws.String(indexName),
 			Select:                 aws.String("COUNT"),
 			KeyConditionExpression: aws.String("SortKey = :sortKeyValue"),
@@ -310,7 +312,7 @@ func (r *orderRepository) GetOrdersPaginated(ctx context.Context, params domain.
 		}
 	} else {
 		countInput := &dynamodb.QueryInput{
-			TableName:              aws.String(orderTable),
+			TableName:              aws.String(r.orderTable),
 			IndexName:              aws.String(indexName),
 			Select:                 aws.String("COUNT"),
 			KeyConditionExpression: aws.String("SortKey = :sortKeyValue"),
