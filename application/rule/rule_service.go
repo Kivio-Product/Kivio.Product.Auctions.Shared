@@ -8,7 +8,6 @@ import (
 	ruleSpecService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/rule_specification"
 	ruleDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/rule"
 	ruleSpecificationDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/rule_specification"
-	sheetsDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/sheets"
 	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/rule"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
@@ -23,16 +22,28 @@ type RuleService interface {
 	GetRulesByPosId(ctx context.Context, id, limit string, lastEvaluatedKey map[string]*dynamodb.AttributeValue) ([]ruleDomain.Rule, map[string]*dynamodb.AttributeValue, error)
 	GetRules() ([]ruleDomain.Rule, error)
 	GetRulesSpecificationByRuleId(ctx context.Context, ruleIds string) ([]ruleSpecificationDomain.RuleSpecification, error)
-	GetCategorizedRules(fields []sheetsDomain.RuleField) map[string][]sheetsDomain.RuleField
-}
-type ruleService struct {
-	repo                     infrastructure.RuleRepository
-	RuleFactory              ruleDomain.RuleFactory
-	ruleSpecificationService ruleSpecService.RuleSpecificationService
+	GetRuleData(pointOfSaleId string) (map[string]interface{}, error)
 }
 
-func NewRuleService(repo infrastructure.RuleRepository, ruleFactory ruleDomain.RuleFactory, ruleSpecificationService ruleSpecService.RuleSpecificationService) RuleService {
-	return &ruleService{repo: repo, RuleFactory: ruleFactory, ruleSpecificationService: ruleSpecificationService}
+type ruleService struct {
+	repo                      infrastructure.RuleRepository
+	RuleFactory               ruleDomain.RuleFactory
+	ruleSpecificationService  ruleSpecService.RuleSpecificationService
+	suggestRuleColumnsService SuggestRuleColumnsService
+}
+
+func NewRuleService(
+	repo infrastructure.RuleRepository,
+	ruleFactory ruleDomain.RuleFactory,
+	ruleSpecificationService ruleSpecService.RuleSpecificationService,
+	suggestRuleColumnsService SuggestRuleColumnsService,
+) RuleService {
+	return &ruleService{
+		repo:                      repo,
+		RuleFactory:               ruleFactory,
+		ruleSpecificationService:  ruleSpecificationService,
+		suggestRuleColumnsService: suggestRuleColumnsService,
+	}
 }
 
 type Response[T any] struct {
@@ -144,50 +155,6 @@ func (s *ruleService) UpdateRuleState(ctx context.Context, ruleId, state string)
 	return s.repo.SaveRule(ctx, rule)
 }
 
-func (s *ruleService) GetCategorizedRules(fields []sheetsDomain.RuleField) map[string][]sheetsDomain.RuleField {
-	categorizedRules := make(map[string][]sheetsDomain.RuleField)
-
-	var localRules []sheetsDomain.RuleField
-	var otherRules []sheetsDomain.RuleField
-
-	var dateExists, availabilityExists bool
-
-	for _, field := range fields {
-		switch field.Field {
-		case "date":
-			dateExists = true
-			localRules = append(localRules, field)
-		case "availability":
-			availabilityExists = true
-			localRules = append(localRules, field)
-		default:
-			otherRules = append(otherRules, field)
-		}
-	}
-
-	if !dateExists {
-		dateOperators := []string{"=", ">", "<", ">=", "<=", "!="}
-		localRules = append(localRules, sheetsDomain.RuleField{
-			Field:         "current date",
-			ParameterType: "numérico",
-			Operators:     dateOperators,
-		})
-	}
-
-	if !availabilityExists {
-		availabilityOperators := []string{"=", ">", "<", ">=", "<=", "!="}
-		localRules = append(localRules, sheetsDomain.RuleField{
-			Field:         "availability",
-			ParameterType: "numérico",
-			Operators:     availabilityOperators,
-		})
-	}
-
-	categorizedRules["local"] = localRules
-
-	if len(otherRules) > 0 {
-		categorizedRules["google sheets"] = otherRules
-	}
-
-	return categorizedRules
+func (s *ruleService) GetRuleData(pointOfSaleId string) (map[string]interface{}, error) {
+	return s.suggestRuleColumnsService.Execute(pointOfSaleId)
 }
