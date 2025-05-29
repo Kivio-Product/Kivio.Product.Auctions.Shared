@@ -2,6 +2,7 @@ package services
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -12,8 +13,8 @@ import (
 )
 
 type RuleSuggestionCache interface {
-	GetCachedSuggestions(pointOfSaleId string, headers []interface{}) (map[string][]sheetsDomain.RuleField, error)
-	CacheSuggestions(pointOfSaleId string, headers []interface{}, suggestions map[string][]sheetsDomain.RuleField) error
+	GetCachedSuggestions(ctx context.Context, pointOfSaleId string, headers []interface{}) (map[string][]sheetsDomain.RuleField, error)
+	CacheSuggestions(ctx context.Context, pointOfSaleId string, headers []interface{}, suggestions map[string][]sheetsDomain.RuleField) error
 }
 
 type ruleSuggestionCache struct {
@@ -40,7 +41,7 @@ type cachedSuggestion struct {
 	LastUpdated time.Time                           `json:"lastUpdated"`
 }
 
-func (c *ruleSuggestionCache) GetCachedSuggestions(pointOfSaleId string, headers []interface{}) (map[string][]sheetsDomain.RuleField, error) {
+func (c *ruleSuggestionCache) GetCachedSuggestions(ctx context.Context, pointOfSaleId string, headers []interface{}) (map[string][]sheetsDomain.RuleField, error) {
 	key := fmt.Sprintf("rule-suggestions/%s.json", pointOfSaleId)
 
 	reader, err := c.fileReader.GetFileContent(key)
@@ -61,7 +62,7 @@ func (c *ruleSuggestionCache) GetCachedSuggestions(pointOfSaleId string, headers
 	return cached.Suggestions, nil
 }
 
-func (c *ruleSuggestionCache) CacheSuggestions(pointOfSaleId string, headers []interface{}, suggestions map[string][]sheetsDomain.RuleField) error {
+func (c *ruleSuggestionCache) CacheSuggestions(ctx context.Context, pointOfSaleId string, headers []interface{}, suggestions map[string][]sheetsDomain.RuleField) error {
 	key := fmt.Sprintf("rule-suggestions/%s.json", pointOfSaleId)
 
 	cached := cachedSuggestion{
@@ -75,7 +76,7 @@ func (c *ruleSuggestionCache) CacheSuggestions(pointOfSaleId string, headers []i
 		return fmt.Errorf("error marshaling suggestions: %w", err)
 	}
 
-	if err := c.fileStorage.Upload(nil, key, bytes.NewReader(data)); err != nil {
+	if err := c.fileStorage.Upload(ctx, key, bytes.NewReader(data)); err != nil {
 		return fmt.Errorf("error caching suggestions: %w", err)
 	}
 

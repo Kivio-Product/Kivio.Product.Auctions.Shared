@@ -22,7 +22,7 @@ type RuleService interface {
 	GetRulesByPosId(ctx context.Context, id, limit string, lastEvaluatedKey map[string]*dynamodb.AttributeValue) ([]ruleDomain.Rule, map[string]*dynamodb.AttributeValue, error)
 	GetRules() ([]ruleDomain.Rule, error)
 	GetRulesSpecificationByRuleId(ctx context.Context, ruleIds string) ([]ruleSpecificationDomain.RuleSpecification, error)
-	GetRuleData(pointOfSaleId string) (map[string]interface{}, error)
+	GetRuleData(ctx context.Context, pointOfSaleId string) (map[string]interface{}, error)
 }
 
 type ruleService struct {
@@ -155,6 +155,6 @@ func (s *ruleService) UpdateRuleState(ctx context.Context, ruleId, state string)
 	return s.repo.SaveRule(ctx, rule)
 }
 
-func (s *ruleService) GetRuleData(pointOfSaleId string) (map[string]interface{}, error) {
-	return s.ruleDataService.GetRuleData(pointOfSaleId)
+func (s *ruleService) GetRuleData(ctx context.Context, pointOfSaleId string) (map[string]interface{}, error) {
+	return s.ruleDataService.GetRuleData(ctx, pointOfSaleId)
 }

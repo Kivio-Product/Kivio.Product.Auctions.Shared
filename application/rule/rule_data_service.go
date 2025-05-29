@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"fmt"
 
 	sheetService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/sheets"
@@ -9,7 +10,7 @@ import (
 )
 
 type RuleDataService interface {
-	GetRuleData(pointOfSaleId string) (map[string]interface{}, error)
+	GetRuleData(ctx context.Context, pointOfSaleId string) (map[string]interface{}, error)
 }
 
 type ruleDataService struct {
@@ -33,7 +34,7 @@ func NewRuleDataService(
 	}
 }
 
-func (s *ruleDataService) GetRuleData(pointOfSaleId string) (map[string]interface{}, error) {
+func (s *ruleDataService) GetRuleData(ctx context.Context, pointOfSaleId string) (map[string]interface{}, error) {
 	if pointOfSaleId == "" {
 		return nil, fmt.Errorf("pointOfSaleId is required")
 	}
@@ -43,19 +44,28 @@ func (s *ruleDataService) GetRuleData(pointOfSaleId string) (map[string]interfac
 		return nil, fmt.Errorf("error fetching sheet data: %w", err)
 	}
 
-	suggestedRules, err := s.suggestionCache.GetCachedSuggestions(pointOfSaleId, sheetData.Values[0])
+	if len(sheetData.Values) < 2 {
+		return nil, fmt.Errorf("insufficient data in sheet")
+	}
+
+	headers := sheetData.Values[0]
+
+	// Try to get cached suggestions first
+	suggestions, err := s.suggestionCache.GetCachedSuggestions(ctx, pointOfSaleId, headers)
 	if err != nil {
-		suggestedRules, err = s.ruleSuggester.SuggestRules(sheetData)
+		// If cache miss or headers changed, generate new suggestions
+		suggestions, err = s.ruleSuggester.SuggestRules(sheetData)
 		if err != nil {
-			return nil, fmt.Errorf("error getting rule suggestions: %w", err)
+			return nil, fmt.Errorf("error generating suggestions: %w", err)
 		}
 
-		if err := s.suggestionCache.CacheSuggestions(pointOfSaleId, sheetData.Values[0], suggestedRules); err != nil {
+		// Cache the new suggestions
+		if err := s.suggestionCache.CacheSuggestions(ctx, pointOfSaleId, headers, suggestions); err != nil {
 			return nil, fmt.Errorf("error caching suggestions: %w", err)
 		}
 	}
 
 	return map[string]interface{}{
-		"suggestedRules": suggestedRules,
+		"suggestedRules": suggestions,
 	}, nil
 }
