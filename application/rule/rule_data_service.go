@@ -45,24 +45,7 @@ func (s *ruleDataService) GetRuleData(pointOfSaleId string) (map[string]interfac
 		return nil, fmt.Errorf("error getting rule suggestions: %w", err)
 	}
 
-	rules, err := s.ruleRepo.GetAllRules()
-	if err != nil {
-		return nil, fmt.Errorf("error getting rules: %w", err)
-	}
-
-	var allRuleSpecs []interface{}
-	for _, rule := range rules {
-		ruleSpecs, err := s.ruleRepo.GetRulesSpecification(rule.RuleId)
-		if err != nil {
-			return nil, fmt.Errorf("error getting rule specifications for rule ID %v: %w", rule.RuleId, err)
-		}
-		allRuleSpecs = append(allRuleSpecs, ruleSpecs)
-	}
-
 	return map[string]interface{}{
-		"sheetData":          sheetData,
-		"suggestedRules":     suggestedRules,
-		"rules":              rules,
-		"ruleSpecifications": allRuleSpecs,
+		"suggestedRules": suggestedRules,
 	}, nil
 }
