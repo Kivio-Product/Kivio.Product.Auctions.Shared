@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	itemDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/repository"
 	sheetsDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/sheets"
 	"github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/api/google_studio"
@@ -21,7 +20,7 @@ func NewGoogleStudioRuleSuggester() domain.RuleSuggestionAI {
 	}
 }
 
-func (s *GoogleStudioRuleSuggester) SuggestRules(sheetData sheetsDomain.SheetData, ecommerceItems []itemDomain.Item) (map[string][]sheetsDomain.RuleField, error) {
+func (s *GoogleStudioRuleSuggester) SuggestRules(sheetData sheetsDomain.SheetData, ecommerceResponse []byte) (map[string][]sheetsDomain.RuleField, error) {
 	categorizedRules := make(map[string][]sheetsDomain.RuleField)
 
 	dateRule := sheetsDomain.RuleField{
@@ -44,8 +43,8 @@ func (s *GoogleStudioRuleSuggester) SuggestRules(sheetData sheetsDomain.SheetDat
 		}
 	}
 
-	if len(ecommerceItems) > 0 {
-		ecommerceRules, err := s.getEcommerceRules(ecommerceItems)
+	if len(ecommerceResponse) > 0 {
+		ecommerceRules, err := s.getEcommerceRules(ecommerceResponse)
 		if err != nil {
 			return nil, fmt.Errorf("error getting ecommerce rules: %w", err)
 		}
@@ -94,10 +93,29 @@ Only include fields that make sense for business rules.`, headers, sampleData)
 	return suggestedRules, nil
 }
 
-func (s *GoogleStudioRuleSuggester) getEcommerceRules(items []itemDomain.Item) ([]sheetsDomain.RuleField, error) {
-	sampleItems := items
-	if len(items) > 5 {
-		sampleItems = items[:5]
+func (s *GoogleStudioRuleSuggester) getEcommerceRules(ecommerceResponse []byte) ([]sheetsDomain.RuleField, error) {
+	type Product struct {
+		ID                  int     `json:"id"`
+		Name                string  `json:"name"`
+		ShortDescription    string  `json:"short_description"`
+		FullDescription     string  `json:"full_description"`
+		Price               float64 `json:"price"`
+		SKU                 string  `json:"sku"`
+		VisibleIndividually bool    `json:"visible_individually"`
+	}
+
+	type ApiResponse struct {
+		Products []Product `json:"products"`
+	}
+
+	var apiResponse ApiResponse
+	if err := json.Unmarshal(ecommerceResponse, &apiResponse); err != nil {
+		return nil, fmt.Errorf("error unmarshaling ecommerce response: %w", err)
+	}
+
+	sampleItems := apiResponse.Products
+	if len(sampleItems) > 5 {
+		sampleItems = sampleItems[:5]
 	}
 
 	prompt := fmt.Sprintf(`Based on the following ecommerce items data, suggest rules that could be used for business logic.

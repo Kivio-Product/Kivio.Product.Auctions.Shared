@@ -1,21 +1,18 @@
 package infrastructure
 
 import (
-	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io/ioutil"
-	"net/http"
 	"strings"
-	"time"
 
 	customerDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/customer"
 	itemDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
+	"github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/api/ecommerce"
 )
 
 type EcommerceRepository interface {
 	GetItems(baseUrl, apiKey string) ([]itemDomain.Item, error)
+	GetItemsRaw(baseUrl, apiKey string) ([]byte, error)
 	GetItemByID(baseUrl, apiKey, itemId string) (*itemDomain.Item, error)
 	GetCustomers(baseUrl, apiKey string) ([]customerDomain.Customer, error)
 	GetCustomerByID(baseUrl, apiKey, id string) (*customerDomain.Customer, error)
@@ -23,89 +20,23 @@ type EcommerceRepository interface {
 }
 
 type ecommerceRepository struct {
-	httpClient *http.Client
+	client ecommerce.EcommerceClient
 }
 
 func NewEcommerceRepository() EcommerceRepository {
 	return &ecommerceRepository{
-		httpClient: &http.Client{
-			Timeout: time.Second * 30,
-		},
+		client: ecommerce.NewEcommerceClient(),
 	}
 }
 
 func (r *ecommerceRepository) GetApiKey(username, password, tokenUrl string) (string, error) {
-	payload := map[string]interface{}{
-		"guest":       true,
-		"username":    username,
-		"password":    password,
-		"remember_me": true,
-	}
-
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal payload: %w", err)
-	}
-
-	req, err := http.NewRequest("POST", tokenUrl, bytes.NewBuffer(body))
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("accept", "text/plain")
-	req.Header.Set("Content-Type", "application/json-patch+json")
-
-	resp, err := r.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed to get API key, status code: %d", resp.StatusCode)
-	}
-
-	respBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return "", fmt.Errorf("failed to unmarshal response: %w", err)
-	}
-
-	apiKey, ok := result["access_token"].(string)
-	if !ok {
-		return "", errors.New("API key not found in response")
-	}
-
-	return apiKey, nil
+	return r.client.GetApiKey(username, password, tokenUrl)
 }
 
 func (r *ecommerceRepository) GetItems(baseUrl, apiKey string) ([]itemDomain.Item, error) {
-	url := fmt.Sprintf("%s/api/products?Limit=2", baseUrl)
-
-	req, err := http.NewRequest("GET", url, nil)
+	respBody, err := r.client.GetItems(baseUrl, apiKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
-
-	resp, err := r.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to get items, status code: %d", resp.StatusCode)
-	}
-
-	respBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+		return nil, err
 	}
 
 	type Product struct {
@@ -137,32 +68,15 @@ func (r *ecommerceRepository) GetItems(baseUrl, apiKey string) ([]itemDomain.Ite
 	return items, nil
 }
 
+func (r *ecommerceRepository) GetItemsRaw(baseUrl, apiKey string) ([]byte, error) {
+	return r.client.GetItems(baseUrl, apiKey)
+}
+
 func (r *ecommerceRepository) GetItemByID(baseUrl, apiKey, itemId string) (*itemDomain.Item, error) {
-
 	itemId = strings.TrimPrefix(itemId, "kivio-ecommerce∼")
-
-	url := fmt.Sprintf("%s/api/products/%s", baseUrl, itemId)
-
-	req, err := http.NewRequest("GET", url, nil)
+	respBody, err := r.client.GetItemByID(baseUrl, apiKey, itemId)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
-
-	resp, err := r.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to get item, status code: %d", resp.StatusCode)
-	}
-
-	respBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+		return nil, err
 	}
 
 	type Image struct {
@@ -212,26 +126,13 @@ func (r *ecommerceRepository) GetItemByID(baseUrl, apiKey, itemId string) (*item
 }
 
 func (r *ecommerceRepository) GetCustomers(baseUrl, apiKey string) ([]customerDomain.Customer, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/customers", baseUrl), nil)
+	respBody, err := r.client.GetCustomers(baseUrl, apiKey)
 	if err != nil {
-		return nil, fmt.Errorf("error creating request: %w", err)
-	}
-
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := r.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("error making request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return nil, err
 	}
 
 	var customers []customerDomain.Customer
-	if err := json.NewDecoder(resp.Body).Decode(&customers); err != nil {
+	if err := json.Unmarshal(respBody, &customers); err != nil {
 		return nil, fmt.Errorf("error decoding response: %w", err)
 	}
 
@@ -239,30 +140,13 @@ func (r *ecommerceRepository) GetCustomers(baseUrl, apiKey string) ([]customerDo
 }
 
 func (r *ecommerceRepository) GetCustomerByID(baseUrl, apiKey, id string) (*customerDomain.Customer, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/customers/%s", baseUrl, id), nil)
+	respBody, err := r.client.GetCustomerByID(baseUrl, apiKey, id)
 	if err != nil {
-		return nil, fmt.Errorf("error creating request: %w", err)
-	}
-
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := r.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("error making request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, fmt.Errorf("customer not found")
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return nil, err
 	}
 
 	var customer customerDomain.Customer
-	if err := json.NewDecoder(resp.Body).Decode(&customer); err != nil {
+	if err := json.Unmarshal(respBody, &customer); err != nil {
 		return nil, fmt.Errorf("error decoding response: %w", err)
 	}
 

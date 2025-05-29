@@ -60,12 +60,12 @@ func (s *ruleDataService) GetRuleData(ctx context.Context, pointOfSaleId string)
 		return nil, fmt.Errorf("error fetching ecommerce credentials: %w", err)
 	}
 
-	ecommerceItems, err := s.ecommerceService.GetItems(credentials.Context, credentials.ApiURL, credentials.ApiKey)
+	ecommerceResponse, err := s.ecommerceService.GetItemsRaw(credentials.Context, credentials.ApiURL, credentials.ApiKey)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching ecommerce items: %w", err)
 	}
 
-	if len(sheetData.Values) < 2 && len(ecommerceItems) == 0 {
+	if len(sheetData.Values) < 2 && len(ecommerceResponse) == 0 {
 		return nil, fmt.Errorf("insufficient data in both sheet and ecommerce")
 	}
 
@@ -73,7 +73,7 @@ func (s *ruleDataService) GetRuleData(ctx context.Context, pointOfSaleId string)
 
 	suggestions, err := s.suggestionCache.GetCachedSuggestions(ctx, pointOfSaleId, headers)
 	if err != nil {
-		suggestions, err = s.ruleSuggester.SuggestRules(sheetData, ecommerceItems)
+		suggestions, err = s.ruleSuggester.SuggestRules(sheetData, ecommerceResponse)
 		if err != nil {
 			return nil, fmt.Errorf("error generating suggestions: %w", err)
 		}
