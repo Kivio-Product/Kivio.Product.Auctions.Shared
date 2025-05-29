@@ -1,58 +1,62 @@
 package services
 
 import (
-	"context"
 	"fmt"
 
 	sheetService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/sheets"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/repository"
-	"github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/ai/google_studio"
+	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/rule"
 )
 
-type SuggestRuleColumnsService interface {
-	Execute(pointOfSaleId string) (map[string]interface{}, error)
+type RuleDataService interface {
+	GetRuleData(pointOfSaleId string) (map[string]interface{}, error)
 }
 
-type suggestRuleColumnsService struct {
+type ruleDataService struct {
 	sheetService  sheetService.SheetService
-	ruleService   RuleService
+	ruleRepo      infrastructure.RuleRepository
 	ruleSuggester domain.RuleSuggestionAI
 }
 
-func NewSuggestRuleColumnsService(
+func NewRuleDataService(
 	sheetService sheetService.SheetService,
-	ruleService RuleService,
-) SuggestRuleColumnsService {
-	return &suggestRuleColumnsService{
+	ruleRepo infrastructure.RuleRepository,
+	ruleSuggester domain.RuleSuggestionAI,
+) RuleDataService {
+	return &ruleDataService{
 		sheetService:  sheetService,
-		ruleService:   ruleService,
-		ruleSuggester: google_studio.NewGoogleStudioRuleSuggester(),
+		ruleRepo:      ruleRepo,
+		ruleSuggester: ruleSuggester,
 	}
 }
 
-func (s *suggestRuleColumnsService) Execute(pointOfSaleId string) (map[string]interface{}, error) {
+func (s *ruleDataService) GetRuleData(pointOfSaleId string) (map[string]interface{}, error) {
 	if pointOfSaleId == "" {
 		return nil, fmt.Errorf("pointOfSaleId is required")
 	}
 
+	// Get sheet data
 	sheetData, err := s.sheetService.FetchSheetData(pointOfSaleId)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching sheet data: %w", err)
 	}
 
+	// Get rule suggestions using AI
 	suggestedRules, err := s.ruleSuggester.SuggestRules(sheetData)
 	if err != nil {
 		return nil, fmt.Errorf("error getting rule suggestions: %w", err)
 	}
 
-	rules, err := s.ruleService.GetRules()
+	// Get existing rules
+	rules, err := s.ruleRepo.GetAllRules()
 	if err != nil {
 		return nil, fmt.Errorf("error getting rules: %w", err)
 	}
 
+	// Get rule specifications for each rule
 	var allRuleSpecs []interface{}
 	for _, rule := range rules {
-		ruleSpecs, err := s.ruleService.GetRulesSpecificationByRuleId(context.Background(), rule.RuleId)
+		ruleSpecs, err := s.ruleRepo.GetRulesSpecification(rule.RuleId)
 		if err != nil {
 			return nil, fmt.Errorf("error getting rule specifications for rule ID %v: %w", rule.RuleId, err)
 		}

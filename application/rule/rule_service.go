@@ -26,23 +26,23 @@ type RuleService interface {
 }
 
 type ruleService struct {
-	repo                      infrastructure.RuleRepository
-	RuleFactory               ruleDomain.RuleFactory
-	ruleSpecificationService  ruleSpecService.RuleSpecificationService
-	suggestRuleColumnsService SuggestRuleColumnsService
+	repo                     infrastructure.RuleRepository
+	RuleFactory              ruleDomain.RuleFactory
+	ruleSpecificationService ruleSpecService.RuleSpecificationService
+	ruleDataService          RuleDataService
 }
 
 func NewRuleService(
 	repo infrastructure.RuleRepository,
 	ruleFactory ruleDomain.RuleFactory,
 	ruleSpecificationService ruleSpecService.RuleSpecificationService,
-	suggestRuleColumnsService SuggestRuleColumnsService,
+	ruleDataService RuleDataService,
 ) RuleService {
 	return &ruleService{
-		repo:                      repo,
-		RuleFactory:               ruleFactory,
-		ruleSpecificationService:  ruleSpecificationService,
-		suggestRuleColumnsService: suggestRuleColumnsService,
+		repo:                     repo,
+		RuleFactory:              ruleFactory,
+		ruleSpecificationService: ruleSpecificationService,
+		ruleDataService:          ruleDataService,
 	}
 }
 
@@ -156,5 +156,5 @@ func (s *ruleService) UpdateRuleState(ctx context.Context, ruleId, state string)
 }
 
 func (s *ruleService) GetRuleData(pointOfSaleId string) (map[string]interface{}, error) {
-	return s.suggestRuleColumnsService.Execute(pointOfSaleId)
+	return s.ruleDataService.GetRuleData(pointOfSaleId)
 }
