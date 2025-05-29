@@ -141,8 +141,6 @@ func (r *ecommerceRepository) GetItemByID(baseUrl, apiKey, itemId string) (*item
 
 	itemId = strings.TrimPrefix(itemId, "kivio-ecommerce∼")
 
-	fmt.Println("itemId", itemId)
-
 	url := fmt.Sprintf("%s/api/products/%s", baseUrl, itemId)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -158,8 +156,6 @@ func (r *ecommerceRepository) GetItemByID(baseUrl, apiKey, itemId string) (*item
 	}
 	defer resp.Body.Close()
 
-	fmt.Println("resp.StatusCode", resp.StatusCode)
-
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to get item, status code: %d", resp.StatusCode)
 	}
@@ -169,12 +165,50 @@ func (r *ecommerceRepository) GetItemByID(baseUrl, apiKey, itemId string) (*item
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	var item itemDomain.Item
-	if err := json.Unmarshal(respBody, &item); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal item: %w", err)
+	type Image struct {
+		Src string `json:"src"`
 	}
 
-	return &item, nil
+	type Product struct {
+		ID               int     `json:"id"`
+		Name             string  `json:"name"`
+		ShortDescription string  `json:"short_description"`
+		FullDescription  string  `json:"full_description"`
+		Price            float64 `json:"price"`
+		Images           []Image `json:"images"`
+		SKU              string  `json:"sku"`
+	}
+
+	type ApiResponse struct {
+		Products []Product `json:"products"`
+	}
+
+	var apiResponse ApiResponse
+	if err := json.Unmarshal(respBody, &apiResponse); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	if len(apiResponse.Products) == 0 {
+		return nil, fmt.Errorf("product not found")
+	}
+
+	product := apiResponse.Products[0]
+
+	var imageURL string
+	if len(product.Images) > 0 {
+		imageURL = product.Images[0].Src
+	}
+
+	item := &itemDomain.Item{
+		ItemId:      fmt.Sprintf("kivio-ecommerce∼%d", product.ID),
+		Name:        product.Name,
+		Description: product.ShortDescription,
+		ExternalId:  product.SKU,
+		Source:      "kivio ecommerce",
+		Url:         imageURL,
+	}
+
+	return item, nil
 }
 
 func (r *ecommerceRepository) GetCustomers(baseUrl, apiKey string) ([]customerDomain.Customer, error) {
