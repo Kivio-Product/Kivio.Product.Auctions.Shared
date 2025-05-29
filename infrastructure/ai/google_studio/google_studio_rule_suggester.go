@@ -95,13 +95,26 @@ Only include fields that make sense for business rules.`, headers, sampleData)
 
 func (s *GoogleStudioRuleSuggester) getEcommerceRules(ecommerceResponse []byte) ([]sheetsDomain.RuleField, error) {
 	type Product struct {
-		ID                  int     `json:"id"`
-		Name                string  `json:"name"`
-		ShortDescription    string  `json:"short_description"`
-		FullDescription     string  `json:"full_description"`
-		Price               float64 `json:"price"`
-		SKU                 string  `json:"sku"`
-		VisibleIndividually bool    `json:"visible_individually"`
+		ID                  int      `json:"id"`
+		Name                string   `json:"name"`
+		ShortDescription    string   `json:"short_description"`
+		FullDescription     string   `json:"full_description"`
+		SKU                 string   `json:"sku"`
+		Price               float64  `json:"price"`
+		OldPrice            float64  `json:"old_price"`
+		StockQuantity       int      `json:"stock_quantity"`
+		Published           bool     `json:"published"`
+		VisibleIndividually bool     `json:"visible_individually"`
+		AvailableStartDate  string   `json:"available_start_date_time_utc"`
+		AvailableEndDate    string   `json:"available_end_date_time_utc"`
+		Tags                []string `json:"tags"`
+		IsFreeShipping      bool     `json:"is_free_shipping"`
+		Weight              float64  `json:"weight"`
+		Dimensions          struct {
+			Length float64 `json:"length"`
+			Width  float64 `json:"width"`
+			Height float64 `json:"height"`
+		}
 	}
 
 	type ApiResponse struct {
@@ -118,21 +131,23 @@ func (s *GoogleStudioRuleSuggester) getEcommerceRules(ecommerceResponse []byte) 
 		sampleItems = sampleItems[:5]
 	}
 
-	prompt := fmt.Sprintf(`Based on the following ecommerce items data, suggest rules that could be used for business logic.
-For each field, determine if it would make sense to create rules for it and what type of rules would be appropriate.
-Consider only fields that could be used for meaningful business rules (e.g., stock levels, prices, categories, etc.).
-Ignore fields that are not suitable for rules (e.g., IDs, names, etc.).
+	prompt := fmt.Sprintf(`Based on the following ecommerce product data, suggest business rules that could be used for inventory management, pricing.
 
-Sample Items: %+v
+Sample Products: %+v
 
-For each suitable field, provide a response in this JSON format:
+For each suitable field or combination of fields, provide a response in this JSON format:
 {
-    "field": "field name",
+    "field": "field name or combination (e.g., 'price', 'stock_quantity', 'available_dates')",
     "parameterType": "one of: numérico, moneda, porcentaje, fecha, booleano, texto, categoría",
     "operators": ["=", "!=", ">", "<", ">=", "<=", "contiene", "no contiene", "está en", "no está en"]
 }
 
-Only include fields that make sense for business rules.`, sampleItems)
+Focus on rules that would be valuable for:
+1. Inventory control and stock management
+2. Price optimization and discount strategies
+3. Product visibility and availability
+
+Only include fields that make sense for business rules and would provide value for decision making.`, sampleItems)
 
 	response, err := s.client.GenerateContent(prompt)
 	if err != nil {
