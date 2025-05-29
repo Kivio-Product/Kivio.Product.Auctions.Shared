@@ -13,20 +13,23 @@ type RuleDataService interface {
 }
 
 type ruleDataService struct {
-	sheetService  sheetService.SheetService
-	ruleRepo      infrastructure.RuleRepository
-	ruleSuggester domain.RuleSuggestionAI
+	sheetService    sheetService.SheetService
+	ruleRepo        infrastructure.RuleRepository
+	ruleSuggester   domain.RuleSuggestionAI
+	suggestionCache RuleSuggestionCache
 }
 
 func NewRuleDataService(
 	sheetService sheetService.SheetService,
 	ruleRepo infrastructure.RuleRepository,
 	ruleSuggester domain.RuleSuggestionAI,
+	suggestionCache RuleSuggestionCache,
 ) RuleDataService {
 	return &ruleDataService{
-		sheetService:  sheetService,
-		ruleRepo:      ruleRepo,
-		ruleSuggester: ruleSuggester,
+		sheetService:    sheetService,
+		ruleRepo:        ruleRepo,
+		ruleSuggester:   ruleSuggester,
+		suggestionCache: suggestionCache,
 	}
 }
 
@@ -40,9 +43,16 @@ func (s *ruleDataService) GetRuleData(pointOfSaleId string) (map[string]interfac
 		return nil, fmt.Errorf("error fetching sheet data: %w", err)
 	}
 
-	suggestedRules, err := s.ruleSuggester.SuggestRules(sheetData)
+	suggestedRules, err := s.suggestionCache.GetCachedSuggestions(pointOfSaleId, sheetData.Values[0])
 	if err != nil {
-		return nil, fmt.Errorf("error getting rule suggestions: %w", err)
+		suggestedRules, err = s.ruleSuggester.SuggestRules(sheetData)
+		if err != nil {
+			return nil, fmt.Errorf("error getting rule suggestions: %w", err)
+		}
+
+		if err := s.suggestionCache.CacheSuggestions(pointOfSaleId, sheetData.Values[0], suggestedRules); err != nil {
+			return nil, fmt.Errorf("error caching suggestions: %w", err)
+		}
 	}
 
 	return map[string]interface{}{

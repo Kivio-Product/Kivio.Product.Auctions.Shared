@@ -65,16 +65,14 @@ Only include fields that make sense for business rules.`, headers, sampleData)
 	var localRules []sheetsDomain.RuleField
 	var otherRules []sheetsDomain.RuleField
 
-	for _, rule := range suggestedRules {
-		switch strings.ToLower(rule.Field) {
-		case "date", "fecha", "fecha de última entrada", "fecha de última salida", "fecha de vencimiento":
-			localRules = append(localRules, rule)
-		case "availability", "disponibilidad", "stock actual", "stock mínimo", "stock máximo":
-			localRules = append(localRules, rule)
-		default:
-			otherRules = append(otherRules, rule)
-		}
+	dateRule := sheetsDomain.RuleField{
+		Field:         "date",
+		ParameterType: "fecha",
+		Operators:     []string{"=", "!=", ">", "<", ">=", "<="},
 	}
+	localRules = append(localRules, dateRule)
+
+	otherRules = append(otherRules, suggestedRules...)
 
 	categorizedRules["local"] = localRules
 	if len(otherRules) > 0 {
