@@ -50,8 +50,14 @@ Only include fields that make sense for business rules.`, headers, sampleData)
 		return nil, fmt.Errorf("error getting AI suggestions: %w", err)
 	}
 
+	cleanedResponse := strings.TrimSpace(response)
+	cleanedResponse = strings.TrimPrefix(cleanedResponse, "```json")
+	cleanedResponse = strings.TrimPrefix(cleanedResponse, "```")
+	cleanedResponse = strings.TrimSuffix(cleanedResponse, "```")
+	cleanedResponse = strings.TrimSpace(cleanedResponse)
+
 	var suggestedRules []sheetsDomain.RuleField
-	if err := json.Unmarshal([]byte(response), &suggestedRules); err != nil {
+	if err := json.Unmarshal([]byte(cleanedResponse), &suggestedRules); err != nil {
 		return nil, fmt.Errorf("error parsing AI response: %w", err)
 	}
 
@@ -61,9 +67,9 @@ Only include fields that make sense for business rules.`, headers, sampleData)
 
 	for _, rule := range suggestedRules {
 		switch strings.ToLower(rule.Field) {
-		case "date", "fecha":
+		case "date", "fecha", "fecha de última entrada", "fecha de última salida", "fecha de vencimiento":
 			localRules = append(localRules, rule)
-		case "availability", "disponibilidad":
+		case "availability", "disponibilidad", "stock actual", "stock mínimo", "stock máximo":
 			localRules = append(localRules, rule)
 		default:
 			otherRules = append(otherRules, rule)
