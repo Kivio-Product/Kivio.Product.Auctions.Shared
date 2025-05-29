@@ -7,31 +7,29 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/dto"
 	services "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
 	application "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/file_storage"
-	service "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/integration"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/repository"
 )
 
 type NotifyOfferUseCase struct {
-	notifier           domain.Notifier
-	fileStorageService application.IFileStorageService
-	integrationService service.IntegrationService
-	ecommerceService   services.EcommerceService
+	notifier                domain.Notifier
+	fileStorageService      application.IFileStorageService
+	ecommerceService        services.EcommerceService
+	ecommerceCredentialsSvc services.EcommerceCredentialsService
 }
 
 func NewNotifyOfferUseCase(
 	notifier domain.Notifier,
 	fileStorageService application.IFileStorageService,
-	integrationService service.IntegrationService,
 	ecommerceService services.EcommerceService,
+	ecommerceCredentialsSvc services.EcommerceCredentialsService,
 ) *NotifyOfferUseCase {
 	return &NotifyOfferUseCase{
-		notifier:           notifier,
-		fileStorageService: fileStorageService,
-		integrationService: integrationService,
-		ecommerceService:   ecommerceService,
+		notifier:                notifier,
+		fileStorageService:      fileStorageService,
+		ecommerceService:        ecommerceService,
+		ecommerceCredentialsSvc: ecommerceCredentialsSvc,
 	}
 }
 
@@ -52,40 +50,14 @@ func (uc *NotifyOfferUseCase) Execute(ctx context.Context, auctionURL, offerName
 		}
 	}
 
-	integrations, err := uc.integrationService.GetIntegrationsByPosID(ctx, posID)
+	credentials, err := uc.ecommerceCredentialsSvc.GetCredentials(ctx, posID)
 	if err == nil {
-		var ecommerceIntegration *dto.IntegrationResponse
-		for _, integ := range integrations {
-			if integ.Type == "kivio_ecommerce" && integ.Status == "Active" {
-				ecommerceIntegration = integ
-				break
-			}
-		}
-		if ecommerceIntegration != nil {
-			var apiUrl, username, password string
-			for _, cfg := range ecommerceIntegration.Configs {
-				switch cfg.Key {
-				case "apiUrl":
-					apiUrl = cfg.Value
-				case "username":
-					username = cfg.Value
-				case "password":
-					password = cfg.Value
-				}
-			}
-			if apiUrl != "" && username != "" && password != "" {
-				tokenUrl := fmt.Sprintf("%s/token", apiUrl)
-				apiKey, err := uc.ecommerceService.GetApiKey(ctx, username, password, tokenUrl)
-				if err == nil {
-					customers, err := uc.ecommerceService.GetCustomers(ctx, apiUrl, apiKey)
-					if err == nil {
-						for _, customer := range customers {
-							email := strings.TrimSpace(customer.Email)
-							if email != "" {
-								emailSet[email] = struct{}{}
-							}
-						}
-					}
+		customers, err := uc.ecommerceService.GetCustomers(credentials.Context, credentials.ApiURL, credentials.ApiKey)
+		if err == nil {
+			for _, customer := range customers {
+				email := strings.TrimSpace(customer.Email)
+				if email != "" {
+					emailSet[email] = struct{}{}
 				}
 			}
 		}

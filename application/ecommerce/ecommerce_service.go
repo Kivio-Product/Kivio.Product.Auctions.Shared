@@ -9,7 +9,7 @@ import (
 )
 
 type EcommerceService interface {
-	GetItems(ctx context.Context) ([]itemDomain.Item, error)
+	GetItems(ctx context.Context, apiUrl, apiKey string) ([]itemDomain.Item, error)
 	GetItemByID(ctx context.Context, id string) (*itemDomain.Item, error)
 	GetCustomers(ctx context.Context, apiUrl, apiKey string) ([]customerDomain.Customer, error)
 	GetCustomerByID(ctx context.Context, id string) (*customerDomain.Customer, error)
@@ -26,10 +26,8 @@ func NewEcommerceService(repo infrastructure.EcommerceRepository) EcommerceServi
 	}
 }
 
-func (s *ecommerceService) GetItems(ctx context.Context) ([]itemDomain.Item, error) {
-	arg2 := "defaultArg2" // TODO: Replace with actual logic to get arg2
-	arg3 := "defaultArg3" // TODO: Replace with actual logic to get arg3
-	return s.repo.GetItems(arg2, arg3)
+func (s *ecommerceService) GetItems(ctx context.Context, apiUrl, apiKey string) ([]itemDomain.Item, error) {
+	return s.repo.GetItems(apiUrl, apiKey)
 }
 
 func (s *ecommerceService) GetItemByID(ctx context.Context, id string) (*itemDomain.Item, error) {

@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	services "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
 	sheetService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/sheets"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/repository"
+	integrationInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/integration"
 	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/rule"
 )
 
@@ -14,10 +16,13 @@ type RuleDataService interface {
 }
 
 type ruleDataService struct {
-	sheetService    sheetService.SheetService
-	ruleRepo        infrastructure.RuleRepository
-	ruleSuggester   domain.RuleSuggestionAI
-	suggestionCache RuleSuggestionCache
+	sheetService            sheetService.SheetService
+	ruleRepo                infrastructure.RuleRepository
+	ruleSuggester           domain.RuleSuggestionAI
+	suggestionCache         RuleSuggestionCache
+	integrationRepository   integrationInfrastructure.IntegrationRepository
+	ecommerceService        services.EcommerceService
+	ecommerceCredentialsSvc services.EcommerceCredentialsService
 }
 
 func NewRuleDataService(
@@ -25,12 +30,18 @@ func NewRuleDataService(
 	ruleRepo infrastructure.RuleRepository,
 	ruleSuggester domain.RuleSuggestionAI,
 	suggestionCache RuleSuggestionCache,
+	integrationRepository integrationInfrastructure.IntegrationRepository,
+	ecommerceService services.EcommerceService,
+	ecommerceCredentialsSvc services.EcommerceCredentialsService,
 ) RuleDataService {
 	return &ruleDataService{
-		sheetService:    sheetService,
-		ruleRepo:        ruleRepo,
-		ruleSuggester:   ruleSuggester,
-		suggestionCache: suggestionCache,
+		sheetService:            sheetService,
+		ruleRepo:                ruleRepo,
+		ruleSuggester:           ruleSuggester,
+		suggestionCache:         suggestionCache,
+		integrationRepository:   integrationRepository,
+		ecommerceService:        ecommerceService,
+		ecommerceCredentialsSvc: ecommerceCredentialsSvc,
 	}
 }
 
@@ -44,15 +55,25 @@ func (s *ruleDataService) GetRuleData(ctx context.Context, pointOfSaleId string)
 		return nil, fmt.Errorf("error fetching sheet data: %w", err)
 	}
 
-	if len(sheetData.Values) < 2 {
-		return nil, fmt.Errorf("insufficient data in sheet")
+	credentials, err := s.ecommerceCredentialsSvc.GetCredentials(ctx, pointOfSaleId)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching ecommerce credentials: %w", err)
+	}
+
+	ecommerceItems, err := s.ecommerceService.GetItems(credentials.Context, credentials.ApiURL, credentials.ApiKey)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching ecommerce items: %w", err)
+	}
+
+	if len(sheetData.Values) < 2 && len(ecommerceItems) == 0 {
+		return nil, fmt.Errorf("insufficient data in both sheet and ecommerce")
 	}
 
 	headers := sheetData.Values[0]
 
 	suggestions, err := s.suggestionCache.GetCachedSuggestions(ctx, pointOfSaleId, headers)
 	if err != nil {
-		suggestions, err = s.ruleSuggester.SuggestRules(sheetData)
+		suggestions, err = s.ruleSuggester.SuggestRules(sheetData, ecommerceItems)
 		if err != nil {
 			return nil, fmt.Errorf("error generating suggestions: %w", err)
 		}
