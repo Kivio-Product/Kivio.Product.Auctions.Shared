@@ -50,22 +50,19 @@ func (s *ruleDataService) GetRuleData(ctx context.Context, pointOfSaleId string)
 
 	headers := sheetData.Values[0]
 
-	// Try to get cached suggestions first
 	suggestions, err := s.suggestionCache.GetCachedSuggestions(ctx, pointOfSaleId, headers)
 	if err != nil {
-		// If cache miss or headers changed, generate new suggestions
 		suggestions, err = s.ruleSuggester.SuggestRules(sheetData)
 		if err != nil {
 			return nil, fmt.Errorf("error generating suggestions: %w", err)
 		}
 
-		// Cache the new suggestions
 		if err := s.suggestionCache.CacheSuggestions(ctx, pointOfSaleId, headers, suggestions); err != nil {
 			return nil, fmt.Errorf("error caching suggestions: %w", err)
 		}
 	}
 
 	return map[string]interface{}{
-		"suggestedRules": suggestions,
+		"categories": suggestions,
 	}, nil
 }
