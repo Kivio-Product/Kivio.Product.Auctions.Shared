@@ -24,7 +24,7 @@ func (s *GoogleStudioRuleSuggester) SuggestRules(sheetData sheetsDomain.SheetDat
 	categorizedRules := make(map[string][]sheetsDomain.RuleField)
 
 	dateRule := sheetsDomain.RuleField{
-		Field:         "date",
+		Field:         "current date",
 		ParameterType: "fecha",
 		Operators:     []string{"=", "!=", ">", "<", ">=", "<="},
 	}
