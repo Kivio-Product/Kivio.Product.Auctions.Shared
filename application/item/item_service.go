@@ -2,9 +2,6 @@ package services
 
 import (
 	"context"
-	"fmt"
-	"net/url"
-	"strings"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
 	integrationInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/integration"
@@ -15,7 +12,6 @@ type ItemService interface {
 	CreateItem(ctx context.Context, name, description, externalId, pointOfSaleId, url string) (*domain.Item, error)
 	GetItems() ([]domain.Item, error)
 	GetItemById(ctx context.Context, id string) (*domain.Item, error)
-	GetExternalItemById(ctx context.Context, itemId string, pointOfSaleId string) (*domain.Item, error)
 	UpdateItem(ctx context.Context, id, name, description, externalId, pointOfSaleId, url string) error
 	DeleteItemById(ctx context.Context, id string) error
 	GetItemsByPosId(ctx context.Context, id string) ([]domain.Item, error)
@@ -23,23 +19,20 @@ type ItemService interface {
 }
 
 type itemService struct {
-	repo                   itemInfrastructure.ItemRepository
-	integrationRepository  integrationInfrastructure.IntegrationRepository
-	itemFactory            domain.ItemFactory
-	itemIntegrationFactory *itemInfrastructure.ItemIntegrationFactory
+	repo                  itemInfrastructure.ItemRepository
+	integrationRepository integrationInfrastructure.IntegrationRepository
+	itemFactory           domain.ItemFactory
 }
 
 func NewItemService(
 	repo itemInfrastructure.ItemRepository,
 	itemFactory domain.ItemFactory,
 	integrationRepository integrationInfrastructure.IntegrationRepository,
-	itemIntegrationFactory *itemInfrastructure.ItemIntegrationFactory,
 ) ItemService {
 	return &itemService{
-		repo:                   repo,
-		itemFactory:            itemFactory,
-		integrationRepository:  integrationRepository,
-		itemIntegrationFactory: itemIntegrationFactory,
+		repo:                  repo,
+		itemFactory:           itemFactory,
+		integrationRepository: integrationRepository,
 	}
 }
 
@@ -94,45 +87,6 @@ func (s *itemService) GetItemsByPosId(ctx context.Context, id string) ([]domain.
 	}
 
 	return items, nil
-}
-
-func (s *itemService) GetExternalItemById(ctx context.Context, itemId string, pointOfSaleId string) (*domain.Item, error) {
-	var cleanedItemId string
-
-	decodedId, err := url.QueryUnescape(itemId)
-	if err != nil {
-		return nil, err
-	}
-
-	if strings.Contains(decodedId, "∼") {
-		parts := strings.Split(decodedId, "∼")
-		cleanedItemId = parts[len(parts)-1]
-	} else {
-		cleanedItemId = decodedId
-	}
-
-	integrations, err := s.integrationRepository.GetIntegrationsByPosID(pointOfSaleId)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, integration := range integrations {
-		strategy, err := s.itemIntegrationFactory.GetStrategy(integration.Type)
-		if err != nil {
-			continue
-		}
-
-		item, err := strategy.GetItemById(cleanedItemId, pointOfSaleId)
-		if err != nil {
-			continue
-		}
-
-		if item != nil {
-			return item, nil
-		}
-	}
-
-	return nil, fmt.Errorf("item with id %s not found in any integration", itemId)
 }
 
 func (s *itemService) UpdateItem(ctx context.Context, id, name, description, externalId, pointOfSaleId, url string) error {
