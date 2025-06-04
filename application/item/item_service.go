@@ -93,25 +93,6 @@ func (s *itemService) GetItemsByPosId(ctx context.Context, id string) ([]domain.
 		items[i].Source = "local"
 	}
 
-	integrations, err := s.integrationRepository.GetIntegrationsByPosID(id)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, integration := range integrations {
-		strategy, err := s.itemIntegrationFactory.GetStrategy(integration.Type)
-		if err != nil {
-			continue
-		}
-
-		integrationItems, err := strategy.GetItems(id)
-		if err != nil {
-			continue
-		}
-
-		items = append(items, integrationItems...)
-	}
-
 	return items, nil
 }
 

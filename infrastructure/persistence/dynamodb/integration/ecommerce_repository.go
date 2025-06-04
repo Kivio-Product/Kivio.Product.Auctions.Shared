@@ -11,8 +11,8 @@ import (
 )
 
 type EcommerceRepository interface {
-	GetItems(baseUrl, apiKey string) ([]itemDomain.Item, error)
-	GetItemsRaw(baseUrl, apiKey string) ([]byte, error)
+	GetItems(baseUrl, apiKey string, page, limit int) ([]itemDomain.Item, error)
+	GetItemsRaw(baseUrl, apiKey string, page, limit int) ([]byte, error)
 	GetItemByID(baseUrl, apiKey, itemId string) (*itemDomain.Item, error)
 	GetCustomers(baseUrl, apiKey string) ([]customerDomain.Customer, error)
 	GetCustomerByID(baseUrl, apiKey, id string) (*customerDomain.Customer, error)
@@ -33,8 +33,8 @@ func (r *ecommerceRepository) GetApiKey(username, password, tokenUrl string) (st
 	return r.client.GetApiKey(username, password, tokenUrl)
 }
 
-func (r *ecommerceRepository) GetItems(baseUrl, apiKey string) ([]itemDomain.Item, error) {
-	respBody, err := r.client.GetItems(baseUrl, apiKey)
+func (r *ecommerceRepository) GetItems(baseUrl, apiKey string, page, limit int) ([]itemDomain.Item, error) {
+	respBody, err := r.client.GetItems(baseUrl, apiKey, page, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -47,6 +47,8 @@ func (r *ecommerceRepository) GetItems(baseUrl, apiKey string) ([]itemDomain.Ite
 
 	type ApiResponse struct {
 		Products []Product `json:"products"`
+		Total    int       `json:"total"`
+		Pages    int       `json:"pages"`
 	}
 
 	var apiResponse ApiResponse
@@ -68,8 +70,8 @@ func (r *ecommerceRepository) GetItems(baseUrl, apiKey string) ([]itemDomain.Ite
 	return items, nil
 }
 
-func (r *ecommerceRepository) GetItemsRaw(baseUrl, apiKey string) ([]byte, error) {
-	return r.client.GetItems(baseUrl, apiKey)
+func (r *ecommerceRepository) GetItemsRaw(baseUrl, apiKey string, page, limit int) ([]byte, error) {
+	return r.client.GetItems(baseUrl, apiKey, page, limit)
 }
 
 func (r *ecommerceRepository) GetItemByID(baseUrl, apiKey, itemId string) (*itemDomain.Item, error) {

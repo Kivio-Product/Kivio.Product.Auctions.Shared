@@ -9,8 +9,8 @@ import (
 )
 
 type EcommerceService interface {
-	GetItems(ctx context.Context, apiUrl, apiKey string) ([]itemDomain.Item, error)
-	GetItemsRaw(ctx context.Context, apiUrl, apiKey string) ([]byte, error)
+	GetItems(ctx context.Context, apiUrl, apiKey string, page, limit int) ([]itemDomain.Item, error)
+	GetItemsRaw(ctx context.Context, apiUrl, apiKey string, page, limit int) ([]byte, error)
 	GetItemByID(ctx context.Context, id string) (*itemDomain.Item, error)
 	GetCustomers(ctx context.Context, apiUrl, apiKey string) ([]customerDomain.Customer, error)
 	GetCustomerByID(ctx context.Context, id string) (*customerDomain.Customer, error)
@@ -27,12 +27,12 @@ func NewEcommerceService(repo infrastructure.EcommerceRepository) EcommerceServi
 	}
 }
 
-func (s *ecommerceService) GetItems(ctx context.Context, apiUrl, apiKey string) ([]itemDomain.Item, error) {
-	return s.repo.GetItems(apiUrl, apiKey)
+func (s *ecommerceService) GetItems(ctx context.Context, apiUrl, apiKey string, page, limit int) ([]itemDomain.Item, error) {
+	return s.repo.GetItems(apiUrl, apiKey, page, limit)
 }
 
-func (s *ecommerceService) GetItemsRaw(ctx context.Context, apiUrl, apiKey string) ([]byte, error) {
-	return s.repo.GetItemsRaw(apiUrl, apiKey)
+func (s *ecommerceService) GetItemsRaw(ctx context.Context, apiUrl, apiKey string, page, limit int) ([]byte, error) {
+	return s.repo.GetItemsRaw(apiUrl, apiKey, page, limit)
 }
 
 func (s *ecommerceService) GetItemByID(ctx context.Context, id string) (*itemDomain.Item, error) {

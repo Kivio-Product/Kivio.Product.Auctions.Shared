@@ -60,7 +60,7 @@ func (s *ruleDataService) GetRuleData(ctx context.Context, pointOfSaleId string)
 		return nil, fmt.Errorf("error fetching ecommerce credentials: %w", err)
 	}
 
-	ecommerceResponse, err := s.ecommerceService.GetItemsRaw(credentials.Context, credentials.ApiURL, credentials.ApiKey)
+	ecommerceResponse, err := s.ecommerceService.GetItemsRaw(credentials.Context, credentials.ApiURL, credentials.ApiKey, 1, 0)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching ecommerce items: %w", err)
 	}

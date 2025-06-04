@@ -11,7 +11,7 @@ import (
 
 type EcommerceClient interface {
 	GetApiKey(username, password, tokenUrl string) (string, error)
-	GetItems(baseUrl, apiKey string) ([]byte, error)
+	GetItems(baseUrl, apiKey string, page, limit int) ([]byte, error)
 	GetItemByID(baseUrl, apiKey, itemId string) ([]byte, error)
 	GetCustomers(baseUrl, apiKey string) ([]byte, error)
 	GetCustomerByID(baseUrl, apiKey, id string) ([]byte, error)
@@ -78,8 +78,8 @@ func (c *ecommerceClient) GetApiKey(username, password, tokenUrl string) (string
 	return apiKey, nil
 }
 
-func (c *ecommerceClient) GetItems(baseUrl, apiKey string) ([]byte, error) {
-	url := fmt.Sprintf("%s/api/products?Limit=2", baseUrl)
+func (c *ecommerceClient) GetItems(baseUrl, apiKey string, page, limit int) ([]byte, error) {
+	url := fmt.Sprintf("%s/api/products?Page=%d&Limit=%d", baseUrl, page, limit)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
