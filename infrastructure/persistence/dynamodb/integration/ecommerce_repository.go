@@ -43,6 +43,9 @@ func (r *ecommerceRepository) GetItems(baseUrl, apiKey string, page, limit int) 
 		ID          int    `json:"id"`
 		Name        string `json:"name"`
 		Description string `json:"short_description"`
+		Images      []struct {
+			Src string `json:"src"`
+		} `json:"images"`
 	}
 
 	type ApiResponse struct {
@@ -58,11 +61,17 @@ func (r *ecommerceRepository) GetItems(baseUrl, apiKey string, page, limit int) 
 
 	var items []itemDomain.Item
 	for _, product := range apiResponse.Products {
+		var imageURL string
+		if len(product.Images) > 0 {
+			imageURL = product.Images[0].Src
+		}
+
 		item := itemDomain.Item{
 			ItemId:      fmt.Sprintf("kivio-ecommerce∼%d", product.ID),
 			Name:        product.Name,
 			Description: product.Description,
 			ExternalId:  fmt.Sprintf("kivio-ecommerce∼%d", product.ID),
+			Url:         imageURL,
 		}
 		items = append(items, item)
 	}
