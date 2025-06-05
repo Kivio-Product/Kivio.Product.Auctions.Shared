@@ -15,6 +15,7 @@ type Order struct {
 	ItemSpecificationId string
 	State               string
 	SortKey             string
+	PointOfSaleId       string
 }
 
 type OrderDetail struct {
