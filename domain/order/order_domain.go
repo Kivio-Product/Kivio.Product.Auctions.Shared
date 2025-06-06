@@ -26,8 +26,8 @@ type OrderDetail struct {
 	State           string    `json:"state"`
 	CreatedAt       time.Time `json:"created_at"`
 	CustomerId      string    `json:"customer_id"`
-	ItemAmount      int64     `json:"item_amount"`
 	OrderAmount     int64     `json:"order_amount"`
+	ExtraData       string    `json:"extra_data"`
 }
 
 type PaginationParams struct {

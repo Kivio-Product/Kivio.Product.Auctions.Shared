@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"fmt"
-	"log"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 	itemInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item"
@@ -100,7 +99,6 @@ func (s *orderService) GetAllOrdersWithDetails(ctx context.Context) ([]domain.Or
 			State:           order.State,
 			CreatedAt:       order.CreatedAt,
 			CustomerId:      order.CustomerId,
-			ItemAmount:      itemSpecification.Amount,
 			OrderAmount:     order.OfferedAmount,
 			ItemDescription: item.Description,
 		}
@@ -158,33 +156,13 @@ func (s *orderService) GetPaginatedOrdersWithDetails(ctx context.Context, params
 
 	var orderDetails []domain.OrderDetail
 	for _, order := range ordersResult.Orders {
-		itemSpecification, err := s.itemSpecRepo.GetById(ctx, order.ItemSpecificationId)
-		if err != nil {
-			log.Printf("No se pudo obtener la especificación del item: error=%s, item_spec_id=%s, order_id=%s",
-				err.Error(),
-				order.ItemSpecificationId,
-				order.OrderId)
-			continue
-		}
-
-		item, err := s.itemRepo.GetItemById(ctx, itemSpecification.ItemId)
-		if err != nil {
-			log.Printf("No se pudo obtener el item: error=%s, item_id=%s, order_id=%s",
-				err.Error(),
-				itemSpecification.ItemId,
-				order.OrderId)
-			continue
-		}
-
 		orderDetail := domain.OrderDetail{
-			OrderId:         order.OrderId,
-			ItemName:        item.Name,
-			State:           order.State,
-			CreatedAt:       order.CreatedAt,
-			CustomerId:      order.CustomerId,
-			ItemAmount:      itemSpecification.Amount,
-			OrderAmount:     order.OfferedAmount,
-			ItemDescription: item.Description,
+			OrderId:     order.OrderId,
+			State:       order.State,
+			CreatedAt:   order.CreatedAt,
+			CustomerId:  order.CustomerId,
+			OrderAmount: order.OfferedAmount,
+			ExtraData:   order.ExtraData,
 		}
 		orderDetails = append(orderDetails, orderDetail)
 	}
