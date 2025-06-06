@@ -28,7 +28,14 @@ func (s *GoogleStudioRuleSuggester) SuggestRules(sheetData sheetsDomain.SheetDat
 		ParameterType: "fecha",
 		Operators:     []string{"=", "!=", ">", "<", ">=", "<="},
 	}
-	categorizedRules["local"] = []sheetsDomain.RuleField{dateRule}
+
+	availabilityRule := sheetsDomain.RuleField{
+		Field:         "availability",
+		ParameterType: "numérico",
+		Operators:     []string{"=", "!=", ">", "<", ">=", "<="},
+	}
+
+	categorizedRules["local"] = []sheetsDomain.RuleField{dateRule, availabilityRule}
 
 	if len(sheetData.Values) >= 2 {
 		headers := sheetData.Values[0]

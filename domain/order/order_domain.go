@@ -13,6 +13,7 @@ type Order struct {
 	CustomerId          string
 	ExternalId          string
 	ItemSpecificationId string
+	ExtraData           string
 	State               string
 	SortKey             string
 	PointOfSaleId       string
