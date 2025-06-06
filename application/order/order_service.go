@@ -12,7 +12,7 @@ import (
 )
 
 type OrderService interface {
-	CreateOrder(ctx context.Context, customerId, externalId, itemId, offerId, pointOfSaleId string, offeredAmount int64) (*domain.Order, error)
+	CreateOrder(ctx context.Context, customerId, externalId, itemId, offerId, pointOfSaleId, extraData string, offeredAmount int64) (*domain.Order, error)
 	GetOrders(ctx context.Context) ([]domain.Order, error)
 	UpdateOrder(ctx context.Context, orderId string, offeredAmount int64, customerId, externalId, itemId, state string) error
 	GetOrderById(ctx context.Context, id string) (*domain.Order, error)
@@ -35,8 +35,8 @@ func NewOrderService(repo orderInfrastructure.OrderRepository, orderFactory doma
 	return &orderService{repo: repo, orderFactory: orderFactory, itemSpecRepo: itemSpecRepo, itemRepo: itemRepo}
 }
 
-func (s *orderService) CreateOrder(ctx context.Context, customerId, externalId, itemId, offerId, pointOfSaleId string, offeredAmount int64) (*domain.Order, error) {
-	order, err := s.orderFactory.CreateOrder(customerId, externalId, itemId, offerId, pointOfSaleId, offeredAmount)
+func (s *orderService) CreateOrder(ctx context.Context, customerId, externalId, itemId, offerId, pointOfSaleId, extraData string, offeredAmount int64) (*domain.Order, error) {
+	order, err := s.orderFactory.CreateOrder(customerId, externalId, itemId, offerId, pointOfSaleId, extraData, offeredAmount)
 	if err != nil {
 		return &domain.Order{}, err
 	}

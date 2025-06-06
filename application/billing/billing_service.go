@@ -181,22 +181,10 @@ func (s *billingService) GetPaginatedBillingsWithDetails(ctx context.Context, pa
 			return nil, err
 		}
 
-		itemSpec, err := s.itemSpecRepo.GetById(ctx, order.ItemSpecificationId)
-		if err != nil {
-			return nil, err
-		}
-
-		item, err := s.itemRepo.GetItemById(ctx, itemSpec.ItemId)
-		if err != nil {
-			return nil, err
-		}
-
 		billOrder := domain.BillOrder{
-			OfferId:         order.OfferId,
-			ItemName:        item.Name,
-			ItemDescription: item.Description,
-			OrderAmount:     order.OfferedAmount,
-			ItemPrice:       itemSpec.Amount,
+			OfferId:     order.OfferId,
+			ItemName:    order.ExtraData,
+			OrderAmount: order.OfferedAmount,
 		}
 
 		if _, exists := billingsMap[billing.Id]; !exists {
