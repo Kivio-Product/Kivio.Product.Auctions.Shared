@@ -147,6 +147,10 @@ func (s *orderService) GetPaginatedOrdersWithDetails(ctx context.Context, params
 		params.PageSize = 100
 	}
 
+	if params.PointOfSaleId == "" {
+		return nil, fmt.Errorf("pointOfSaleId is required")
+	}
+
 	ordersResult, err := s.repo.GetOrdersPaginated(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("error al obtener órdenes paginadas: %w", err)

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"maps"
 	"os"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
@@ -209,7 +208,7 @@ func (r *orderRepository) GetOrdersPaginated(ctx context.Context, params domain.
 
 	if params.NextToken != "" {
 		if err := json.Unmarshal([]byte(params.NextToken), &lastEvaluatedKey); err != nil {
-			return nil, fmt.Errorf("token de paginación inválido: %w", err)
+			return nil, fmt.Errorf("invalid pagination token: %w", err)
 		}
 	}
 
@@ -222,12 +221,12 @@ func (r *orderRepository) GetOrdersPaginated(ctx context.Context, params domain.
 		builder = expression.NewBuilder().WithFilter(condition)
 		expr, err := builder.Build()
 		if err != nil {
-			return nil, fmt.Errorf("error al construir expresión de filtro: %w", err)
+			return nil, fmt.Errorf("error building filter expression: %w", err)
 		}
 		filterExpression = &expr
 	}
 
-	indexName := "SortKey-CreatedAt-index"
+	indexName := "PointOfSaleId-index"
 
 	input := &dynamodb.QueryInput{
 		TableName:              aws.String(r.orderTable),
@@ -236,10 +235,10 @@ func (r *orderRepository) GetOrdersPaginated(ctx context.Context, params domain.
 		ReturnConsumedCapacity: aws.String("TOTAL"),
 		ExclusiveStartKey:      lastEvaluatedKey,
 		ScanIndexForward:       aws.Bool(false),
-		KeyConditionExpression: aws.String("SortKey = :sortKeyValue"),
+		KeyConditionExpression: aws.String("PointOfSaleId = :pointOfSaleId"),
 		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-			":sortKeyValue": {
-				S: aws.String("ACTIVE"),
+			":pointOfSaleId": {
+				S: aws.String(params.PointOfSaleId),
 			},
 		},
 	}
@@ -252,18 +251,24 @@ func (r *orderRepository) GetOrdersPaginated(ctx context.Context, params domain.
 			}
 			input.ExpressionAttributeNames[k] = v
 		}
-		maps.Copy(input.ExpressionAttributeValues, filterExpression.Values())
+
+		if input.ExpressionAttributeValues == nil {
+			input.ExpressionAttributeValues = make(map[string]*dynamodb.AttributeValue)
+		}
+		for k, v := range filterExpression.Values() {
+			input.ExpressionAttributeValues[k] = v
+		}
 	}
 
 	result, err := r.client.QueryWithContext(ctx, input)
 	if err != nil {
-		return nil, fmt.Errorf("error al consultar tabla de órdenes: %w", err)
+		return nil, fmt.Errorf("error querying orders table: %w", err)
 	}
 
 	if len(result.Items) > 0 {
 		err = dynamodbattribute.UnmarshalListOfMaps(result.Items, &orders)
 		if err != nil {
-			return nil, fmt.Errorf("error al deserializar órdenes: %w", err)
+			return nil, fmt.Errorf("error deserializing orders: %w", err)
 		}
 	}
 
@@ -271,70 +276,14 @@ func (r *orderRepository) GetOrdersPaginated(ctx context.Context, params domain.
 	if result.LastEvaluatedKey != nil {
 		tokenBytes, err := json.Marshal(result.LastEvaluatedKey)
 		if err != nil {
-			return nil, fmt.Errorf("error al serializar token de paginación: %w", err)
+			return nil, fmt.Errorf("error serializing pagination token: %w", err)
 		}
 		nextToken = string(tokenBytes)
 	}
 
-	var totalCount int64
-	if params.Search != "" {
-		countInput := &dynamodb.QueryInput{
-			TableName:              aws.String(r.orderTable),
-			IndexName:              aws.String(indexName),
-			Select:                 aws.String("COUNT"),
-			KeyConditionExpression: aws.String("SortKey = :sortKeyValue"),
-			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-				":sortKeyValue": {
-					S: aws.String("ACTIVE"),
-				},
-			},
-		}
-
-		if filterExpression != nil {
-			countInput.FilterExpression = filterExpression.Filter()
-			for k, v := range filterExpression.Names() {
-				if countInput.ExpressionAttributeNames == nil {
-					countInput.ExpressionAttributeNames = make(map[string]*string)
-				}
-				countInput.ExpressionAttributeNames[k] = v
-			}
-			maps.Copy(countInput.ExpressionAttributeValues, filterExpression.Values())
-		}
-
-		log.Println("Realizando consulta COUNT separada para obtener el total filtrado")
-		countResult, err := r.client.QueryWithContext(ctx, countInput)
-		if err != nil {
-			log.Printf("Advertencia: Error al obtener conteo total filtrado: %v", err)
-			totalCount = int64(len(orders))
-		} else {
-			totalCount = *countResult.Count
-			log.Printf("Total de elementos filtrados encontrados: %d", totalCount)
-		}
-	} else {
-		countInput := &dynamodb.QueryInput{
-			TableName:              aws.String(r.orderTable),
-			IndexName:              aws.String(indexName),
-			Select:                 aws.String("COUNT"),
-			KeyConditionExpression: aws.String("SortKey = :sortKeyValue"),
-			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-				":sortKeyValue": {
-					S: aws.String("ACTIVE"),
-				},
-			},
-		}
-
-		countResult, err := r.client.QueryWithContext(ctx, countInput)
-		if err != nil {
-			return nil, fmt.Errorf("error al obtener conteo total sin filtro: %w", err)
-		}
-		totalCount = *countResult.Count
-	}
-
-	log.Printf("DynamoDB devolvió %d elementos ordenados por fecha (más recientes primero). Próxima página disponible: %v", len(orders), nextToken != "")
-
 	return &domain.OrderRepositoryResult{
 		Orders:     orders,
 		NextToken:  nextToken,
-		TotalCount: totalCount,
+		TotalCount: 0,
 	}, nil
 }

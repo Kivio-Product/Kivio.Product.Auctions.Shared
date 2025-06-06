@@ -31,9 +31,10 @@ type OrderDetail struct {
 }
 
 type PaginationParams struct {
-	NextToken string `json:"nextToken"`
-	PageSize  int    `json:"pageSize"`
-	Search    string `json:"search"`
+	NextToken     string `json:"nextToken"`
+	PageSize      int    `json:"pageSize"`
+	Search        string `json:"search"`
+	PointOfSaleId string `json:"pointOfSaleId"`
 }
 type OrderRepositoryResult struct {
 	Orders     []Order `json:"orders"`
