@@ -8,7 +8,7 @@ import (
 )
 
 type ItemSpecificationFactory interface {
-	CreateItemSpecification(currency, offerId, itemId string, amount, availability int64, expireAt time.Time, isExternal bool) (*ItemSpecification, error)
+	CreateItemSpecification(currency, offerId, itemId, pointOfSaleId string, amount, availability int64, expireAt time.Time, isExternal bool) (*ItemSpecification, error)
 }
 
 type DefaultItemSpecificationFactory struct{}
@@ -17,7 +17,7 @@ func NewItemSpecificationFactory() ItemSpecificationFactory {
 	return &DefaultItemSpecificationFactory{}
 }
 
-func (f *DefaultItemSpecificationFactory) CreateItemSpecification(currency, offerId, itemId string, amount, availability int64, expireAt time.Time, isExternal bool) (*ItemSpecification, error) {
+func (f *DefaultItemSpecificationFactory) CreateItemSpecification(currency, offerId, itemId, pointOfSaleId string, amount, availability int64, expireAt time.Time, isExternal bool) (*ItemSpecification, error) {
 
 	if currency == "" {
 		return nil, fmt.Errorf("Currency cannot be empty")
@@ -27,6 +27,9 @@ func (f *DefaultItemSpecificationFactory) CreateItemSpecification(currency, offe
 	}
 	if itemId == "" {
 		return nil, fmt.Errorf("ItemId cannot be empty")
+	}
+	if pointOfSaleId == "" {
+		return nil, fmt.Errorf("PointOfSaleId cannot be empty")
 	}
 	if amount == 0 {
 		return nil, fmt.Errorf("amount cannot be empty")
@@ -39,14 +42,15 @@ func (f *DefaultItemSpecificationFactory) CreateItemSpecification(currency, offe
 	}
 
 	return &ItemSpecification{
-		Id:           generateUUID(),
-		Amount:       amount,
-		Currency:     currency,
-		ExpireAt:     expireAt,
-		OfferId:      offerId,
-		ItemId:       itemId,
-		Availability: availability,
-		IsExternal:   isExternal,
+		Id:            generateUUID(),
+		Amount:        amount,
+		Currency:      currency,
+		ExpireAt:      expireAt,
+		OfferId:       offerId,
+		ItemId:        itemId,
+		Availability:  availability,
+		IsExternal:    isExternal,
+		PointOfSaleId: pointOfSaleId,
 	}, nil
 }
 

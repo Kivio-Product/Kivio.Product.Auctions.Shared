@@ -10,10 +10,10 @@ import (
 )
 
 type ItemSpecificationService interface {
-	Create(ctx context.Context, currency, offerId, itemId string, amount, availability int64, expireAt time.Time, isExternal bool) (*domain.ItemSpecification, error)
+	Create(ctx context.Context, currency, offerId, itemId, pointOfSaleId string, amount, availability int64, expireAt time.Time, isExternal bool) (*domain.ItemSpecification, error)
 	Get() ([]domain.ItemSpecification, error)
 	GetById(ctx context.Context, id string) (*domain.ItemSpecification, error)
-	Update(ctx context.Context, id, currency, offerId, itemId string, amount, availability int64, expireAt time.Time) error
+	Update(ctx context.Context, id, currency, offerId, itemId, pointOfSaleId string, amount, availability int64, expireAt time.Time) error
 	Delete(ctx context.Context, id string) error
 	GetItemSpecByOfferId(ctx context.Context, id string) ([]domain.ItemSpecification, error)
 	GetItemSpecByItemId(ctx context.Context, id string) ([]domain.ItemSpecification, error)
@@ -28,8 +28,8 @@ func NewItemSpecificationService(repo itemSpecInfrastructure.ItemSpecificationRe
 	return &itemSpecificationService{repo: repo, itemSpecificationFactory: itemSpecificationFactory}
 }
 
-func (s *itemSpecificationService) Create(ctx context.Context, currency, offerId, itemId string, amount, availability int64, expireAt time.Time, isExternal bool) (*domain.ItemSpecification, error) {
-	itemSpecification, err := s.itemSpecificationFactory.CreateItemSpecification(currency, offerId, itemId, amount, availability, expireAt, isExternal)
+func (s *itemSpecificationService) Create(ctx context.Context, currency, offerId, itemId, pointOfSaleId string, amount, availability int64, expireAt time.Time, isExternal bool) (*domain.ItemSpecification, error) {
+	itemSpecification, err := s.itemSpecificationFactory.CreateItemSpecification(currency, offerId, itemId, pointOfSaleId, amount, availability, expireAt, isExternal)
 
 	if err != nil {
 		return &domain.ItemSpecification{}, err
@@ -60,9 +60,9 @@ func (s *itemSpecificationService) GetById(ctx context.Context, id string) (*dom
 	return items, nil
 }
 
-func (s *itemSpecificationService) Update(ctx context.Context, id, currency, offerId, itemId string, amount, availability int64, expireAt time.Time) error {
+func (s *itemSpecificationService) Update(ctx context.Context, id, currency, offerId, itemId, pointOfSaleId string, amount, availability int64, expireAt time.Time) error {
 	item, err := s.repo.GetById(ctx, id)
-	err = item.Update(currency, offerId, itemId, amount, availability, expireAt)
+	err = item.Update(currency, offerId, itemId, pointOfSaleId, amount, availability, expireAt)
 	if err != nil {
 		return err
 	}
