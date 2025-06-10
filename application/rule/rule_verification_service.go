@@ -25,14 +25,13 @@ type RuleVerificationService interface {
 }
 
 type ruleVerificationService struct {
-	ruleRepo     infrastructure.RuleRepository
-	offerRepo    offerInfrastructure.IOfferRepository
-	offerSvc     offerService.IOfferService
-	offerClient  offerClient.OfferClient
-	itemSpecSvc  itemSpecService.ItemSpecificationService
-	ecommerceSvc ecommerceService.EcommerceService
-	apiUrl       string
-	apiKey       string
+	ruleRepo         infrastructure.RuleRepository
+	offerRepo        offerInfrastructure.IOfferRepository
+	offerSvc         offerService.IOfferService
+	offerClient      offerClient.OfferClient
+	itemSpecSvc      itemSpecService.ItemSpecificationService
+	ecommerceSvc     ecommerceService.EcommerceService
+	ecommerceCredSvc ecommerceService.EcommerceCredentialsService
 }
 
 func NewRuleVerificationService(
@@ -42,18 +41,16 @@ func NewRuleVerificationService(
 	offerClient offerClient.OfferClient,
 	itemSpecSvc itemSpecService.ItemSpecificationService,
 	ecommerceSvc ecommerceService.EcommerceService,
-	apiUrl string,
-	apiKey string,
+	ecommerceCredSvc ecommerceService.EcommerceCredentialsService,
 ) RuleVerificationService {
 	return &ruleVerificationService{
-		ruleRepo:     ruleRepo,
-		offerRepo:    offerRepo,
-		offerSvc:     offerSvc,
-		offerClient:  offerClient,
-		itemSpecSvc:  itemSpecSvc,
-		ecommerceSvc: ecommerceSvc,
-		apiUrl:       apiUrl,
-		apiKey:       apiKey,
+		ruleRepo:         ruleRepo,
+		offerRepo:        offerRepo,
+		offerSvc:         offerSvc,
+		offerClient:      offerClient,
+		itemSpecSvc:      itemSpecSvc,
+		ecommerceSvc:     ecommerceSvc,
+		ecommerceCredSvc: ecommerceCredSvc,
 	}
 }
 
@@ -145,7 +142,7 @@ func (s *ruleVerificationService) processRule(ctx context.Context, rule *domain.
 		return fmt.Errorf("failed to get item specifications: %w", err)
 	}
 
-	isActive := evaluateRuleSpecifications(ctx, specifications, itemSpecs, s)
+	isActive := evaluateRuleSpecifications(ctx, specifications, itemSpecs, rule.PosId, s)
 	rule.State = getRuleState(isActive)
 
 	if err := s.ruleRepo.SaveRule(ctx, rule); err != nil {
@@ -159,16 +156,16 @@ func (s *ruleVerificationService) processRule(ctx context.Context, rule *domain.
 	return nil
 }
 
-func evaluateRuleSpecifications(ctx context.Context, specifications []ruleSpecDomain.RuleSpecification, itemSpecs []itemSpecificationDomain.ItemSpecification, s *ruleVerificationService) bool {
+func evaluateRuleSpecifications(ctx context.Context, specifications []ruleSpecDomain.RuleSpecification, itemSpecs []itemSpecificationDomain.ItemSpecification, posId string, s *ruleVerificationService) bool {
 	for _, spec := range specifications {
-		if verifySpecification(ctx, spec, itemSpecs, s) {
+		if s.verifySpecification(ctx, spec, itemSpecs, posId) {
 			return true
 		}
 	}
 	return false
 }
 
-func verifySpecification(ctx context.Context, spec ruleSpecDomain.RuleSpecification, itemSpecs []itemSpecificationDomain.ItemSpecification, s *ruleVerificationService) bool {
+func (s *ruleVerificationService) verifySpecification(ctx context.Context, spec ruleSpecDomain.RuleSpecification, itemSpecs []itemSpecificationDomain.ItemSpecification, posId string) bool {
 	if spec.Parameter == "current date" {
 		return verifyDateSpecification(spec)
 	}
@@ -187,8 +184,14 @@ func verifySpecification(ctx context.Context, spec ruleSpecDomain.RuleSpecificat
 		}
 
 		if matchingSpec.IsExternal {
+			credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, posId)
+			if err != nil {
+				fmt.Printf("Error getting ecommerce credentials: %v\n", err)
+				return false
+			}
+
 			itemId := strings.TrimPrefix(matchingSpec.ItemId, "kivio-ecommerce~")
-			rawData, err := s.ecommerceSvc.GetItemsRaw(ctx, s.apiUrl, s.apiKey, 1, 100)
+			rawData, err := s.ecommerceSvc.GetItemsRaw(ctx, credentials.ApiURL, credentials.ApiKey, 1, 100)
 			if err != nil {
 				fmt.Printf("Error getting ecommerce data: %v\n", err)
 				return false
@@ -239,8 +242,14 @@ func verifySpecification(ctx context.Context, spec ruleSpecDomain.RuleSpecificat
 		return false
 	}
 
+	credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, posId)
+	if err != nil {
+		fmt.Printf("Error getting ecommerce credentials: %v\n", err)
+		return false
+	}
+
 	itemId := strings.TrimPrefix(matchingSpec.ItemId, "kivio-ecommerce~")
-	rawData, err := s.ecommerceSvc.GetItemsRaw(ctx, s.apiUrl, s.apiKey, 1, 100)
+	rawData, err := s.ecommerceSvc.GetItemsRaw(ctx, credentials.ApiURL, credentials.ApiKey, 1, 100)
 	if err != nil {
 		fmt.Printf("Error getting ecommerce data: %v\n", err)
 		return false
