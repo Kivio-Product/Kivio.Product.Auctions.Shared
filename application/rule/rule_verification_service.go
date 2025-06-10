@@ -10,6 +10,7 @@ import (
 	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/rule"
 	ruleSpecDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/rule_specification"
+	offerClient "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/api/offer"
 	offerInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/offer"
 	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/rule"
 )
@@ -20,21 +21,23 @@ type RuleVerificationService interface {
 }
 
 type ruleVerificationService struct {
-	ruleRepo  infrastructure.RuleRepository
-	offerRepo offerInfrastructure.IOfferRepository
-	offerSvc  offerService.IOfferService
+	ruleRepo    infrastructure.RuleRepository
+	offerRepo   offerInfrastructure.IOfferRepository
+	offerSvc    offerService.IOfferService
+	offerClient offerClient.OfferClient
 }
 
 func NewRuleVerificationService(
 	ruleRepo infrastructure.RuleRepository,
 	offerRepo offerInfrastructure.IOfferRepository,
 	offerSvc offerService.IOfferService,
+	offerClient offerClient.OfferClient,
 ) RuleVerificationService {
-
 	return &ruleVerificationService{
-		ruleRepo:  ruleRepo,
-		offerRepo: offerRepo,
-		offerSvc:  offerSvc,
+		ruleRepo:    ruleRepo,
+		offerRepo:   offerRepo,
+		offerSvc:    offerSvc,
+		offerClient: offerClient,
 	}
 }
 
@@ -73,9 +76,26 @@ func (s *ruleVerificationService) processOfferRules(ctx context.Context, offerId
 
 	if hasActiveRule {
 		fmt.Printf("Processing active rules for offer %s\n", offerId)
-		if err := s.offerSvc.SendOfferEmail(ctx, "", offerId); err != nil {
-			return fmt.Errorf("failed to send offer email: %w", err)
+		if err := s.sendTokenAndUpdateState(ctx, offerId); err != nil {
+			return fmt.Errorf("failed to send token and update state: %w", err)
 		}
+	}
+
+	return nil
+}
+
+func (s *ruleVerificationService) sendTokenAndUpdateState(ctx context.Context, offerId string) error {
+	token, err := s.offerClient.GetToken(ctx, offerId)
+	if err != nil {
+		return fmt.Errorf("failed to get token: %w", err)
+	}
+
+	if err := s.offerClient.SendToken(ctx, offerId, token); err != nil {
+		return fmt.Errorf("failed to send token: %w", err)
+	}
+
+	if err := s.offerSvc.UpdateOfferState(ctx, offerId, "Offered"); err != nil {
+		return fmt.Errorf("failed to update offer state: %w", err)
 	}
 
 	return nil
