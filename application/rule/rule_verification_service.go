@@ -175,8 +175,30 @@ func verifySpecification(spec ruleSpecDomain.RuleSpecification) bool {
 
 func verifyDateSpecification(spec ruleSpecDomain.RuleSpecification) bool {
 	currentDate := time.Now().UTC()
-	parameterDate, err := time.Parse(time.RFC1123, spec.Type)
+
+	dateStr := spec.Type
+	if idx := strings.Index(dateStr, "("); idx != -1 {
+		dateStr = strings.TrimSpace(dateStr[:idx])
+	}
+
+	formats := []string{
+		"Mon Jan 02 2006 15:04:05 GMT-0700",
+		"Mon Jan 02 2006 15:04:05 GMT-0500",
+		"2006-01-02T15:04:05Z",
+	}
+
+	var parameterDate time.Time
+	var err error
+
+	for _, format := range formats {
+		parameterDate, err = time.Parse(format, dateStr)
+		if err == nil {
+			break
+		}
+	}
+
 	if err != nil {
+		fmt.Printf("Error parsing date '%s': %v\n", dateStr, err)
 		return false
 	}
 
