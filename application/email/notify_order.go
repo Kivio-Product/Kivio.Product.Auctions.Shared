@@ -19,9 +19,9 @@ func NewNotifyOrderUseCase(notifier domain.Notifier) *NotifyOrderUseCase {
 func (uc *NotifyOrderUseCase) Execute(state string, customerEmail string, itemName string, amount int64, itemDescription string) error {
 	templateName := getTemplateName(state)
 	templateData := map[string]string{
-		"ItemName":        itemName,
-		"Amount":          strconv.FormatInt(amount, 10),
-		"ItemDescription": itemDescription,
+		"ITEM_NAME":        itemName,
+		"AMOUNT":           strconv.FormatInt(amount, 10),
+		"ITEM_DESCRIPTION": itemDescription,
 	}
 
 	return uc.notifier.SendTemplatedEmail(customerEmail, templateName, templateData)
