@@ -18,6 +18,7 @@ type offerClient struct {
 	client  *http.Client
 	baseURL string
 	env     string
+	apiKey  string
 }
 
 func NewOfferClient() OfferClient {
@@ -25,6 +26,7 @@ func NewOfferClient() OfferClient {
 		client:  &http.Client{},
 		baseURL: getBaseURL(),
 		env:     getEnv(),
+		apiKey:  getAPIKey(),
 	}
 }
 
@@ -34,6 +36,8 @@ func (c *offerClient) GetToken(ctx context.Context, offerId string) (string, err
 	if err != nil {
 		return "", fmt.Errorf("failed to create token request: %w", err)
 	}
+
+	req.Header.Set("Api_Key", c.apiKey)
 
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -74,6 +78,7 @@ func (c *offerClient) SendToken(ctx context.Context, offerId, token string) erro
 	}
 	req.Header.Set("Authorization", token)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Api_Key", c.apiKey)
 
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -94,4 +99,8 @@ func getBaseURL() string {
 
 func getEnv() string {
 	return os.Getenv("AUCTIONS_ENV")
+}
+
+func getAPIKey() string {
+	return os.Getenv("API_KEY")
 }
