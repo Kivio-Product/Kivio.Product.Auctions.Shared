@@ -18,8 +18,8 @@ type ItemSpecificationRepository interface {
 	Get() ([]domain.ItemSpecification, error)
 	GetById(ctx context.Context, itemId string) (*domain.ItemSpecification, error)
 	Delete(ctx context.Context, id string) error
-	GetItemSpecByOffer(id string) ([]domain.ItemSpecification, error)
-	GetItemSpecByItem(id string) ([]domain.ItemSpecification, error)
+	GetItemSpecByOffer(id string, pointOfSaleId string) ([]domain.ItemSpecification, error)
+	GetItemSpecByItem(id string, pointOfSaleId string) ([]domain.ItemSpecification, error)
 	UpdateItemSpec(ctx context.Context, itemSpec *domain.ItemSpecification) error
 }
 
@@ -132,54 +132,54 @@ func (r *itemSpecificationRepository) Delete(ctx context.Context, id string) err
 	return nil
 }
 
-func (r *itemSpecificationRepository) GetItemSpecByOffer(offerId string) ([]domain.ItemSpecification, error) {
-	result, err := r.client.Scan(&dynamodb.ScanInput{
-		TableName: aws.String(r.itemSpecificationTable),
-	})
+func (r *itemSpecificationRepository) GetItemSpecByOffer(offerId string, pointOfSaleId string) ([]domain.ItemSpecification, error) {
+	input := &dynamodb.QueryInput{
+		TableName:              aws.String(r.itemSpecificationTable),
+		IndexName:              aws.String("PointOfSaleId-index"),
+		KeyConditionExpression: aws.String("PointOfSaleId = :pointOfSaleId"),
+		FilterExpression:       aws.String("OfferId = :offerId"),
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":pointOfSaleId": {S: aws.String(pointOfSaleId)},
+			":offerId":       {S: aws.String(offerId)},
+		},
+	}
+
+	result, err := r.client.Query(input)
 	if err != nil {
-		return nil, fmt.Errorf("failed to scan table %s", r.itemSpecificationTable)
+		return nil, fmt.Errorf("failed to query item specifications: %w", err)
 	}
 
-	var items []domain.ItemSpecification
-
-	for _, item := range result.Items {
-		var fitems domain.ItemSpecification
-		err := dynamodbattribute.UnmarshalMap(item, &fitems)
-		if err != nil {
-			log.Printf("Failed to get table items")
-			continue
-		}
-		if fitems.OfferId == offerId {
-			items = append(items, fitems)
-		}
+	var specifications []domain.ItemSpecification
+	if err := dynamodbattribute.UnmarshalListOfMaps(result.Items, &specifications); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal item specifications: %w", err)
 	}
 
-	return items, nil
+	return specifications, nil
 }
 
-func (r *itemSpecificationRepository) GetItemSpecByItem(itemId string) ([]domain.ItemSpecification, error) {
-	result, err := r.client.Scan(&dynamodb.ScanInput{
-		TableName: aws.String(r.itemSpecificationTable),
-	})
+func (r *itemSpecificationRepository) GetItemSpecByItem(itemId string, pointOfSaleId string) ([]domain.ItemSpecification, error) {
+	input := &dynamodb.QueryInput{
+		TableName:              aws.String(r.itemSpecificationTable),
+		IndexName:              aws.String("PointOfSaleId-index"),
+		KeyConditionExpression: aws.String("PointOfSaleId = :pointOfSaleId"),
+		FilterExpression:       aws.String("ItemId = :itemId"),
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":pointOfSaleId": {S: aws.String(pointOfSaleId)},
+			":itemId":        {S: aws.String(itemId)},
+		},
+	}
+
+	result, err := r.client.Query(input)
 	if err != nil {
-		return nil, fmt.Errorf("failed to scan table %s", r.itemSpecificationTable)
+		return nil, fmt.Errorf("failed to query item specifications: %w", err)
 	}
 
-	var items []domain.ItemSpecification
-
-	for _, item := range result.Items {
-		var fitems domain.ItemSpecification
-		err := dynamodbattribute.UnmarshalMap(item, &fitems)
-		if err != nil {
-			log.Printf("Failed to get table items")
-			continue
-		}
-		if fitems.ItemId == itemId {
-			items = append(items, fitems)
-		}
+	var specifications []domain.ItemSpecification
+	if err := dynamodbattribute.UnmarshalListOfMaps(result.Items, &specifications); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal item specifications: %w", err)
 	}
 
-	return items, nil
+	return specifications, nil
 }
 
 func (r *itemSpecificationRepository) UpdateItemSpec(ctx context.Context, itemSpec *domain.ItemSpecification) error {

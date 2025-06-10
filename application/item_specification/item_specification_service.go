@@ -15,8 +15,8 @@ type ItemSpecificationService interface {
 	GetById(ctx context.Context, id string) (*domain.ItemSpecification, error)
 	Update(ctx context.Context, id, currency, offerId, itemId, pointOfSaleId string, amount, availability int64, expireAt time.Time) error
 	Delete(ctx context.Context, id string) error
-	GetItemSpecByOfferId(ctx context.Context, id string) ([]domain.ItemSpecification, error)
-	GetItemSpecByItemId(ctx context.Context, id string) ([]domain.ItemSpecification, error)
+	GetItemSpecByOfferId(ctx context.Context, id string, pointOfSaleId string) ([]domain.ItemSpecification, error)
+	GetItemSpecByItemId(ctx context.Context, id string, pointOfSaleId string) ([]domain.ItemSpecification, error)
 }
 
 type itemSpecificationService struct {
@@ -74,8 +74,8 @@ func (s *itemSpecificationService) Delete(ctx context.Context, id string) error 
 	return err
 }
 
-func (s *itemSpecificationService) GetItemSpecByOfferId(ctx context.Context, id string) ([]domain.ItemSpecification, error) {
-	itemsSpec, err := s.repo.GetItemSpecByOffer(id)
+func (s *itemSpecificationService) GetItemSpecByOfferId(ctx context.Context, id string, pointOfSaleId string) ([]domain.ItemSpecification, error) {
+	itemsSpec, err := s.repo.GetItemSpecByOffer(id, pointOfSaleId)
 
 	fmt.Println("itemSpecification", itemsSpec)
 	if err != nil {
@@ -84,8 +84,8 @@ func (s *itemSpecificationService) GetItemSpecByOfferId(ctx context.Context, id 
 	return itemsSpec, nil
 }
 
-func (s *itemSpecificationService) GetItemSpecByItemId(ctx context.Context, id string) ([]domain.ItemSpecification, error) {
-	order, err := s.repo.GetItemSpecByItem(id)
+func (s *itemSpecificationService) GetItemSpecByItemId(ctx context.Context, id string, pointOfSaleId string) ([]domain.ItemSpecification, error) {
+	order, err := s.repo.GetItemSpecByItem(id, pointOfSaleId)
 	if err != nil {
 		return nil, err
 	}
