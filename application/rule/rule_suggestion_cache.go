@@ -13,8 +13,10 @@ import (
 )
 
 type RuleSuggestionCache interface {
-	GetCachedSuggestions(ctx context.Context, pointOfSaleId string, headers []interface{}) (map[string][]sheetsDomain.RuleField, error)
-	CacheSuggestions(ctx context.Context, pointOfSaleId string, headers []interface{}, suggestions map[string][]sheetsDomain.RuleField) error
+	GetCachedSuggestionsSheets(ctx context.Context, pointOfSaleId string, headers []interface{}) ([]sheetsDomain.RuleField, error)
+	GetCachedSuggestionsEcommerce(ctx context.Context, pointOfSaleId string) ([]sheetsDomain.RuleField, error)
+	CacheSuggestionsSheets(ctx context.Context, pointOfSaleId string, headers []interface{}, suggestions []sheetsDomain.RuleField) error
+	CacheSuggestionsEcommerce(ctx context.Context, pointOfSaleId string, suggestions []sheetsDomain.RuleField) error
 }
 
 type ruleSuggestionCache struct {
@@ -36,23 +38,23 @@ func NewRuleSuggestionCache(
 }
 
 type cachedSuggestion struct {
-	Headers     []interface{}                       `json:"headers"`
-	Suggestions map[string][]sheetsDomain.RuleField `json:"suggestions"`
-	LastUpdated time.Time                           `json:"lastUpdated"`
+	Headers     []interface{}            `json:"headers,omitempty"`
+	Suggestions []sheetsDomain.RuleField `json:"suggestions"`
+	LastUpdated time.Time                `json:"lastUpdated"`
 }
 
-func (c *ruleSuggestionCache) GetCachedSuggestions(ctx context.Context, pointOfSaleId string, headers []interface{}) (map[string][]sheetsDomain.RuleField, error) {
-	key := fmt.Sprintf("rule-suggestions/%s.json", pointOfSaleId)
+func (c *ruleSuggestionCache) GetCachedSuggestionsSheets(ctx context.Context, pointOfSaleId string, headers []interface{}) ([]sheetsDomain.RuleField, error) {
+	key := fmt.Sprintf("rule-suggestions-sheets/%s.json", pointOfSaleId)
 
 	reader, err := c.fileReader.GetFileContent(key)
 	if err != nil {
-		return nil, fmt.Errorf("error getting cached suggestions: %w", err)
+		return nil, fmt.Errorf("error getting cached sheet suggestions: %w", err)
 	}
 	defer reader.Close()
 
 	var cached cachedSuggestion
 	if err := json.NewDecoder(reader).Decode(&cached); err != nil {
-		return nil, fmt.Errorf("error decoding cached suggestions: %w", err)
+		return nil, fmt.Errorf("error decoding cached sheet suggestions: %w", err)
 	}
 
 	if !areHeadersEqual(cached.Headers, headers) {
@@ -62,8 +64,25 @@ func (c *ruleSuggestionCache) GetCachedSuggestions(ctx context.Context, pointOfS
 	return cached.Suggestions, nil
 }
 
-func (c *ruleSuggestionCache) CacheSuggestions(ctx context.Context, pointOfSaleId string, headers []interface{}, suggestions map[string][]sheetsDomain.RuleField) error {
-	key := fmt.Sprintf("rule-suggestions/%s.json", pointOfSaleId)
+func (c *ruleSuggestionCache) GetCachedSuggestionsEcommerce(ctx context.Context, pointOfSaleId string) ([]sheetsDomain.RuleField, error) {
+	key := fmt.Sprintf("rule-suggestions-ecommerce/%s.json", pointOfSaleId)
+
+	reader, err := c.fileReader.GetFileContent(key)
+	if err != nil {
+		return nil, fmt.Errorf("error getting cached ecommerce suggestions: %w", err)
+	}
+	defer reader.Close()
+
+	var cached cachedSuggestion
+	if err := json.NewDecoder(reader).Decode(&cached); err != nil {
+		return nil, fmt.Errorf("error decoding cached ecommerce suggestions: %w", err)
+	}
+
+	return cached.Suggestions, nil
+}
+
+func (c *ruleSuggestionCache) CacheSuggestionsSheets(ctx context.Context, pointOfSaleId string, headers []interface{}, suggestions []sheetsDomain.RuleField) error {
+	key := fmt.Sprintf("rule-suggestions-sheets/%s.json", pointOfSaleId)
 
 	cached := cachedSuggestion{
 		Headers:     headers,
@@ -73,11 +92,31 @@ func (c *ruleSuggestionCache) CacheSuggestions(ctx context.Context, pointOfSaleI
 
 	data, err := json.Marshal(cached)
 	if err != nil {
-		return fmt.Errorf("error marshaling suggestions: %w", err)
+		return fmt.Errorf("error marshaling sheet suggestions: %w", err)
 	}
 
 	if err := c.fileStorage.Upload(ctx, key, bytes.NewReader(data)); err != nil {
-		return fmt.Errorf("error caching suggestions: %w", err)
+		return fmt.Errorf("error caching sheet suggestions: %w", err)
+	}
+
+	return nil
+}
+
+func (c *ruleSuggestionCache) CacheSuggestionsEcommerce(ctx context.Context, pointOfSaleId string, suggestions []sheetsDomain.RuleField) error {
+	key := fmt.Sprintf("rule-suggestions-ecommerce/%s.json", pointOfSaleId)
+
+	cached := cachedSuggestion{
+		Suggestions: suggestions,
+		LastUpdated: time.Now(),
+	}
+
+	data, err := json.Marshal(cached)
+	if err != nil {
+		return fmt.Errorf("error marshaling ecommerce suggestions: %w", err)
+	}
+
+	if err := c.fileStorage.Upload(ctx, key, bytes.NewReader(data)); err != nil {
+		return fmt.Errorf("error caching ecommerce suggestions: %w", err)
 	}
 
 	return nil

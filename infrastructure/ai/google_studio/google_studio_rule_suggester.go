@@ -20,50 +20,14 @@ func NewGoogleStudioRuleSuggester() domain.RuleSuggestionAI {
 	}
 }
 
-func (s *GoogleStudioRuleSuggester) SuggestRules(sheetData sheetsDomain.SheetData, ecommerceResponse []byte) (map[string][]sheetsDomain.RuleField, error) {
-	categorizedRules := make(map[string][]sheetsDomain.RuleField)
-
-	dateRule := sheetsDomain.RuleField{
-		Field:         "current date",
-		ParameterType: "fecha",
-		Operators:     []string{"=", "!=", ">", "<", ">=", "<="},
+func (s *GoogleStudioRuleSuggester) SuggestRulesSheets(sheetData sheetsDomain.SheetData) ([]sheetsDomain.RuleField, error) {
+	if len(sheetData.Values) < 2 {
+		return nil, fmt.Errorf("insufficient sheet data")
 	}
 
-	availabilityRule := sheetsDomain.RuleField{
-		Field:         "availability",
-		ParameterType: "numérico",
-		Operators:     []string{"=", "!=", ">", "<", ">=", "<="},
-	}
+	headers := sheetData.Values[0]
+	sampleData := sheetData.Values[1:]
 
-	categorizedRules["local"] = []sheetsDomain.RuleField{dateRule, availabilityRule}
-
-	if len(sheetData.Values) >= 2 {
-		headers := sheetData.Values[0]
-		sampleData := sheetData.Values[1:]
-
-		sheetRules, err := s.getSheetRules(headers, sampleData)
-		if err != nil {
-			return nil, fmt.Errorf("error getting sheet rules: %w", err)
-		}
-		if len(sheetRules) > 0 {
-			categorizedRules["google sheets"] = sheetRules
-		}
-	}
-
-	if len(ecommerceResponse) > 0 {
-		ecommerceRules, err := s.getEcommerceRules(ecommerceResponse)
-		if err != nil {
-			return nil, fmt.Errorf("error getting ecommerce rules: %w", err)
-		}
-		if len(ecommerceRules) > 0 {
-			categorizedRules["kivio_ecommerce"] = ecommerceRules
-		}
-	}
-
-	return categorizedRules, nil
-}
-
-func (s *GoogleStudioRuleSuggester) getSheetRules(headers []interface{}, sampleData [][]interface{}) ([]sheetsDomain.RuleField, error) {
 	prompt := fmt.Sprintf(`Based on the following spreadsheet data, suggest rules that could be used for business logic. 
 For each column, determine if it would make sense to create rules for it and what type of rules would be appropriate.
 Consider only columns that could be used for meaningful business rules (e.g., stock levels, prices, dates, etc.).
@@ -100,7 +64,7 @@ Only include fields that make sense for business rules.`, headers, sampleData)
 	return suggestedRules, nil
 }
 
-func (s *GoogleStudioRuleSuggester) getEcommerceRules(ecommerceResponse []byte) ([]sheetsDomain.RuleField, error) {
+func (s *GoogleStudioRuleSuggester) SuggestRulesEcommerce(ecommerceResponse []byte) ([]sheetsDomain.RuleField, error) {
 	type Product struct {
 		ID                  int      `json:"id"`
 		Name                string   `json:"name"`

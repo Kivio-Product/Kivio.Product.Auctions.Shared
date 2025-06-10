@@ -66,12 +66,17 @@ func (s *ruleDataService) GetRuleData(ctx context.Context, pointOfSaleId string)
 
 	sheetData, err := s.sheetService.FetchSheetData(pointOfSaleId)
 	if err == nil && len(sheetData.Values) >= 2 {
-		emptyEcommerceResponse := []byte("{}")
-		suggestions, err := s.ruleSuggester.SuggestRules(sheetData, emptyEcommerceResponse)
-		if err == nil {
-			if sheetRules, ok := suggestions["google sheets"]; ok && len(sheetRules) > 0 {
-				categorizedRules["google sheets"] = sheetRules
+		sheetRules, err := s.suggestionCache.GetCachedSuggestionsSheets(ctx, pointOfSaleId, sheetData.Values[0])
+		if err != nil {
+			sheetRules, err = s.ruleSuggester.SuggestRulesSheets(sheetData)
+			if err == nil && len(sheetRules) > 0 {
+				if err := s.suggestionCache.CacheSuggestionsSheets(ctx, pointOfSaleId, sheetData.Values[0], sheetRules); err != nil {
+					fmt.Printf("Error caching sheet suggestions: %v\n", err)
+				}
 			}
+		}
+		if len(sheetRules) > 0 {
+			categorizedRules["google sheets"] = sheetRules
 		}
 	}
 
@@ -79,19 +84,18 @@ func (s *ruleDataService) GetRuleData(ctx context.Context, pointOfSaleId string)
 	if err == nil {
 		ecommerceResponse, err := s.ecommerceService.GetItemsRaw(credentials.Context, credentials.ApiURL, credentials.ApiKey, 1, 1)
 		if err == nil && len(ecommerceResponse) > 0 {
-			emptySheetData := sheetsDomain.SheetData{Values: [][]interface{}{}}
-			suggestions, err := s.ruleSuggester.SuggestRules(emptySheetData, ecommerceResponse)
-			if err == nil {
-				if ecommerceRules, ok := suggestions["kivio_ecommerce"]; ok && len(ecommerceRules) > 0 {
-					categorizedRules["kivio_ecommerce"] = ecommerceRules
+			ecommerceRules, err := s.suggestionCache.GetCachedSuggestionsEcommerce(ctx, pointOfSaleId)
+			if err != nil {
+				ecommerceRules, err = s.ruleSuggester.SuggestRulesEcommerce(ecommerceResponse)
+				if err == nil && len(ecommerceRules) > 0 {
+					if err := s.suggestionCache.CacheSuggestionsEcommerce(ctx, pointOfSaleId, ecommerceRules); err != nil {
+						fmt.Printf("Error caching ecommerce suggestions: %v\n", err)
+					}
 				}
 			}
-		}
-	}
-
-	if len(sheetData.Values) > 0 {
-		if err := s.suggestionCache.CacheSuggestions(ctx, pointOfSaleId, sheetData.Values[0], categorizedRules); err != nil {
-			fmt.Printf("Error caching suggestions: %v\n", err)
+			if len(ecommerceRules) > 0 {
+				categorizedRules["kivio_ecommerce"] = ecommerceRules
+			}
 		}
 	}
 

@@ -5,5 +5,6 @@ import (
 )
 
 type RuleSuggestionAI interface {
-	SuggestRules(sheetData sheetsDomain.SheetData, ecommerceResponse []byte) (map[string][]sheetsDomain.RuleField, error)
+	SuggestRulesSheets(sheetData sheetsDomain.SheetData) ([]sheetsDomain.RuleField, error)
+	SuggestRulesEcommerce(ecommerceResponse []byte) ([]sheetsDomain.RuleField, error)
 }
