@@ -142,7 +142,7 @@ func (s *ruleVerificationService) processRule(ctx context.Context, rule *domain.
 		return fmt.Errorf("failed to get item specifications: %w", err)
 	}
 
-	isActive := evaluateRuleSpecifications(ctx, specifications, itemSpecs, rule.PosId, s)
+	isActive := evaluateRuleSpecifications(ctx, specifications, itemSpecs, rule.PosId, rule.ItemSpecificationId, s)
 	rule.State = getRuleState(isActive)
 
 	if err := s.ruleRepo.SaveRule(ctx, rule); err != nil {
@@ -156,89 +156,37 @@ func (s *ruleVerificationService) processRule(ctx context.Context, rule *domain.
 	return nil
 }
 
-func evaluateRuleSpecifications(ctx context.Context, specifications []ruleSpecDomain.RuleSpecification, itemSpecs []itemSpecificationDomain.ItemSpecification, posId string, s *ruleVerificationService) bool {
+func evaluateRuleSpecifications(ctx context.Context, specifications []ruleSpecDomain.RuleSpecification, itemSpecs []itemSpecificationDomain.ItemSpecification, posId string, itemSpecId string, s *ruleVerificationService) bool {
 	for _, spec := range specifications {
-		if s.verifySpecification(ctx, spec, itemSpecs, posId) {
+		if s.verifySpecification(ctx, spec, itemSpecs, posId, itemSpecId) {
 			return true
 		}
 	}
 	return false
 }
 
-func (s *ruleVerificationService) verifySpecification(ctx context.Context, spec ruleSpecDomain.RuleSpecification, itemSpecs []itemSpecificationDomain.ItemSpecification, posId string) bool {
+func (s *ruleVerificationService) verifySpecification(ctx context.Context, spec ruleSpecDomain.RuleSpecification, itemSpecs []itemSpecificationDomain.ItemSpecification, posId string, itemSpecId string) bool {
 	if spec.Parameter == "current date" {
 		return verifyDateSpecification(spec)
 	}
 
 	if spec.Parameter == "availability" {
-		var matchingSpec *itemSpecificationDomain.ItemSpecification
-		for _, itemSpec := range itemSpecs {
-			if itemSpec.Id == spec.RuleSpecificationId {
-				matchingSpec = &itemSpec
-				break
-			}
-		}
-
-		if matchingSpec == nil {
-			return false
-		}
-
-		if matchingSpec.IsExternal {
-			credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, posId)
-			if err != nil {
-				fmt.Printf("Error getting ecommerce credentials: %v\n", err)
-				return false
-			}
-
-			itemId := strings.TrimPrefix(matchingSpec.ItemId, "kivio-ecommerce~")
-			rawData, err := s.ecommerceSvc.GetItemsRaw(ctx, credentials.ApiURL, credentials.ApiKey, 1, 100)
-			if err != nil {
-				fmt.Printf("Error getting ecommerce data: %v\n", err)
-				return false
-			}
-
-			var items []map[string]interface{}
-			if err := json.Unmarshal(rawData, &items); err != nil {
-				fmt.Printf("Error parsing ecommerce data: %v\n", err)
-				return false
-			}
-
-			itemIdInt, err := strconv.Atoi(itemId)
-			if err != nil {
-				fmt.Printf("Error converting itemId '%s' to int: %v\n", itemId, err)
-				return false
-			}
-
-			var matchingItem map[string]interface{}
-			for _, item := range items {
-				if id, ok := item["id"].(float64); ok && int(id) == itemIdInt {
-					matchingItem = item
-					break
-				}
-			}
-
-			if matchingItem == nil {
-				return false
-			}
-
-			if stock, ok := matchingItem["stock_quantity"].(float64); ok {
-				return verifyNumericValue(stock, spec)
-			}
-			return false
-		}
-
 		return verifyNumericSpecification(spec)
 	}
 
 	var matchingSpec *itemSpecificationDomain.ItemSpecification
 	for _, itemSpec := range itemSpecs {
-		if itemSpec.Id == spec.RuleSpecificationId {
+		if itemSpec.Id == itemSpecId {
 			matchingSpec = &itemSpec
 			break
 		}
 	}
 
-	if matchingSpec == nil || !matchingSpec.IsExternal {
+	if matchingSpec == nil {
+		return false
+	}
+
+	if !matchingSpec.IsExternal {
 		return false
 	}
 
