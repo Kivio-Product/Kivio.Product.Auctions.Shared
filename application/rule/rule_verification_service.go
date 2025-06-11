@@ -142,7 +142,6 @@ func (s *ruleVerificationService) processRule(ctx context.Context, rule *domain.
 		return fmt.Errorf("failed to get item specifications: %w", err)
 	}
 
-	// Get ecommerce data once
 	var ecommerceItems map[string]interface{}
 	if len(specifications) > 0 {
 		credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, rule.PosId)
@@ -208,14 +207,13 @@ func (s *ruleVerificationService) verifySpecification(ctx context.Context, spec 
 		return false
 	}
 
-	itemId := strings.TrimPrefix(matchingSpec.ItemId, "kivio-ecommerce~")
+	itemId := strings.TrimPrefix(matchingSpec.ItemId, "kivio-ecommerce∼")
 	itemIdInt, err := strconv.Atoi(itemId)
 	if err != nil {
 		fmt.Printf("Error converting itemId '%s' to int: %v\n", itemId, err)
 		return false
 	}
 
-	// Get the products array from the response
 	products, ok := ecommerceItems["products"].([]interface{})
 	if !ok {
 		return false
