@@ -57,14 +57,14 @@ func NewRuleVerificationService(
 func (s *ruleVerificationService) VerifyRules(ctx context.Context) error {
 	rules, err := s.ruleRepo.GetAllRules()
 	if err != nil {
-		return fmt.Errorf("failed to get rules: %w", err)
+		return fmt.Errorf("fallo al obtener todas las reglas: %w", err)
 	}
 
 	groupedRules := groupRulesByOffer(rules)
 
 	for offerId := range groupedRules {
 		if err := s.processOfferRules(ctx, offerId); err != nil {
-			fmt.Printf("Error processing rules for offer %s: %v\n", offerId, err)
+			fmt.Printf("Error al procesar reglas para la oferta %s: %v\n", offerId, err)
 		}
 	}
 
@@ -74,23 +74,23 @@ func (s *ruleVerificationService) VerifyRules(ctx context.Context) error {
 func (s *ruleVerificationService) processOfferRules(ctx context.Context, offerId string) error {
 	offer, err := s.offerSvc.GetOfferById(ctx, offerId)
 	if err != nil {
-		return fmt.Errorf("failed to get offer state: %w", err)
+		return fmt.Errorf("fallo al obtener la oferta con ID %s: %w", offerId, err)
 	}
 
 	if offer.State == "Offered" {
-		fmt.Printf("Skipping offer %s: already in Offered state\n", offerId)
+		fmt.Printf("Omitiendo oferta %s: ya está en estado 'Offered'\n", offerId)
 		return nil
 	}
 
 	hasActiveRule, err := s.ProcessRules(ctx, offerId)
 	if err != nil {
-		return fmt.Errorf("failed to process rules: %w", err)
+		return fmt.Errorf("fallo al procesar reglas para la oferta %s: %w", offerId, err)
 	}
 
 	if hasActiveRule {
-		fmt.Printf("Processing active rules for offer %s\n", offerId)
+		fmt.Printf("Reglas activas encontradas para la oferta %s, enviando token y actualizando estado\n", offerId)
 		if err := s.sendTokenAndUpdateState(ctx, offerId); err != nil {
-			return fmt.Errorf("failed to send token and update state: %w", err)
+			return fmt.Errorf("fallo al enviar token y actualizar el estado para la oferta %s: %w", offerId, err)
 		}
 	}
 
@@ -100,15 +100,15 @@ func (s *ruleVerificationService) processOfferRules(ctx context.Context, offerId
 func (s *ruleVerificationService) sendTokenAndUpdateState(ctx context.Context, offerId string) error {
 	token, err := s.offerClient.GetToken(ctx, offerId)
 	if err != nil {
-		return fmt.Errorf("failed to get token: %w", err)
+		return fmt.Errorf("fallo al obtener el token para la oferta %s: %w", offerId, err)
 	}
 
 	if err := s.offerClient.SendToken(ctx, offerId, token); err != nil {
-		return fmt.Errorf("failed to send token: %w", err)
+		return fmt.Errorf("fallo al enviar el token para la oferta %s: %w", offerId, err)
 	}
 
 	if err := s.offerSvc.UpdateOfferState(ctx, offerId, "Offered"); err != nil {
-		return fmt.Errorf("failed to update offer state: %w", err)
+		return fmt.Errorf("fallo al actualizar el estado de la oferta %s a 'Offered': %w", offerId, err)
 	}
 
 	return nil
@@ -117,14 +117,14 @@ func (s *ruleVerificationService) sendTokenAndUpdateState(ctx context.Context, o
 func (s *ruleVerificationService) ProcessRules(ctx context.Context, offerId string) (bool, error) {
 	rules, err := s.ruleRepo.GetOfferRules(offerId)
 	if err != nil {
-		return false, fmt.Errorf("failed to get offer rules: %w", err)
+		return false, fmt.Errorf("fallo al obtener reglas para la oferta %s: %w", offerId, err)
 	}
 
 	hasActiveRule := false
 
-	for _, rule := range rules {
-		if err := s.processRule(ctx, &rule, &hasActiveRule); err != nil {
-			fmt.Printf("Error processing rule %s: %v\n", rule.RuleId, err)
+	for i := range rules {
+		if err := s.processRule(ctx, &rules[i], &hasActiveRule); err != nil {
+			fmt.Printf("Error al procesar la regla %s para la oferta %s: %v\n", rules[i].RuleId, offerId, err)
 		}
 	}
 
@@ -134,36 +134,36 @@ func (s *ruleVerificationService) ProcessRules(ctx context.Context, offerId stri
 func (s *ruleVerificationService) processRule(ctx context.Context, rule *domain.Rule, hasActiveRule *bool) error {
 	specifications, err := s.ruleRepo.GetRulesSpecification(rule.RuleId)
 	if err != nil {
-		return fmt.Errorf("failed to get rule specifications: %w", err)
+		return fmt.Errorf("fallo al obtener especificaciones para la regla %s: %w", rule.RuleId, err)
 	}
 
 	itemSpecs, err := s.itemSpecSvc.GetItemSpecByOfferId(ctx, rule.OfferId, rule.PosId)
 	if err != nil {
-		return fmt.Errorf("failed to get item specifications: %w", err)
+		return fmt.Errorf("fallo al obtener especificaciones de artículo para la oferta %s y POS %s: %w", rule.OfferId, rule.PosId, err)
 	}
 
 	var ecommerceItems map[string]interface{}
 	if len(specifications) > 0 {
 		credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, rule.PosId)
 		if err != nil {
-			fmt.Printf("Error getting ecommerce credentials: %v\n", err)
+			fmt.Printf("Advertencia: Error al obtener credenciales de e-commerce para POS %s: %v\n", rule.PosId, err)
 		} else {
 			rawData, err := s.ecommerceSvc.GetItemsRaw(ctx, credentials.ApiURL, credentials.ApiKey, 1, 100)
 			if err != nil {
-				fmt.Printf("Error getting ecommerce data: %v\n", err)
+				fmt.Printf("Advertencia: Error al obtener datos de e-commerce para POS %s: %v\n", rule.PosId, err)
 			} else {
 				if err := json.Unmarshal(rawData, &ecommerceItems); err != nil {
-					fmt.Printf("Error parsing ecommerce data: %v\n", err)
+					fmt.Printf("Advertencia: Error al parsear datos de e-commerce para POS %s: %v\n", rule.PosId, err)
 				}
 			}
 		}
 	}
 
-	isActive := evaluateRuleSpecifications(ctx, specifications, itemSpecs, rule.PosId, rule.ItemSpecificationId, ecommerceItems, s)
+	isActive := s.evaluateRuleSpecifications(ctx, specifications, itemSpecs, rule.ItemSpecificationId, ecommerceItems)
 	rule.State = getRuleState(isActive)
 
 	if err := s.ruleRepo.SaveRule(ctx, rule); err != nil {
-		return fmt.Errorf("failed to save rule state: %w", err)
+		return fmt.Errorf("fallo al guardar el estado para la regla %s: %w", rule.RuleId, err)
 	}
 
 	if isActive {
@@ -173,22 +173,34 @@ func (s *ruleVerificationService) processRule(ctx context.Context, rule *domain.
 	return nil
 }
 
-func evaluateRuleSpecifications(ctx context.Context, specifications []ruleSpecDomain.RuleSpecification, itemSpecs []itemSpecificationDomain.ItemSpecification, posId string, itemSpecId string, ecommerceItems map[string]interface{}, s *ruleVerificationService) bool {
+func (s *ruleVerificationService) evaluateRuleSpecifications(
+	ctx context.Context,
+	specifications []ruleSpecDomain.RuleSpecification,
+	itemSpecs []itemSpecificationDomain.ItemSpecification,
+	itemSpecId string,
+	ecommerceItems map[string]interface{},
+) bool {
 	for _, spec := range specifications {
-		if s.verifySpecification(ctx, spec, itemSpecs, posId, itemSpecId, ecommerceItems) {
+		if s.verifySpecification(ctx, spec, itemSpecs, itemSpecId, ecommerceItems) {
 			return true
 		}
 	}
 	return false
 }
 
-func (s *ruleVerificationService) verifySpecification(ctx context.Context, spec ruleSpecDomain.RuleSpecification, itemSpecs []itemSpecificationDomain.ItemSpecification, posId string, itemSpecId string, ecommerceItems map[string]interface{}) bool {
-	if spec.Parameter == "current date" {
+func (s *ruleVerificationService) verifySpecification(
+	ctx context.Context,
+	spec ruleSpecDomain.RuleSpecification,
+	itemSpecs []itemSpecificationDomain.ItemSpecification,
+	itemSpecId string,
+	ecommerceItems map[string]interface{},
+) bool {
+	switch spec.Parameter {
+	case "current date":
 		return verifyDateSpecification(spec)
-	}
-
-	if spec.Parameter == "availability" {
-		return verifyNumericSpecification(spec)
+	case "availability":
+		fmt.Printf("Advertencia: La verificación del parámetro 'availability' necesita un valor concreto para comparar. Tipo de especificación: %s\n", spec.Type)
+		return false
 	}
 
 	var matchingSpec *itemSpecificationDomain.ItemSpecification
@@ -200,22 +212,25 @@ func (s *ruleVerificationService) verifySpecification(ctx context.Context, spec 
 	}
 
 	if matchingSpec == nil {
+		fmt.Printf("No se encontró especificación de artículo coincidente para el ID: %s\n", itemSpecId)
 		return false
 	}
 
 	if !matchingSpec.IsExternal {
+		fmt.Printf("La especificación del artículo %s no es externa, omitiendo las comprobaciones de e-commerce.\n", matchingSpec.Id)
 		return false
 	}
 
 	itemId := strings.TrimPrefix(matchingSpec.ItemId, "kivio-ecommerce∼")
 	itemIdInt, err := strconv.Atoi(itemId)
 	if err != nil {
-		fmt.Printf("Error converting itemId '%s' to int: %v\n", itemId, err)
+		fmt.Printf("Error al convertir itemId '%s' a int: %v\n", itemId, err)
 		return false
 	}
 
 	products, ok := ecommerceItems["products"].([]interface{})
 	if !ok {
+		fmt.Printf("Los datos de e-commerce no contienen un array 'products' o no están en el formato esperado.\n")
 		return false
 	}
 
@@ -230,6 +245,7 @@ func (s *ruleVerificationService) verifySpecification(ctx context.Context, spec 
 	}
 
 	if matchingItem == nil {
+		fmt.Printf("No se encontró artículo de e-commerce coincidente para el ID: %d (original: %s)\n", itemIdInt, matchingSpec.ItemId)
 		return false
 	}
 
@@ -238,34 +254,59 @@ func (s *ruleVerificationService) verifySpecification(ctx context.Context, spec 
 		if stock, ok := matchingItem["stock_quantity"].(float64); ok {
 			return verifyNumericValue(stock, spec)
 		}
+		fmt.Printf("StockQuantity no encontrado o no es float64 para el artículo %d.\n", itemIdInt)
 	case "Price", "OldPrice":
 		if price, ok := matchingItem["price"].(float64); ok {
 			return verifyNumericValue(price, spec)
 		}
+		fmt.Printf("Precio no encontrado o no es float64 para el artículo %d.\n", itemIdInt)
 	case "Published", "VisibleIndividually", "IsFreeShipping":
 		if published, ok := matchingItem["published"].(bool); ok {
 			return verifyBooleanValue(published, spec)
 		}
+		fmt.Printf("%s no encontrado o no es bool para el artículo %d.\n", spec.Parameter, itemIdInt)
 	case "AvailableStartDate", "AvailableEndDate":
 		if dateStr, ok := matchingItem["available_start_date_time_utc"].(string); ok {
 			date, err := time.Parse(time.RFC3339, dateStr)
 			if err != nil {
+				fmt.Printf("Error al parsear la cadena de fecha '%s' (RFC3339) para el artículo %d: %v\n", dateStr, itemIdInt, err)
 				return false
 			}
 			return verifyDateValue(date, spec)
 		}
+		fmt.Printf("Fecha disponible no encontrada o no es cadena (available_start_date_time_utc) para el artículo %d.\n", itemIdInt)
 	case "Tags":
 		if tags, ok := matchingItem["tags"].([]interface{}); ok {
 			tagStr := strings.Join(interfaceSliceToStringSlice(tags), ",")
 			return verifyCategoryValue(tagStr, spec)
 		}
+		fmt.Printf("Tags no encontrados o no son un array de interfaces para el artículo %d.\n", itemIdInt)
+	default:
+		fmt.Printf("Parámetro desconocido o no manejado '%s' para el artículo %d.\n", spec.Parameter, itemIdInt)
 	}
+
 	return false
 }
 
 func verifyDateValue(value time.Time, spec ruleSpecDomain.RuleSpecification) bool {
-	parameterDate, err := time.Parse(time.RFC1123, spec.Type)
+	formats := []string{
+		time.RFC3339,
+		time.RFC1123,
+		"2006-01-02",
+	}
+
+	var parameterDate time.Time
+	var err error
+
+	for _, format := range formats {
+		parameterDate, err = time.Parse(format, spec.Type)
+		if err == nil {
+			break
+		}
+	}
+
 	if err != nil {
+		fmt.Printf("Error al parsear spec.Type '%s' como fecha en verifyDateValue (intentando múltiples formatos): %v\n", spec.Type, err)
 		return false
 	}
 
@@ -283,6 +324,7 @@ func verifyDateValue(value time.Time, spec ruleSpecDomain.RuleSpecification) boo
 	case "<=":
 		return value.Before(parameterDate) || value.Equal(parameterDate)
 	default:
+		fmt.Printf("Operador desconocido '%s' para comparación de fechas.\n", spec.Operator)
 		return false
 	}
 }
@@ -297,6 +339,7 @@ func verifyCategoryValue(value string, spec ruleSpecDomain.RuleSpecification) bo
 	case "no está en":
 		return !strings.Contains(value, parameterValue)
 	default:
+		fmt.Printf("Operador desconocido '%s' para comparación de categorías.\n", spec.Operator)
 		return false
 	}
 }
@@ -312,6 +355,7 @@ func interfaceSliceToStringSlice(slice []interface{}) []string {
 func verifyNumericValue(value float64, spec ruleSpecDomain.RuleSpecification) bool {
 	parameterValue, err := strconv.ParseFloat(spec.Type, 64)
 	if err != nil {
+		fmt.Printf("Error al parsear spec.Type '%s' como float64 en verifyNumericValue: %v\n", spec.Type, err)
 		return false
 	}
 
@@ -329,6 +373,7 @@ func verifyNumericValue(value float64, spec ruleSpecDomain.RuleSpecification) bo
 	case "<=":
 		return value <= parameterValue
 	default:
+		fmt.Printf("Operador desconocido '%s' para comparación numérica.\n", spec.Operator)
 		return false
 	}
 }
@@ -336,6 +381,7 @@ func verifyNumericValue(value float64, spec ruleSpecDomain.RuleSpecification) bo
 func verifyBooleanValue(value bool, spec ruleSpecDomain.RuleSpecification) bool {
 	parameterValue, err := strconv.ParseBool(spec.Type)
 	if err != nil {
+		fmt.Printf("Error al parsear spec.Type '%s' como bool en verifyBooleanValue: %v\n", spec.Type, err)
 		return false
 	}
 
@@ -345,6 +391,7 @@ func verifyBooleanValue(value bool, spec ruleSpecDomain.RuleSpecification) bool 
 	case "!=":
 		return value != parameterValue
 	default:
+		fmt.Printf("Operador desconocido '%s' para comparación booleana.\n", spec.Operator)
 		return false
 	}
 }
@@ -358,9 +405,10 @@ func verifyDateSpecification(spec ruleSpecDomain.RuleSpecification) bool {
 	}
 
 	formats := []string{
+		time.RFC3339,
 		"Mon Jan 02 2006 15:04:05 GMT-0700",
-		"Mon Jan 02 2006 15:04:05 GMT-0500",
-		"2006-01-02T15:04:05Z",
+		"Mon Jan 02 15:04:05 MST 2006",
+		"2006-01-02",
 	}
 
 	var parameterDate time.Time
@@ -374,7 +422,7 @@ func verifyDateSpecification(spec ruleSpecDomain.RuleSpecification) bool {
 	}
 
 	if err != nil {
-		fmt.Printf("Error parsing date '%s': %v\n", dateStr, err)
+		fmt.Printf("Error al parsear la fecha '%s' de la especificación de la regla (se intentaron múltiples formatos): %v\n", dateStr, err)
 		return false
 	}
 
@@ -392,103 +440,7 @@ func verifyDateSpecification(spec ruleSpecDomain.RuleSpecification) bool {
 	case "<=":
 		return currentDate.Before(parameterDate) || currentDate.Equal(parameterDate)
 	default:
-		return false
-	}
-}
-
-func verifyNumericSpecification(spec ruleSpecDomain.RuleSpecification) bool {
-	value, err := strconv.ParseFloat(spec.Type, 64)
-	if err != nil {
-		return false
-	}
-
-	parameterValue, err := strconv.ParseFloat(spec.Type, 64)
-	if err != nil {
-		return false
-	}
-
-	switch spec.Operator {
-	case "=":
-		return value == parameterValue
-	case "!=":
-		return value != parameterValue
-	case ">":
-		return value > parameterValue
-	case "<":
-		return value < parameterValue
-	case ">=":
-		return value >= parameterValue
-	case "<=":
-		return value <= parameterValue
-	default:
-		return false
-	}
-}
-
-func verifyCurrencySpecification(spec ruleSpecDomain.RuleSpecification) bool {
-	valueStr := strings.ReplaceAll(spec.Type, "$", "")
-	valueStr = strings.ReplaceAll(valueStr, ",", "")
-	value, err := strconv.ParseFloat(valueStr, 64)
-	if err != nil {
-		return false
-	}
-
-	parameterStr := strings.ReplaceAll(spec.Type, "$", "")
-	parameterStr = strings.ReplaceAll(parameterStr, ",", "")
-	parameterValue, err := strconv.ParseFloat(parameterStr, 64)
-	if err != nil {
-		return false
-	}
-
-	switch spec.Operator {
-	case "=":
-		return value == parameterValue
-	case "!=":
-		return value != parameterValue
-	case ">":
-		return value > parameterValue
-	case "<":
-		return value < parameterValue
-	case ">=":
-		return value >= parameterValue
-	case "<=":
-		return value <= parameterValue
-	default:
-		return false
-	}
-}
-
-func verifyBooleanSpecification(spec ruleSpecDomain.RuleSpecification) bool {
-	value, err := strconv.ParseBool(spec.Type)
-	if err != nil {
-		return false
-	}
-
-	parameterValue, err := strconv.ParseBool(spec.Type)
-	if err != nil {
-		return false
-	}
-
-	switch spec.Operator {
-	case "=":
-		return value == parameterValue
-	case "!=":
-		return value != parameterValue
-	default:
-		return false
-	}
-}
-
-func verifyCategorySpecification(spec ruleSpecDomain.RuleSpecification) bool {
-	value := strings.ToLower(spec.Type)
-	parameterValue := strings.ToLower(spec.Type)
-
-	switch spec.Operator {
-	case "está en":
-		return strings.Contains(parameterValue, value)
-	case "no está en":
-		return !strings.Contains(parameterValue, value)
-	default:
+		fmt.Printf("Operador desconocido '%s' para comparación de fecha actual.\n", spec.Operator)
 		return false
 	}
 }
