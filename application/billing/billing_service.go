@@ -309,10 +309,8 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 	}
 
 	orders, err := s.repo.GetOrdersBillingByID(ctx, billingId)
-
 	if err != nil {
 		fmt.Printf("no se encontraron ordenes de facturas con ID: %s\n", billingId)
-
 		return fmt.Errorf("no se encontraron ordenes de facturas con ID: %s", billingId)
 	}
 
@@ -322,7 +320,6 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 	}
 
 	var validOrders []*orderDomain.Order
-
 	for _, id := range orderIDs {
 		order, err := s.orderRepo.GetIdOrder(ctx, id)
 		if err == nil {
@@ -335,20 +332,36 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 	}
 
 	if res.Extra1 == "Quick offer" {
-
 		for _, order := range validOrders {
-
 			itemSpec, err := s.itemSpecRepo.GetById(ctx, order.ItemSpecificationId)
 			if err != nil {
 				fmt.Printf("no se encontro el itemSpec con Id: %s\n", order.ItemSpecificationId)
+				continue
 			}
 
-			item, err := s.itemRepo.GetItemById(ctx, itemSpec.ItemId)
-			if err != nil {
-				fmt.Printf("no se encontro el item con Id: %s\n", order.ItemSpecificationId)
+			var item *itemDomain.Item
+			if itemSpec.IsExternal {
+				credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, itemSpec.PointOfSaleId)
+				if err != nil {
+					fmt.Printf("error getting ecommerce credentials: %v\n", err)
+					continue
+				}
+
+				itemId := strings.TrimPrefix(itemSpec.ItemId, "kivio-ecommerce∼")
+				item, err = s.ecommerceSvc.GetItemByID(ctx, itemId, credentials.ApiURL, credentials.ApiKey)
+				if err != nil {
+					fmt.Printf("error getting item from ecommerce: %v\n", err)
+					continue
+				}
+			} else {
+				item, err = s.itemRepo.GetItemById(ctx, itemSpec.ItemId)
+				if err != nil {
+					fmt.Printf("no se encontro el item con Id: %s\n", itemSpec.ItemId)
+					continue
+				}
 			}
+
 			var typer = ""
-
 			switch state {
 			case "Approved":
 				order.State = "Approved"
@@ -376,8 +389,8 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 			}
 		}
 	}
-	if res.Extra1 == "Regular auction" {
 
+	if res.Extra1 == "Regular auction" {
 		for _, order := range validOrders {
 			switch state {
 			case "Approved":
