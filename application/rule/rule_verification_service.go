@@ -142,7 +142,25 @@ func (s *ruleVerificationService) processRule(ctx context.Context, rule *domain.
 		return fmt.Errorf("failed to get item specifications: %w", err)
 	}
 
-	isActive := evaluateRuleSpecifications(ctx, specifications, itemSpecs, rule.PosId, rule.ItemSpecificationId, s)
+	// Get ecommerce data once
+	var ecommerceItems map[string]interface{}
+	if len(specifications) > 0 {
+		credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, rule.PosId)
+		if err != nil {
+			fmt.Printf("Error getting ecommerce credentials: %v\n", err)
+		} else {
+			rawData, err := s.ecommerceSvc.GetItemsRaw(ctx, credentials.ApiURL, credentials.ApiKey, 1, 100)
+			if err != nil {
+				fmt.Printf("Error getting ecommerce data: %v\n", err)
+			} else {
+				if err := json.Unmarshal(rawData, &ecommerceItems); err != nil {
+					fmt.Printf("Error parsing ecommerce data: %v\n", err)
+				}
+			}
+		}
+	}
+
+	isActive := evaluateRuleSpecifications(ctx, specifications, itemSpecs, rule.PosId, rule.ItemSpecificationId, ecommerceItems, s)
 	rule.State = getRuleState(isActive)
 
 	if err := s.ruleRepo.SaveRule(ctx, rule); err != nil {
@@ -156,16 +174,16 @@ func (s *ruleVerificationService) processRule(ctx context.Context, rule *domain.
 	return nil
 }
 
-func evaluateRuleSpecifications(ctx context.Context, specifications []ruleSpecDomain.RuleSpecification, itemSpecs []itemSpecificationDomain.ItemSpecification, posId string, itemSpecId string, s *ruleVerificationService) bool {
+func evaluateRuleSpecifications(ctx context.Context, specifications []ruleSpecDomain.RuleSpecification, itemSpecs []itemSpecificationDomain.ItemSpecification, posId string, itemSpecId string, ecommerceItems map[string]interface{}, s *ruleVerificationService) bool {
 	for _, spec := range specifications {
-		if s.verifySpecification(ctx, spec, itemSpecs, posId, itemSpecId) {
+		if s.verifySpecification(ctx, spec, itemSpecs, posId, itemSpecId, ecommerceItems) {
 			return true
 		}
 	}
 	return false
 }
 
-func (s *ruleVerificationService) verifySpecification(ctx context.Context, spec ruleSpecDomain.RuleSpecification, itemSpecs []itemSpecificationDomain.ItemSpecification, posId string, itemSpecId string) bool {
+func (s *ruleVerificationService) verifySpecification(ctx context.Context, spec ruleSpecDomain.RuleSpecification, itemSpecs []itemSpecificationDomain.ItemSpecification, posId string, itemSpecId string, ecommerceItems map[string]interface{}) bool {
 	if spec.Parameter == "current date" {
 		return verifyDateSpecification(spec)
 	}
@@ -190,36 +208,26 @@ func (s *ruleVerificationService) verifySpecification(ctx context.Context, spec 
 		return false
 	}
 
-	credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, posId)
-	if err != nil {
-		fmt.Printf("Error getting ecommerce credentials: %v\n", err)
-		return false
-	}
-
 	itemId := strings.TrimPrefix(matchingSpec.ItemId, "kivio-ecommerce~")
-	rawData, err := s.ecommerceSvc.GetItemsRaw(ctx, credentials.ApiURL, credentials.ApiKey, 1, 100)
-	if err != nil {
-		fmt.Printf("Error getting ecommerce data: %v\n", err)
-		return false
-	}
-
-	var items []map[string]interface{}
-	if err := json.Unmarshal(rawData, &items); err != nil {
-		fmt.Printf("Error parsing ecommerce data: %v\n", err)
-		return false
-	}
-
 	itemIdInt, err := strconv.Atoi(itemId)
 	if err != nil {
 		fmt.Printf("Error converting itemId '%s' to int: %v\n", itemId, err)
 		return false
 	}
 
+	// Get the products array from the response
+	products, ok := ecommerceItems["products"].([]interface{})
+	if !ok {
+		return false
+	}
+
 	var matchingItem map[string]interface{}
-	for _, item := range items {
-		if id, ok := item["id"].(float64); ok && int(id) == itemIdInt {
-			matchingItem = item
-			break
+	for _, product := range products {
+		if productMap, ok := product.(map[string]interface{}); ok {
+			if id, ok := productMap["id"].(float64); ok && int(id) == itemIdInt {
+				matchingItem = productMap
+				break
+			}
 		}
 	}
 
@@ -241,7 +249,7 @@ func (s *ruleVerificationService) verifySpecification(ctx context.Context, spec 
 			return verifyBooleanValue(published, spec)
 		}
 	case "AvailableStartDate", "AvailableEndDate":
-		if dateStr, ok := matchingItem["available_date"].(string); ok {
+		if dateStr, ok := matchingItem["available_start_date_time_utc"].(string); ok {
 			date, err := time.Parse(time.RFC3339, dateStr)
 			if err != nil {
 				return false
