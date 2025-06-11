@@ -134,7 +134,7 @@ func (s *billingService) GetAllBillingsWithDetail(ctx context.Context) ([]domain
 
 			itemId := strings.TrimPrefix(itemSpec.ItemId, "kivio-ecommerce∼")
 
-			item, err = s.ecommerceSvc.GetItemByID(ctx, itemId, credentials.ApiURL, credentials.ApiKey)
+			item, err = s.ecommerceSvc.GetItemByID(ctx, credentials.ApiURL, credentials.ApiKey, itemId)
 			if err != nil {
 				return nil, fmt.Errorf("error getting item from ecommerce: %w", err)
 			}
