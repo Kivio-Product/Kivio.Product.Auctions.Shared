@@ -348,7 +348,7 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 				}
 
 				itemId := strings.TrimPrefix(itemSpec.ItemId, "kivio-ecommerce∼")
-				item, err = s.ecommerceSvc.GetItemByID(ctx, itemId, credentials.ApiURL, credentials.ApiKey)
+				item, err = s.ecommerceSvc.GetItemByID(ctx, credentials.ApiURL, credentials.ApiKey, itemId)
 				if err != nil {
 					fmt.Printf("error getting item from ecommerce: %v\n", err)
 					continue
