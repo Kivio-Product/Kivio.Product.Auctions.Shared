@@ -12,9 +12,11 @@ import (
 	"time"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/billing"
+	itemDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
 	orderDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 	paymentDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/payment"
 
+	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
 	emailService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
 
 	billingInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/billing"
@@ -33,12 +35,14 @@ type BillingService interface {
 }
 
 type billingService struct {
-	repo           billingInfrastructure.BillingRepository
-	billingFactory domain.BillingFactory
-	orderRepo      orderInfrastructure.OrderRepository
-	itemSpecRepo   itemSpecInfrastructure.ItemSpecificationRepository
-	itemRepo       itemInfrastructure.ItemRepository
-	emailService   emailService.EmailServiceInterface
+	repo             billingInfrastructure.BillingRepository
+	billingFactory   domain.BillingFactory
+	orderRepo        orderInfrastructure.OrderRepository
+	itemSpecRepo     itemSpecInfrastructure.ItemSpecificationRepository
+	itemRepo         itemInfrastructure.ItemRepository
+	emailService     emailService.EmailServiceInterface
+	ecommerceCredSvc ecommerceService.EcommerceCredentialsService
+	ecommerceSvc     ecommerceService.EcommerceService
 }
 
 func NewBillingService(
@@ -48,14 +52,18 @@ func NewBillingService(
 	itemSpecRepo itemSpecInfrastructure.ItemSpecificationRepository,
 	itemRepo itemInfrastructure.ItemRepository,
 	emailService emailService.EmailServiceInterface,
+	ecommerceCredSvc ecommerceService.EcommerceCredentialsService,
+	ecommerceSvc ecommerceService.EcommerceService,
 ) BillingService {
 	return &billingService{
-		repo:           repo,
-		billingFactory: billingFactory,
-		orderRepo:      orderRepo,
-		itemSpecRepo:   itemSpecRepo,
-		itemRepo:       itemRepo,
-		emailService:   emailService,
+		repo:             repo,
+		billingFactory:   billingFactory,
+		orderRepo:        orderRepo,
+		itemSpecRepo:     itemSpecRepo,
+		itemRepo:         itemRepo,
+		emailService:     emailService,
+		ecommerceCredSvc: ecommerceCredSvc,
+		ecommerceSvc:     ecommerceSvc,
 	}
 }
 
@@ -117,9 +125,24 @@ func (s *billingService) GetAllBillingsWithDetail(ctx context.Context) ([]domain
 			return nil, err
 		}
 
-		item, err := s.itemRepo.GetItemById(ctx, itemSpec.ItemId)
-		if err != nil {
-			return nil, err
+		var item *itemDomain.Item
+		if itemSpec.IsExternal {
+			credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, itemSpec.PointOfSaleId)
+			if err != nil {
+				return nil, fmt.Errorf("error getting ecommerce credentials: %w", err)
+			}
+
+			itemId := strings.TrimPrefix(itemSpec.ItemId, "kivio-ecommerce∼")
+
+			item, err = s.ecommerceSvc.GetItemByID(ctx, itemId, credentials.ApiURL, credentials.ApiKey)
+			if err != nil {
+				return nil, fmt.Errorf("error getting item from ecommerce: %w", err)
+			}
+		} else {
+			item, err = s.itemRepo.GetItemById(ctx, itemSpec.ItemId)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		billOrder := domain.BillOrder{
