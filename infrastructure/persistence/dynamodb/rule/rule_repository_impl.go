@@ -22,6 +22,7 @@ type RuleRepository interface {
 	GetRulesSpecification(ruleId string) ([]ruleSpecDomain.RuleSpecification, error)
 	GetRulesByPosIdPaged(ctx context.Context, posID string, limit int, lastEvaluatedKey map[string]*dynamodb.AttributeValue) ([]domain.Rule, map[string]*dynamodb.AttributeValue, error)
 	GetAllRules() ([]domain.Rule, error)
+	GetRulesByPosId(ctx context.Context, posID string) ([]domain.Rule, error)
 }
 type ruleRepository struct {
 	client                 *dynamodb.DynamoDB
@@ -214,4 +215,27 @@ func (r *ruleRepository) GetRulesSpecification(ruleId string) ([]ruleSpecDomain.
 	}
 
 	return spec, nil
+}
+
+func (r *ruleRepository) GetRulesByPosId(ctx context.Context, posID string) ([]domain.Rule, error) {
+	input := &dynamodb.QueryInput{
+		TableName:              aws.String(r.ruleTable),
+		IndexName:              aws.String("PosId-index"),
+		KeyConditionExpression: aws.String("PosId = :posId"),
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":posId": {S: aws.String(posID)},
+		},
+	}
+
+	result, err := r.client.QueryWithContext(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("error al consultar reglas por PosId: %w", err)
+	}
+
+	var rules []domain.Rule
+	if err := dynamodbattribute.UnmarshalListOfMaps(result.Items, &rules); err != nil {
+		return nil, fmt.Errorf("error al deserializar reglas: %w", err)
+	}
+
+	return rules, nil
 }

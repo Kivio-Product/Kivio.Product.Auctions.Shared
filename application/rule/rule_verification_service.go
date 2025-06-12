@@ -20,7 +20,7 @@ import (
 )
 
 type RuleVerificationService interface {
-	VerifyRules(ctx context.Context) error
+	VerifyRules(ctx context.Context, pointOfSaleId string) error
 	ProcessRules(ctx context.Context, offerId string) (bool, error)
 }
 
@@ -54,10 +54,10 @@ func NewRuleVerificationService(
 	}
 }
 
-func (s *ruleVerificationService) VerifyRules(ctx context.Context) error {
-	rules, err := s.ruleRepo.GetAllRules()
+func (s *ruleVerificationService) VerifyRules(ctx context.Context, pointOfSaleId string) error {
+	rules, err := s.ruleRepo.GetRulesByPosId(ctx, pointOfSaleId)
 	if err != nil {
-		return fmt.Errorf("fallo al obtener todas las reglas: %w", err)
+		return fmt.Errorf("fallo al obtener reglas para el punto de venta %s: %w", pointOfSaleId, err)
 	}
 
 	groupedRules := groupRulesByOffer(rules)
@@ -159,7 +159,7 @@ func (s *ruleVerificationService) processRule(ctx context.Context, rule *domain.
 		}
 	}
 
-	isActive := s.evaluateRuleSpecifications(ctx, specifications, itemSpecs, rule.ItemSpecificationId, ecommerceItems)
+	isActive := s.evaluateRuleSpecifications(specifications, itemSpecs, rule.ItemSpecificationId, ecommerceItems)
 	rule.State = getRuleState(isActive)
 
 	if err := s.ruleRepo.SaveRule(ctx, rule); err != nil {
@@ -174,14 +174,13 @@ func (s *ruleVerificationService) processRule(ctx context.Context, rule *domain.
 }
 
 func (s *ruleVerificationService) evaluateRuleSpecifications(
-	ctx context.Context,
 	specifications []ruleSpecDomain.RuleSpecification,
 	itemSpecs []itemSpecificationDomain.ItemSpecification,
 	itemSpecId string,
 	ecommerceItems map[string]interface{},
 ) bool {
 	for _, spec := range specifications {
-		if s.verifySpecification(ctx, spec, itemSpecs, itemSpecId, ecommerceItems) {
+		if s.verifySpecification(spec, itemSpecs, itemSpecId, ecommerceItems) {
 			return true
 		}
 	}
@@ -189,7 +188,6 @@ func (s *ruleVerificationService) evaluateRuleSpecifications(
 }
 
 func (s *ruleVerificationService) verifySpecification(
-	ctx context.Context,
 	spec ruleSpecDomain.RuleSpecification,
 	itemSpecs []itemSpecificationDomain.ItemSpecification,
 	itemSpecId string,
