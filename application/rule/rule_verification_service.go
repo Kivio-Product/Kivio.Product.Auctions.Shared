@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
@@ -62,11 +63,26 @@ func (s *ruleVerificationService) VerifyRules(ctx context.Context, pointOfSaleId
 
 	groupedRules := groupRulesByOffer(rules)
 
+	errChan := make(chan error, len(groupedRules))
+	var wg sync.WaitGroup
+
+	semaphore := make(chan struct{}, 10)
+
 	for offerId := range groupedRules {
-		if err := s.processOfferRules(ctx, offerId); err != nil {
-			fmt.Printf("Error al procesar reglas para la oferta %s: %v\n", offerId, err)
-		}
+		wg.Add(1)
+		go func(offerId string) {
+			defer wg.Done()
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			if err := s.processOfferRules(ctx, offerId); err != nil {
+				errChan <- fmt.Errorf("error al procesar reglas para la oferta %s: %w", offerId, err)
+			}
+		}(offerId)
 	}
+
+	wg.Wait()
+	close(errChan)
 
 	return nil
 }
@@ -120,18 +136,32 @@ func (s *ruleVerificationService) ProcessRules(ctx context.Context, offerId stri
 		return false, fmt.Errorf("fallo al obtener reglas para la oferta %s: %w", offerId, err)
 	}
 
-	hasActiveRule := false
+	var (
+		wg            sync.WaitGroup
+		hasActiveRule bool
+	)
+
+	semaphore := make(chan struct{}, 5)
 
 	for i := range rules {
-		if err := s.processRule(ctx, &rules[i], &hasActiveRule); err != nil {
-			fmt.Printf("Error al procesar la regla %s para la oferta %s: %v\n", rules[i].RuleId, offerId, err)
-		}
+		wg.Add(1)
+		go func(rule *domain.Rule) {
+			defer wg.Done()
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			if err := s.processRule(ctx, rule, &hasActiveRule); err != nil {
+				fmt.Printf("Error al procesar la regla %s para la oferta %s: %v\n", rule.RuleId, offerId, err)
+			}
+		}(&rules[i])
 	}
 
+	wg.Wait()
 	return hasActiveRule, nil
 }
 
 func (s *ruleVerificationService) processRule(ctx context.Context, rule *domain.Rule, hasActiveRule *bool) error {
+	var mu sync.Mutex
 	specifications, err := s.ruleRepo.GetRulesSpecification(rule.RuleId)
 	if err != nil {
 		return fmt.Errorf("fallo al obtener especificaciones para la regla %s: %w", rule.RuleId, err)
@@ -167,7 +197,9 @@ func (s *ruleVerificationService) processRule(ctx context.Context, rule *domain.
 	}
 
 	if isActive {
+		mu.Lock()
 		*hasActiveRule = true
+		mu.Unlock()
 	}
 
 	return nil
