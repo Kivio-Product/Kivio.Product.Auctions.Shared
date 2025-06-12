@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item_specification"
 	"github.com/aws/aws-sdk-go/aws"
@@ -21,6 +22,7 @@ type ItemSpecificationRepository interface {
 	GetItemSpecByOffer(id string, pointOfSaleId string) ([]domain.ItemSpecification, error)
 	GetItemSpecByItem(id string, pointOfSaleId string) ([]domain.ItemSpecification, error)
 	UpdateItemSpec(ctx context.Context, itemSpec *domain.ItemSpecification) error
+	GetItemSpecsByOfferIds(ctx context.Context, offerIds []string, pointOfSaleId string) ([]domain.ItemSpecification, error)
 }
 
 type itemSpecificationRepository struct {
@@ -197,4 +199,29 @@ func (r *itemSpecificationRepository) UpdateItemSpec(ctx context.Context, itemSp
 	}
 
 	return nil
+}
+
+func (r *itemSpecificationRepository) GetItemSpecsByOfferIds(ctx context.Context, offerIds []string, pointOfSaleId string) ([]domain.ItemSpecification, error) {
+	if len(offerIds) == 0 {
+		return nil, nil
+	}
+	var (
+		wg       sync.WaitGroup
+		mu       sync.Mutex
+		allSpecs []domain.ItemSpecification
+	)
+	for _, offerId := range offerIds {
+		wg.Add(1)
+		go func(offerId string) {
+			defer wg.Done()
+			specs, err := r.GetItemSpecByOffer(offerId, pointOfSaleId)
+			if err == nil && len(specs) > 0 {
+				mu.Lock()
+				allSpecs = append(allSpecs, specs...)
+				mu.Unlock()
+			}
+		}(offerId)
+	}
+	wg.Wait()
+	return allSpecs, nil
 }

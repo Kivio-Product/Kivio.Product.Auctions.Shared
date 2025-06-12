@@ -24,6 +24,7 @@ type IOfferRepository interface {
 	GetPosOffers(posId string, limit int, lastKey map[string]*dynamodb.AttributeValue) ([]domain.Offer, map[string]*dynamodb.AttributeValue, error)
 	GetOfferById(ctx context.Context, offerId string) (*domain.Offer, error)
 	DeleteOffer(ctx context.Context, offerId string) error
+	BatchGetOffersByIds(ctx context.Context, offerIds []string) ([]domain.Offer, error)
 }
 
 func NewOfferRepository() IOfferRepository {
@@ -156,4 +157,37 @@ func (r *OfferRepository) GetOfferById(ctx context.Context, offerId string) (*do
 		return nil, fmt.Errorf("failed to unmarshal offer with ID %s: %w", offerId, err)
 	}
 	return &item, nil
+}
+
+func (r *OfferRepository) BatchGetOffersByIds(ctx context.Context, offerIds []string) ([]domain.Offer, error) {
+	if len(offerIds) == 0 {
+		return nil, nil
+	}
+	keys := make([]map[string]*dynamodb.AttributeValue, len(offerIds))
+	for i, id := range offerIds {
+		keys[i] = map[string]*dynamodb.AttributeValue{
+			"OfferId": {S: aws.String(id)},
+		}
+	}
+	input := &dynamodb.BatchGetItemInput{
+		RequestItems: map[string]*dynamodb.KeysAndAttributes{
+			r.offerTable: {
+				Keys: keys,
+			},
+		},
+	}
+	result, err := r.client.BatchGetItemWithContext(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	items := result.Responses[r.offerTable]
+	var offers []domain.Offer
+	for _, item := range items {
+		var offer domain.Offer
+		if err := dynamodbattribute.UnmarshalMap(item, &offer); err != nil {
+			continue
+		}
+		offers = append(offers, offer)
+	}
+	return offers, nil
 }

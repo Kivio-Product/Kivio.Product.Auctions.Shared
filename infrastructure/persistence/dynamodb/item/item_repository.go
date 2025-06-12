@@ -20,6 +20,7 @@ type ItemRepository interface {
 	DeleteItem(ctx context.Context, itemId string) error
 	GetItemsByPosId(id string) ([]domain.Item, error)
 	GetItemsByUserID(userID string) ([]domain.Item, error)
+	BatchGetItemsByIds(ctx context.Context, itemIds []string) ([]domain.Item, error)
 }
 
 type itemRepository struct {
@@ -222,4 +223,37 @@ func (r *itemRepository) DeleteItem(ctx context.Context, itemId string) error {
 	}
 
 	return nil
+}
+
+func (r *itemRepository) BatchGetItemsByIds(ctx context.Context, itemIds []string) ([]domain.Item, error) {
+	if len(itemIds) == 0 {
+		return nil, nil
+	}
+	keys := make([]map[string]*dynamodb.AttributeValue, len(itemIds))
+	for i, id := range itemIds {
+		keys[i] = map[string]*dynamodb.AttributeValue{
+			"ItemId": {S: aws.String(id)},
+		}
+	}
+	input := &dynamodb.BatchGetItemInput{
+		RequestItems: map[string]*dynamodb.KeysAndAttributes{
+			r.itemTable: {
+				Keys: keys,
+			},
+		},
+	}
+	result, err := r.client.BatchGetItemWithContext(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	items := result.Responses[r.itemTable]
+	var domainItems []domain.Item
+	for _, item := range items {
+		var domainItem domain.Item
+		if err := dynamodbattribute.UnmarshalMap(item, &domainItem); err != nil {
+			continue
+		}
+		domainItems = append(domainItems, domainItem)
+	}
+	return domainItems, nil
 }

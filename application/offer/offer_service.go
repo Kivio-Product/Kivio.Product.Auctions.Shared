@@ -5,7 +5,11 @@ import (
 	"strconv"
 
 	emailService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
+	itemDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
+	itemSpecDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item_specification"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/offer"
+	itemRepository "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item"
+	itemSpecRepository "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item_specification"
 	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/offer"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
@@ -19,19 +23,41 @@ type IOfferService interface {
 	DeleteOfferById(ctx context.Context, id string) error
 	GetOffersByPosId(ctx context.Context, id string, limit string, lastEvaluatedKey map[string]*dynamodb.AttributeValue) ([]domain.Offer, map[string]*dynamodb.AttributeValue, error)
 	SendOfferEmail(ctx context.Context, auctionURL string, offerID string) error
+	GetOffersWithSpecsAndItems(
+		ctx context.Context,
+		posId string,
+		limit int,
+		lastEvaluatedKey map[string]*dynamodb.AttributeValue,
+	) ([]OfferWithSpecsAndItems, map[string]*dynamodb.AttributeValue, error)
 }
 
 type OfferService struct {
-	repo         infrastructure.IOfferRepository
-	emailSender  emailService.EmailServiceInterface
-	offerFactory domain.OfferFactory
+	repo               infrastructure.IOfferRepository
+	emailSender        emailService.EmailServiceInterface
+	offerFactory       domain.OfferFactory
+	itemRepository     itemRepository.ItemRepository
+	itemSpecRepository itemSpecRepository.ItemSpecificationRepository
 }
 
-func NewofferService(repo infrastructure.IOfferRepository, offerFactory domain.OfferFactory, emailSender emailService.EmailServiceInterface) IOfferService {
+type OfferWithDetails struct {
+	Offer     domain.Offer
+	Item      *itemDomain.Item
+	ItemSpecs []itemSpecDomain.ItemSpecification
+}
+
+type OfferWithSpecsAndItems struct {
+	Offer     domain.Offer
+	ItemSpecs []itemSpecDomain.ItemSpecification
+	Items     []itemDomain.Item
+}
+
+func NewofferService(repo infrastructure.IOfferRepository, offerFactory domain.OfferFactory, emailSender emailService.EmailServiceInterface, itemRepository itemRepository.ItemRepository, itemSpecRepository itemSpecRepository.ItemSpecificationRepository) IOfferService {
 	return &OfferService{
-		repo:         repo,
-		offerFactory: offerFactory,
-		emailSender:  emailSender,
+		repo:               repo,
+		offerFactory:       offerFactory,
+		emailSender:        emailSender,
+		itemRepository:     itemRepository,
+		itemSpecRepository: itemSpecRepository,
 	}
 }
 
@@ -109,4 +135,69 @@ func (s *OfferService) GetOffersByPosId(ctx context.Context, id string, limit st
 		return nil, nil, err
 	}
 	return offers, lastKey, nil
+}
+
+func (s *OfferService) GetOffersWithSpecsAndItems(
+	ctx context.Context,
+	posId string,
+	limit int,
+	lastEvaluatedKey map[string]*dynamodb.AttributeValue,
+) ([]OfferWithSpecsAndItems, map[string]*dynamodb.AttributeValue, error) {
+	offers, lastKey, err := s.repo.GetPosOffers(posId, limit, lastEvaluatedKey)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(offers) == 0 {
+		return nil, lastKey, nil
+	}
+
+	offerIds := make([]string, len(offers))
+	for i, offer := range offers {
+		offerIds[i] = offer.OfferId
+	}
+
+	itemSpecs, err := s.itemSpecRepository.GetItemSpecsByOfferIds(ctx, offerIds, posId)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	specsByOffer := make(map[string][]itemSpecDomain.ItemSpecification)
+	itemIdSet := make(map[string]struct{})
+	for _, spec := range itemSpecs {
+		specsByOffer[spec.OfferId] = append(specsByOffer[spec.OfferId], spec)
+		itemIdSet[spec.ItemId] = struct{}{}
+	}
+	itemIds := make([]string, 0, len(itemIdSet))
+	for id := range itemIdSet {
+		itemIds = append(itemIds, id)
+	}
+
+	itemsMap := make(map[string]itemDomain.Item)
+	if len(itemIds) > 0 {
+		items, _ := s.itemRepository.BatchGetItemsByIds(ctx, itemIds)
+		for _, item := range items {
+			itemsMap[item.ItemId] = item
+		}
+	}
+
+	var result []OfferWithSpecsAndItems
+	for _, offer := range offers {
+		specs := specsByOffer[offer.OfferId]
+		itemMap := make(map[string]itemDomain.Item)
+		for _, spec := range specs {
+			if itm, ok := itemsMap[spec.ItemId]; ok {
+				itemMap[spec.ItemId] = itm
+			}
+		}
+		items := make([]itemDomain.Item, 0, len(itemMap))
+		for _, itm := range itemMap {
+			items = append(items, itm)
+		}
+		result = append(result, OfferWithSpecsAndItems{
+			Offer:     offer,
+			ItemSpecs: specs,
+			Items:     items,
+		})
+	}
+	return result, lastKey, nil
 }
