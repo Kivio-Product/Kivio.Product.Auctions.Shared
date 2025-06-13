@@ -30,7 +30,7 @@ type IOfferService interface {
 		posId string,
 		limit int,
 		lastEvaluatedKey map[string]*dynamodb.AttributeValue,
-	) ([]ItemWithSpec, map[string]*dynamodb.AttributeValue, error)
+	) ([]OfferWithItemsAndSpecs, map[string]*dynamodb.AttributeValue, error)
 }
 
 type OfferService struct {
@@ -49,9 +49,14 @@ type OfferWithDetails struct {
 	ItemSpecs []itemSpecDomain.ItemSpecification
 }
 
-type ItemWithSpec struct {
-	Item     itemDomain.Item                  `json:"item"`
-	ItemSpec itemSpecDomain.ItemSpecification `json:"item_specs"`
+type ItemWithSpecs struct {
+	Item      itemDomain.Item                    `json:"item"`
+	ItemSpecs []itemSpecDomain.ItemSpecification `json:"item_specs"`
+}
+
+type OfferWithItemsAndSpecs struct {
+	Offer domain.Offer    `json:"offer"`
+	Items []ItemWithSpecs `json:"items"`
 }
 
 func NewofferService(repo infrastructure.IOfferRepository, offerFactory domain.OfferFactory, emailSender emailService.EmailServiceInterface, itemRepository itemRepository.ItemRepository, itemSpecRepository itemSpecRepository.ItemSpecificationRepository, ecommerceService ecommerceService.EcommerceService, ecommerceCredSvc ecommerceService.EcommerceCredentialsService) IOfferService {
@@ -147,7 +152,7 @@ func (s *OfferService) GetOffersWithSpecsAndItems(
 	posId string,
 	limit int,
 	lastEvaluatedKey map[string]*dynamodb.AttributeValue,
-) ([]ItemWithSpec, map[string]*dynamodb.AttributeValue, error) {
+) ([]OfferWithItemsAndSpecs, map[string]*dynamodb.AttributeValue, error) {
 	offers, lastKey, err := s.repo.GetPosOffers(posId, limit, lastEvaluatedKey)
 	if err != nil {
 		return nil, nil, err
@@ -210,25 +215,41 @@ func (s *OfferService) GetOffersWithSpecsAndItems(
 	}
 	wg.Wait()
 
-	var result []ItemWithSpec
+	specsByOfferAndItem := make(map[string]map[string][]itemSpecDomain.ItemSpecification)
 	for _, spec := range itemSpecs {
-		var item itemDomain.Item
-		if spec.IsExternal {
-			itm, ok := externalItemsMap[spec.ItemId]
-			if !ok {
-				continue
-			}
-			item = itm
-		} else {
-			itm, ok := itemsMap[spec.ItemId]
-			if !ok {
-				continue
-			}
-			item = itm
+		if _, ok := specsByOfferAndItem[spec.OfferId]; !ok {
+			specsByOfferAndItem[spec.OfferId] = make(map[string][]itemSpecDomain.ItemSpecification)
 		}
-		result = append(result, ItemWithSpec{
-			Item:     item,
-			ItemSpec: spec,
+		specsByOfferAndItem[spec.OfferId][spec.ItemId] = append(specsByOfferAndItem[spec.OfferId][spec.ItemId], spec)
+	}
+
+	var result []OfferWithItemsAndSpecs
+	for _, offer := range offers {
+		itemSpecsMap := specsByOfferAndItem[offer.OfferId]
+		var itemsWithSpecs []ItemWithSpecs
+		for itemId, specs := range itemSpecsMap {
+			var item itemDomain.Item
+			if len(specs) > 0 && specs[0].IsExternal {
+				itm, ok := externalItemsMap[itemId]
+				if !ok {
+					continue
+				}
+				item = itm
+			} else {
+				itm, ok := itemsMap[itemId]
+				if !ok {
+					continue
+				}
+				item = itm
+			}
+			itemsWithSpecs = append(itemsWithSpecs, ItemWithSpecs{
+				Item:      item,
+				ItemSpecs: specs,
+			})
+		}
+		result = append(result, OfferWithItemsAndSpecs{
+			Offer: offer,
+			Items: itemsWithSpecs,
 		})
 	}
 	return result, lastKey, nil
