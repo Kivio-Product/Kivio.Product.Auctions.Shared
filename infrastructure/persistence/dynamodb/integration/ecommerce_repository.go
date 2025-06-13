@@ -46,6 +46,7 @@ func (r *ecommerceRepository) GetItems(baseUrl, apiKey string, page, limit int) 
 		Images      []struct {
 			Src string `json:"src"`
 		} `json:"images"`
+		Published bool `json:"published"`
 	}
 
 	type ApiResponse struct {
@@ -61,6 +62,9 @@ func (r *ecommerceRepository) GetItems(baseUrl, apiKey string, page, limit int) 
 
 	var items []itemDomain.Item
 	for _, product := range apiResponse.Products {
+		if !product.Published {
+			continue
+		}
 		var imageURL string
 		if len(product.Images) > 0 {
 			imageURL = product.Images[0].Src
@@ -102,6 +106,7 @@ func (r *ecommerceRepository) GetItemByID(baseUrl, apiKey, itemId string) (*item
 		Price            float64 `json:"price"`
 		Images           []Image `json:"images"`
 		SKU              string  `json:"sku"`
+		Published        bool    `json:"published"`
 	}
 
 	type ApiResponse struct {
@@ -118,6 +123,10 @@ func (r *ecommerceRepository) GetItemByID(baseUrl, apiKey, itemId string) (*item
 	}
 
 	product := apiResponse.Products[0]
+
+	if !product.Published {
+		return nil, nil
+	}
 
 	var imageURL string
 	if len(product.Images) > 0 {
