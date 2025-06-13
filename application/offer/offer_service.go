@@ -180,7 +180,9 @@ func (s *OfferService) GetOffersWithSpecsAndItems(
 			itemIdSet[spec.ItemId] = struct{}{}
 		}
 	}
+
 	itemIds := make([]string, 0, len(itemIdSet))
+
 	for id := range itemIdSet {
 		itemIds = append(itemIds, id)
 	}
@@ -196,15 +198,16 @@ func (s *OfferService) GetOffersWithSpecsAndItems(
 	externalItemsMap := make(map[string]itemDomain.Item)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
+	creds, err := s.ecommerceCredSvc.GetCredentials(ctx, posId)
 	for _, spec := range externalSpecs {
 		wg.Add(1)
 		go func(spec itemSpecDomain.ItemSpecification) {
 			defer wg.Done()
-			creds, err := s.ecommerceCredSvc.GetCredentials(ctx, spec.PointOfSaleId)
+
 			if err != nil {
 				return
 			}
-			item, err := s.ecommerceService.GetItemByID(ctx, spec.ItemId, creds.ApiURL, creds.ApiKey)
+			item, err := s.ecommerceService.GetItemByID(ctx, creds.ApiURL, creds.ApiKey, spec.ItemId)
 			if err != nil || item == nil {
 				return
 			}
