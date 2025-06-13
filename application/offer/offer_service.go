@@ -3,7 +3,9 @@ package services
 import (
 	"context"
 	"strconv"
+	"sync"
 
+	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
 	emailService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
 	itemDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
 	itemSpecDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item_specification"
@@ -28,7 +30,7 @@ type IOfferService interface {
 		posId string,
 		limit int,
 		lastEvaluatedKey map[string]*dynamodb.AttributeValue,
-	) ([]OfferWithSpecsAndItems, map[string]*dynamodb.AttributeValue, error)
+	) ([]ItemWithSpec, map[string]*dynamodb.AttributeValue, error)
 }
 
 type OfferService struct {
@@ -37,6 +39,8 @@ type OfferService struct {
 	offerFactory       domain.OfferFactory
 	itemRepository     itemRepository.ItemRepository
 	itemSpecRepository itemSpecRepository.ItemSpecificationRepository
+	ecommerceService   ecommerceService.EcommerceService
+	ecommerceCredSvc   ecommerceService.EcommerceCredentialsService
 }
 
 type OfferWithDetails struct {
@@ -45,19 +49,20 @@ type OfferWithDetails struct {
 	ItemSpecs []itemSpecDomain.ItemSpecification
 }
 
-type OfferWithSpecsAndItems struct {
-	Offer     domain.Offer
-	ItemSpecs []itemSpecDomain.ItemSpecification
-	Items     []itemDomain.Item
+type ItemWithSpec struct {
+	Item     itemDomain.Item                  `json:"item"`
+	ItemSpec itemSpecDomain.ItemSpecification `json:"item_specs"`
 }
 
-func NewofferService(repo infrastructure.IOfferRepository, offerFactory domain.OfferFactory, emailSender emailService.EmailServiceInterface, itemRepository itemRepository.ItemRepository, itemSpecRepository itemSpecRepository.ItemSpecificationRepository) IOfferService {
+func NewofferService(repo infrastructure.IOfferRepository, offerFactory domain.OfferFactory, emailSender emailService.EmailServiceInterface, itemRepository itemRepository.ItemRepository, itemSpecRepository itemSpecRepository.ItemSpecificationRepository, ecommerceService ecommerceService.EcommerceService, ecommerceCredSvc ecommerceService.EcommerceCredentialsService) IOfferService {
 	return &OfferService{
 		repo:               repo,
 		offerFactory:       offerFactory,
 		emailSender:        emailSender,
 		itemRepository:     itemRepository,
 		itemSpecRepository: itemSpecRepository,
+		ecommerceService:   ecommerceService,
+		ecommerceCredSvc:   ecommerceCredSvc,
 	}
 }
 
@@ -142,7 +147,7 @@ func (s *OfferService) GetOffersWithSpecsAndItems(
 	posId string,
 	limit int,
 	lastEvaluatedKey map[string]*dynamodb.AttributeValue,
-) ([]OfferWithSpecsAndItems, map[string]*dynamodb.AttributeValue, error) {
+) ([]ItemWithSpec, map[string]*dynamodb.AttributeValue, error) {
 	offers, lastKey, err := s.repo.GetPosOffers(posId, limit, lastEvaluatedKey)
 	if err != nil {
 		return nil, nil, err
@@ -161,11 +166,14 @@ func (s *OfferService) GetOffersWithSpecsAndItems(
 		return nil, nil, err
 	}
 
-	specsByOffer := make(map[string][]itemSpecDomain.ItemSpecification)
 	itemIdSet := make(map[string]struct{})
+	externalSpecs := []itemSpecDomain.ItemSpecification{}
 	for _, spec := range itemSpecs {
-		specsByOffer[spec.OfferId] = append(specsByOffer[spec.OfferId], spec)
-		itemIdSet[spec.ItemId] = struct{}{}
+		if spec.IsExternal {
+			externalSpecs = append(externalSpecs, spec)
+		} else {
+			itemIdSet[spec.ItemId] = struct{}{}
+		}
 	}
 	itemIds := make([]string, 0, len(itemIdSet))
 	for id := range itemIdSet {
@@ -180,23 +188,47 @@ func (s *OfferService) GetOffersWithSpecsAndItems(
 		}
 	}
 
-	var result []OfferWithSpecsAndItems
-	for _, offer := range offers {
-		specs := specsByOffer[offer.OfferId]
-		itemMap := make(map[string]itemDomain.Item)
-		for _, spec := range specs {
-			if itm, ok := itemsMap[spec.ItemId]; ok {
-				itemMap[spec.ItemId] = itm
+	externalItemsMap := make(map[string]itemDomain.Item)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	for _, spec := range externalSpecs {
+		wg.Add(1)
+		go func(spec itemSpecDomain.ItemSpecification) {
+			defer wg.Done()
+			creds, err := s.ecommerceCredSvc.GetCredentials(ctx, spec.PointOfSaleId)
+			if err != nil {
+				return
 			}
+			item, err := s.ecommerceService.GetItemByID(ctx, spec.ItemId, creds.ApiURL, creds.ApiKey)
+			if err != nil || item == nil {
+				return
+			}
+			mu.Lock()
+			externalItemsMap[spec.ItemId] = *item
+			mu.Unlock()
+		}(spec)
+	}
+	wg.Wait()
+
+	var result []ItemWithSpec
+	for _, spec := range itemSpecs {
+		var item itemDomain.Item
+		if spec.IsExternal {
+			itm, ok := externalItemsMap[spec.ItemId]
+			if !ok {
+				continue
+			}
+			item = itm
+		} else {
+			itm, ok := itemsMap[spec.ItemId]
+			if !ok {
+				continue
+			}
+			item = itm
 		}
-		items := make([]itemDomain.Item, 0, len(itemMap))
-		for _, itm := range itemMap {
-			items = append(items, itm)
-		}
-		result = append(result, OfferWithSpecsAndItems{
-			Offer:     offer,
-			ItemSpecs: specs,
-			Items:     items,
+		result = append(result, ItemWithSpec{
+			Item:     item,
+			ItemSpec: spec,
 		})
 	}
 	return result, lastKey, nil
