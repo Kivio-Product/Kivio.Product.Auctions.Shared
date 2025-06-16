@@ -106,7 +106,6 @@ func (r *ecommerceRepository) GetItemByID(baseUrl, apiKey, itemId string) (*item
 		Price            float64 `json:"price"`
 		Images           []Image `json:"images"`
 		SKU              string  `json:"sku"`
-		Published        bool    `json:"published"`
 	}
 
 	type ApiResponse struct {
@@ -123,10 +122,6 @@ func (r *ecommerceRepository) GetItemByID(baseUrl, apiKey, itemId string) (*item
 	}
 
 	product := apiResponse.Products[0]
-
-	if !product.Published {
-		return nil, nil
-	}
 
 	var imageURL string
 	if len(product.Images) > 0 {
