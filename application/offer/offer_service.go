@@ -31,6 +31,7 @@ type IOfferService interface {
 		limit int,
 		lastEvaluatedKey map[string]*dynamodb.AttributeValue,
 	) ([]OfferWithItemsAndSpecs, map[string]*dynamodb.AttributeValue, error)
+	CountOffers(ctx context.Context) (int64, error)
 }
 
 type OfferService struct {
@@ -256,4 +257,8 @@ func (s *OfferService) GetOffersWithSpecsAndItems(
 		})
 	}
 	return result, lastKey, nil
+}
+
+func (s *OfferService) CountOffers(ctx context.Context) (int64, error) {
+	return s.repo.CountOffers(ctx)
 }

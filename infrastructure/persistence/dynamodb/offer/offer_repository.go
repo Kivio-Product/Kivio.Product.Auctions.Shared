@@ -25,6 +25,7 @@ type IOfferRepository interface {
 	GetOfferById(ctx context.Context, offerId string) (*domain.Offer, error)
 	DeleteOffer(ctx context.Context, offerId string) error
 	BatchGetOffersByIds(ctx context.Context, offerIds []string) ([]domain.Offer, error)
+	CountOffers(ctx context.Context) (int64, error)
 }
 
 func NewOfferRepository() IOfferRepository {
@@ -190,4 +191,16 @@ func (r *OfferRepository) BatchGetOffersByIds(ctx context.Context, offerIds []st
 		offers = append(offers, offer)
 	}
 	return offers, nil
+}
+
+func (r *OfferRepository) CountOffers(ctx context.Context) (int64, error) {
+	input := &dynamodb.ScanInput{
+		TableName: aws.String(r.offerTable),
+		Select:    aws.String("COUNT"),
+	}
+	result, err := r.client.ScanWithContext(ctx, input)
+	if err != nil {
+		return 0, err
+	}
+	return *result.Count, nil
 }
