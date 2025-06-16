@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 	itemInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item"
@@ -149,9 +150,26 @@ func (s *orderService) GetPaginatedOrdersWithDetails(ctx context.Context, params
 		return nil, fmt.Errorf("pointOfSaleId is required")
 	}
 
+	var (
+		wg         sync.WaitGroup
+		totalCount int64
+		countErr   error
+	)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		totalCount, countErr = s.repo.CountOrders(ctx, params.PointOfSaleId)
+	}()
+
 	ordersResult, err := s.repo.GetOrdersPaginated(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("error al obtener órdenes paginadas: %w", err)
+	}
+
+	wg.Wait()
+	if countErr != nil {
+		fmt.Printf("Error al obtener el conteo total de órdenes: %v\n", countErr)
 	}
 
 	var orderDetails []domain.OrderDetail
@@ -170,6 +188,6 @@ func (s *orderService) GetPaginatedOrdersWithDetails(ctx context.Context, params
 	return &domain.PaginatedOrdersResponse{
 		Orders:     orderDetails,
 		NextToken:  ordersResult.NextToken,
-		TotalCount: ordersResult.TotalCount,
+		TotalCount: totalCount,
 	}, nil
 }

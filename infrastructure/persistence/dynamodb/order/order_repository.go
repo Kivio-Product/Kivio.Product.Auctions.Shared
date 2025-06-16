@@ -24,6 +24,7 @@ type OrderRepository interface {
 	DeleteOrder(ctx context.Context, orderId string) error
 	UpdateOrder(ctx context.Context, order *domain.Order) error
 	GetOrdersPaginated(ctx context.Context, params domain.PaginationParams) (*domain.OrderRepositoryResult, error)
+	CountOrders(ctx context.Context, pointOfSaleId string) (int64, error)
 }
 
 type orderRepository struct {
@@ -286,4 +287,22 @@ func (r *orderRepository) GetOrdersPaginated(ctx context.Context, params domain.
 		NextToken:  nextToken,
 		TotalCount: 0,
 	}, nil
+}
+
+func (r *orderRepository) CountOrders(ctx context.Context, pointOfSaleId string) (int64, error) {
+	input := &dynamodb.QueryInput{
+		TableName:              aws.String(r.orderTable),
+		IndexName:              aws.String("PointOfSaleId-index"),
+		KeyConditionExpression: aws.String("PointOfSaleId = :pointOfSaleId"),
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":pointOfSaleId": {S: aws.String(pointOfSaleId)},
+		},
+		Select: aws.String("COUNT"),
+	}
+
+	result, err := r.client.QueryWithContext(ctx, input)
+	if err != nil {
+		return 0, fmt.Errorf("error counting orders: %w", err)
+	}
+	return *result.Count, nil
 }

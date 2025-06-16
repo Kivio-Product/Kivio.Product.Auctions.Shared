@@ -21,6 +21,7 @@ type ItemRepository interface {
 	GetItemsByPosId(id string) ([]domain.Item, error)
 	GetItemsByUserID(userID string) ([]domain.Item, error)
 	BatchGetItemsByIds(ctx context.Context, itemIds []string) ([]domain.Item, error)
+	GetItemsByPosIdPaged(ctx context.Context, posID string, limit int, lastEvaluatedKey map[string]*dynamodb.AttributeValue) ([]domain.Item, map[string]*dynamodb.AttributeValue, error)
 }
 
 type itemRepository struct {
@@ -256,4 +257,29 @@ func (r *itemRepository) BatchGetItemsByIds(ctx context.Context, itemIds []strin
 		domainItems = append(domainItems, domainItem)
 	}
 	return domainItems, nil
+}
+
+func (r *itemRepository) GetItemsByPosIdPaged(ctx context.Context, posID string, limit int, lastEvaluatedKey map[string]*dynamodb.AttributeValue) ([]domain.Item, map[string]*dynamodb.AttributeValue, error) {
+	input := &dynamodb.QueryInput{
+		TableName:              aws.String(r.itemTable),
+		IndexName:              aws.String("PointOfSaleId-index"),
+		KeyConditionExpression: aws.String("PointOfSaleId = :posId"),
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":posId": {S: aws.String(posID)},
+		},
+		Limit:             aws.Int64(int64(limit)),
+		ExclusiveStartKey: lastEvaluatedKey,
+	}
+
+	result, err := r.client.QueryWithContext(ctx, input)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error al consultar items por PosId: %w", err)
+	}
+
+	var items []domain.Item
+	if err := dynamodbattribute.UnmarshalListOfMaps(result.Items, &items); err != nil {
+		return nil, nil, fmt.Errorf("error al deserializar items: %w", err)
+	}
+
+	return items, result.LastEvaluatedKey, nil
 }
