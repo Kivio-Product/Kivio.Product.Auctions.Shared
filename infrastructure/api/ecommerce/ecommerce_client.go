@@ -79,7 +79,7 @@ func (c *ecommerceClient) GetApiKey(username, password, tokenUrl string) (string
 }
 
 func (c *ecommerceClient) GetItems(baseUrl, apiKey string, page, limit int) ([]byte, error) {
-	url := fmt.Sprintf("%s/api/products?Page=%d&Limit=%d", baseUrl, page, limit)
+	url := fmt.Sprintf("%s/api/products?Page=%d&Limit=%d&PublishedStatus=true", baseUrl, page, limit)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
