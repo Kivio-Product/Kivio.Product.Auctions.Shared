@@ -16,12 +16,12 @@ func NewNotifyOrderUseCase(notifier domain.Notifier) *NotifyOrderUseCase {
 	}
 }
 
-func (uc *NotifyOrderUseCase) Execute(state string, customerEmail string, itemName string, amount int64, itemDescription string) error {
+func (uc *NotifyOrderUseCase) Execute(state string, customerEmail string, concatenatedItemNames string, firstOrderAmount int64, concatenatedItemDescriptions string) error {
 	templateName := getTemplateName(state)
 	templateData := map[string]string{
-		"ITEM_NAME":        itemName,
-		"AMOUNT":           strconv.FormatInt(amount, 10),
-		"ITEM_DESCRIPTION": itemDescription,
+		"ITEM_NAME":        concatenatedItemNames,
+		"AMOUNT":           strconv.FormatInt(firstOrderAmount, 10),
+		"ITEM_DESCRIPTION": concatenatedItemDescriptions,
 	}
 
 	return uc.notifier.SendTemplatedEmail(customerEmail, templateName, templateData)

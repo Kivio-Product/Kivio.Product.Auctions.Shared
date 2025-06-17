@@ -2,15 +2,11 @@ package services
 
 import (
 	"context"
-
-	itemDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
-	itemSpecDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item_specification"
-	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 )
 
 type EmailServiceInterface interface {
 	NotifyOffer(ctx context.Context, auctionURL string, offerName string, posId string) error
-	NotifyOrder(ctx context.Context, state string, order *domain.Order, itemSpec *itemSpecDomain.ItemSpecification, item *itemDomain.Item) error
+	NotifyOrder(ctx context.Context, state string, customerEmail string, totalOfferedAmount int64, concatenatedItemNames string) error
 }
 
 type EmailService struct {
@@ -32,12 +28,12 @@ func (s *EmailService) NotifyOffer(ctx context.Context, auctionURL string, offer
 	return s.notifyOffer.Execute(ctx, auctionURL, offerName, posId)
 }
 
-func (s *EmailService) NotifyOrder(ctx context.Context, state string, order *domain.Order, itemSpec *itemSpecDomain.ItemSpecification, item *itemDomain.Item) error {
+func (s *EmailService) NotifyOrder(ctx context.Context, state string, customerEmail string, totalOfferedAmount int64, concatenatedItemNames string) error {
 	return s.notifyOrderUseCase.Execute(
 		state,
-		order.CustomerId,
-		item.Name,
-		order.OfferedAmount,
-		item.Description,
+		customerEmail,
+		concatenatedItemNames,
+		totalOfferedAmount,
+		"",
 	)
 }

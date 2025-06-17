@@ -331,8 +331,13 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 		return fmt.Errorf("no se encontró ninguna orden válida en: %v", orderIDs)
 	}
 
+	var concatenatedItemNames []string
+	var concatenatedItemDescriptions []string
+	var firstOrderAmount int64
+	var customerEmail string
+
 	if res.Extra1 == "Quick offer" {
-		for _, order := range validOrders {
+		for idx, order := range validOrders {
 			itemSpec, err := s.itemSpecRepo.GetById(ctx, order.ItemSpecificationId)
 			if err != nil {
 				fmt.Printf("no se encontro el itemSpec con Id: %s\n", order.ItemSpecificationId)
@@ -361,12 +366,21 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 				}
 			}
 
-			var typer = ""
+			if item != nil {
+				concatenatedItemNames = append(concatenatedItemNames, item.Name)
+				concatenatedItemDescriptions = append(concatenatedItemDescriptions, item.Description)
+			}
+			if idx == 0 {
+				firstOrderAmount = order.OfferedAmount
+			}
+			if customerEmail == "" {
+				customerEmail = order.CustomerId
+			}
+
 			switch state {
 			case "Approved":
 				order.State = "Approved"
 				itemSpec.Availability--
-				typer = "Quick"
 			case "Rejected", "Error":
 				order.State = "Rejected"
 			default:
@@ -382,16 +396,23 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 			if err != nil {
 				return fmt.Errorf("no se pudo actualizar el item specification %s: %v", order.ItemSpecificationId, err)
 			}
-
-			err = s.emailService.NotifyOrder(ctx, typer, order, itemSpec, item)
-			if err != nil {
-				fmt.Printf("No se puedo enviar el correo: %s\n", err)
-			}
+		}
+		if customerEmail != "" && len(concatenatedItemNames) > 0 {
+			go func() {
+				err = s.emailService.NotifyOrder(ctx, state, customerEmail, firstOrderAmount, strings.Join(concatenatedItemNames, ", "))
+				if err != nil {
+					fmt.Printf("No se puedo enviar el correo: %s\n", err)
+				}
+			}()
 		}
 	}
 
 	if res.Extra1 == "Regular auction" {
 		for _, order := range validOrders {
+			if customerEmail == "" && len(validOrders) > 0 {
+				customerEmail = validOrders[0].CustomerId
+			}
+
 			switch state {
 			case "Approved":
 				order.State = "Pending"
@@ -405,6 +426,14 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 			if err != nil {
 				return fmt.Errorf("no se pudo actualizar la orden %s: %v", order.OrderId, err)
 			}
+		}
+		if customerEmail != "" && len(concatenatedItemNames) > 0 {
+			go func() {
+				err = s.emailService.NotifyOrder(ctx, state, customerEmail, firstOrderAmount, strings.Join(concatenatedItemNames, ", "))
+				if err != nil {
+					fmt.Printf("No se puedo enviar el correo: %s\n", err)
+				}
+			}()
 		}
 	}
 
