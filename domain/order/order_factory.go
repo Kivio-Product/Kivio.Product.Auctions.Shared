@@ -8,7 +8,7 @@ import (
 )
 
 type OrderFactory interface {
-	CreateOrder(customerId, externalId, itemSpecificationId, offerId, pointOfSaleId, extraData string, offeredAmount int64) (*Order, error)
+	CreateOrder(customerId, externalId, itemSpecificationId, offerId, pointOfSaleId, extraData string, offeredAmount int64, auctionService bool) (*Order, error)
 }
 
 type DefaultOrderFactory struct{}
@@ -17,7 +17,7 @@ func NewOrderFactory() OrderFactory {
 	return &DefaultOrderFactory{}
 }
 
-func (f *DefaultOrderFactory) CreateOrder(customerId, externalId, itemSpecificationId, offerId, pointOfSaleId, extraData string, offeredAmount int64) (*Order, error) {
+func (f *DefaultOrderFactory) CreateOrder(customerId, externalId, itemSpecificationId, offerId, pointOfSaleId, extraData string, offeredAmount int64, auctionService bool) (*Order, error) {
 
 	if customerId == "" {
 		return nil, fmt.Errorf("CustomerId cannot be empty")
@@ -48,6 +48,7 @@ func (f *DefaultOrderFactory) CreateOrder(customerId, externalId, itemSpecificat
 		ItemSpecificationId: itemSpecificationId,
 		SortKey:             "ACTIVE",
 		PointOfSaleId:       pointOfSaleId,
+		AuctionService:      auctionService,
 	}, nil
 }
 

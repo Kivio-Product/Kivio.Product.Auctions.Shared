@@ -32,6 +32,7 @@ type BillingService interface {
 	GetAllBillingsWithDetail(ctx context.Context) ([]domain.BillingDetailResponse, error)
 	ConfirmPayUResponse(ctx context.Context, res *paymentDomain.ConfirmationResponse, secretKey string) error
 	GetPaginatedBillingsWithDetails(ctx context.Context, params orderDomain.PaginationParams) (*domain.PaginatedBillingDetailsResponse, error)
+	GetOrdersBillingByID(ctx context.Context, id string) ([]domain.BillingByOrder, error)
 }
 
 type billingService struct {
@@ -91,6 +92,14 @@ func (s *billingService) CreateBilling(ctx context.Context, provider string, ord
 	}
 
 	return billing, nil
+}
+
+func (s *billingService) GetOrdersBillingByID(ctx context.Context, id string) ([]domain.BillingByOrder, error) {
+	order, err := s.repo.GetOrdersBillingByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return order, nil
 }
 
 func (s *billingService) GetAllBillings(ctx context.Context) ([]domain.Billing, error) {
