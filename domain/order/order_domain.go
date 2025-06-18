@@ -17,6 +17,7 @@ type Order struct {
 	State               string
 	SortKey             string
 	PointOfSaleId       string
+	AuctionService      bool
 }
 
 type OrderDetail struct {
