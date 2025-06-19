@@ -178,7 +178,7 @@ func (s *ruleVerificationService) processRule(ctx context.Context, rule *domain.
 		if err != nil {
 			fmt.Printf("Advertencia: Error al obtener credenciales de e-commerce para POS %s: %v\n", rule.PosId, err)
 		} else {
-			rawData, err := s.ecommerceSvc.GetItemsRaw(ctx, credentials.ApiURL, credentials.ApiKey, 1, 1000, false)
+			rawData, err := s.ecommerceSvc.GetItemsRaw(ctx, credentials.ApiURL, credentials.ApiKey, 1, 200, false)
 			if err != nil {
 				fmt.Printf("Advertencia: Error al obtener datos de e-commerce para POS %s: %v\n", rule.PosId, err)
 			} else {
