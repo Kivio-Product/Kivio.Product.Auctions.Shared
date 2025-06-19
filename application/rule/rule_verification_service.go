@@ -212,6 +212,9 @@ func (s *ruleVerificationService) evaluateRuleSpecifications(
 	ecommerceItems map[string]interface{},
 ) bool {
 	for _, spec := range specifications {
+		if spec.Parameter == "offerType" {
+			continue
+		}
 		if s.verifySpecification(spec, itemSpecs, itemSpecId, ecommerceItems) {
 			return true
 		}
