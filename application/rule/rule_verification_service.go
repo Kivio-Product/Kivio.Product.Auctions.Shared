@@ -228,19 +228,43 @@ func (s *ruleVerificationService) verifySpecification(
 	itemSpecId string,
 	ecommerceItems map[string]interface{},
 ) bool {
-	switch spec.Parameter {
-	case "current date":
-		return verifyDateSpecification(spec)
-	case "availability":
-		fmt.Printf("Advertencia: La verificación del parámetro 'availability' necesita un valor concreto para comparar. Tipo de especificación: %s\n", spec.Type)
-		return false
-	}
-
 	var matchingSpec *itemSpecificationDomain.ItemSpecification
 	for _, itemSpec := range itemSpecs {
 		if itemSpec.Id == itemSpecId {
 			matchingSpec = &itemSpec
 			break
+		}
+	}
+
+	switch spec.Parameter {
+	case "current date":
+		return verifyDateSpecification(spec)
+	case "availability":
+		if matchingSpec == nil {
+			fmt.Printf("No se encontró especificación de artículo coincidente para el ID: %s\n", itemSpecId)
+			return false
+		}
+		expected, err := strconv.ParseInt(spec.Type, 10, 64)
+		if err != nil {
+			fmt.Printf("Error al parsear spec.Type '%s' como int64 para availability: %v\n", spec.Type, err)
+			return false
+		}
+		switch spec.Operator {
+		case "=":
+			return matchingSpec.Availability == expected
+		case "!=":
+			return matchingSpec.Availability != expected
+		case ">":
+			return matchingSpec.Availability > expected
+		case "<":
+			return matchingSpec.Availability < expected
+		case ">=":
+			return matchingSpec.Availability >= expected
+		case "<=":
+			return matchingSpec.Availability <= expected
+		default:
+			fmt.Printf("Operador desconocido '%s' para comparación de availability.\n", spec.Operator)
+			return false
 		}
 	}
 
