@@ -82,7 +82,7 @@ func (s *ruleDataService) GetRuleData(ctx context.Context, pointOfSaleId string)
 
 	credentials, err := s.ecommerceCredentialsSvc.GetCredentials(ctx, pointOfSaleId)
 	if err == nil {
-		ecommerceResponse, err := s.ecommerceService.GetItemsRaw(credentials.Context, credentials.ApiURL, credentials.ApiKey, 1, 1)
+		ecommerceResponse, err := s.ecommerceService.GetItemsRaw(credentials.Context, credentials.ApiURL, credentials.ApiKey, 1, 1, false)
 		if err == nil && len(ecommerceResponse) > 0 {
 			ecommerceRules, err := s.suggestionCache.GetCachedSuggestionsEcommerce(ctx, pointOfSaleId)
 			if err != nil {
