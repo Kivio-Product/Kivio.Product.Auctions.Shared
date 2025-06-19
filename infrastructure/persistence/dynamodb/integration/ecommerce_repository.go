@@ -12,7 +12,7 @@ import (
 
 type EcommerceRepository interface {
 	GetItems(baseUrl, apiKey string, page, limit int) ([]itemDomain.Item, error)
-	GetItemsRaw(baseUrl, apiKey string, page, limit int) ([]byte, error)
+	GetItemsRaw(baseUrl, apiKey string, page, limit int, publishedStatus bool) ([]byte, error)
 	GetItemByID(baseUrl, apiKey, itemId string) (*itemDomain.Item, error)
 	GetCustomers(baseUrl, apiKey string) ([]customerDomain.Customer, error)
 	GetCustomerByID(baseUrl, apiKey, id string) (*customerDomain.Customer, error)
@@ -34,7 +34,7 @@ func (r *ecommerceRepository) GetApiKey(username, password, tokenUrl string) (st
 }
 
 func (r *ecommerceRepository) GetItems(baseUrl, apiKey string, page, limit int) ([]itemDomain.Item, error) {
-	respBody, err := r.client.GetItems(baseUrl, apiKey, page, limit)
+	respBody, err := r.client.GetItems(baseUrl, apiKey, page, limit, true)
 	if err != nil {
 		return nil, err
 	}
@@ -83,8 +83,8 @@ func (r *ecommerceRepository) GetItems(baseUrl, apiKey string, page, limit int) 
 	return items, nil
 }
 
-func (r *ecommerceRepository) GetItemsRaw(baseUrl, apiKey string, page, limit int) ([]byte, error) {
-	return r.client.GetItems(baseUrl, apiKey, page, limit)
+func (r *ecommerceRepository) GetItemsRaw(baseUrl, apiKey string, page, limit int, publishedStatus bool) ([]byte, error) {
+	return r.client.GetItems(baseUrl, apiKey, page, limit, publishedStatus)
 }
 
 func (r *ecommerceRepository) GetItemByID(baseUrl, apiKey, itemId string) (*itemDomain.Item, error) {

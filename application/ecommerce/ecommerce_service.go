@@ -32,7 +32,7 @@ func (s *ecommerceService) GetItems(ctx context.Context, apiUrl, apiKey string, 
 }
 
 func (s *ecommerceService) GetItemsRaw(ctx context.Context, apiUrl, apiKey string, page, limit int) ([]byte, error) {
-	return s.repo.GetItemsRaw(apiUrl, apiKey, page, limit)
+	return s.repo.GetItemsRaw(apiUrl, apiKey, page, limit, true)
 }
 
 func (s *ecommerceService) GetItemByID(ctx context.Context, id, apiUrl, apiKey string) (*itemDomain.Item, error) {
