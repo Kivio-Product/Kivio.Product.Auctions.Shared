@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
@@ -110,7 +111,7 @@ func (s *itemSpecificationService) GetItemSpecByItemId(ctx context.Context, id s
 			if err != nil {
 				continue
 			}
-			itemId := spec.ItemId
+			itemId := strings.TrimPrefix(spec.ItemId, "kivio-ecommerce∼")
 			itemRaw, err := s.ecommerceSvc.GetItemByIDRaw(ctx, itemId, credentials.ApiURL, credentials.ApiKey)
 			if err == nil && itemRaw != nil {
 				type externalProductResponse struct {
