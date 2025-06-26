@@ -57,12 +57,8 @@ func (s *ruleDataService) GetRuleData(ctx context.Context, pointOfSaleId string)
 		ParameterType: "fecha",
 		Operators:     []string{"=", "!=", ">", "<", ">=", "<="},
 	}
-	availabilityRule := sheetsDomain.RuleField{
-		Field:         "availability",
-		ParameterType: "numérico",
-		Operators:     []string{"=", "!=", ">", "<", ">=", "<="},
-	}
-	categorizedRules["local"] = []sheetsDomain.RuleField{dateRule, availabilityRule}
+	
+	categorizedRules["local"] = []sheetsDomain.RuleField{dateRule}
 
 	sheetData, err := s.sheetService.FetchSheetData(pointOfSaleId)
 	if err == nil && len(sheetData.Values) >= 2 {
