@@ -105,26 +105,31 @@ func (s *itemSpecificationService) GetItemSpecByItemId(ctx context.Context, id s
 		return nil, err
 	}
 
-	for i, spec := range itemSpecs {
-		if spec.IsExternal {
-			credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, pointOfSaleId)
-			if err != nil {
-				continue
-			}
-			itemId := strings.TrimPrefix(spec.ItemId, "kivio-ecommerce∼")
-			itemRaw, err := s.ecommerceSvc.GetItemByIDRaw(ctx, itemId, credentials.ApiURL, credentials.ApiKey)
-			if err == nil && itemRaw != nil {
-				type externalProductResponse struct {
-					Products []struct {
-						StockQuantity int64 `json:"stock_quantity"`
-					} `json:"products"`
-				}
-				var extResp externalProductResponse
-				if err := json.Unmarshal(itemRaw, &extResp); err == nil && len(extResp.Products) > 0 {
-					itemSpecs[i].Availability = extResp.Products[0].StockQuantity
-				}
-			}
+	credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, pointOfSaleId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ecommerce credentials: %w", err)
+	}
+
+	var stockQuantity int64
+	itemId := strings.TrimPrefix(id, "kivio-ecommerce∼")
+	itemRaw, err := s.ecommerceSvc.GetItemByIDRaw(ctx, itemId, credentials.ApiURL, credentials.ApiKey)
+
+	if err == nil && itemRaw != nil {
+		var extResp struct {
+			Products []struct {
+				StockQuantity int64 `json:"stock_quantity"`
+			} `json:"products"`
+		}
+		if jsonErr := json.Unmarshal(itemRaw, &extResp); jsonErr == nil && len(extResp.Products) > 0 {
+			stockQuantity = extResp.Products[0].StockQuantity
 		}
 	}
+
+	for i, spec := range itemSpecs {
+		if spec.IsExternal {
+			itemSpecs[i].Availability = stockQuantity
+		}
+	}
+
 	return itemSpecs, nil
 }
