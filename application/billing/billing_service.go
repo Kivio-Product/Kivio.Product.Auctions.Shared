@@ -20,6 +20,7 @@ import (
 	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
 	emailService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
 
+	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
 	billingInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/billing"
 	itemInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item"
 	itemSpecInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item_specification"
@@ -45,6 +46,7 @@ type billingService struct {
 	emailService     emailService.EmailServiceInterface
 	ecommerceCredSvc ecommerceService.EcommerceCredentialsService
 	ecommerceSvc     ecommerceService.EcommerceService
+	offerService     offerService.IOfferService
 }
 
 func NewBillingService(
@@ -56,6 +58,7 @@ func NewBillingService(
 	emailService emailService.EmailServiceInterface,
 	ecommerceCredSvc ecommerceService.EcommerceCredentialsService,
 	ecommerceSvc ecommerceService.EcommerceService,
+	offerService offerService.IOfferService,
 ) BillingService {
 	return &billingService{
 		repo:             repo,
@@ -66,6 +69,7 @@ func NewBillingService(
 		emailService:     emailService,
 		ecommerceCredSvc: ecommerceCredSvc,
 		ecommerceSvc:     ecommerceSvc,
+		offerService:     offerService,
 	}
 }
 
@@ -343,8 +347,10 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 
 	var concatenatedItemNames []string
 	var concatenatedItemDescriptions []string
+	var concatenatedItemSpecsAvailability []int64
 	var firstOrderAmount int64
 	var customerEmail string
+	var offerId string
 
 	if res.Extra1 == "Quick offer" {
 		for idx, order := range validOrders {
@@ -387,6 +393,9 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 				customerEmail = order.CustomerId
 			}
 
+			if offerId == "" {
+				offerId = order.OfferId
+			}
 			switch state {
 			case "Approved":
 				order.State = "Approved"
@@ -418,6 +427,10 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 				continue
 			}
 
+			if itemSpec != nil {
+				concatenatedItemSpecsAvailability = append(concatenatedItemSpecsAvailability, itemSpec.Availability)
+			}
+
 			err = s.orderRepo.UpdateOrder(ctx, order)
 			if err != nil {
 				return fmt.Errorf("no se pudo actualizar la orden %s: %v", order.OrderId, err)
@@ -428,6 +441,22 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 				return fmt.Errorf("no se pudo actualizar el item specification %s: %v", order.ItemSpecificationId, err)
 			}
 		}
+
+		allZero := true
+		for _, availability := range concatenatedItemSpecsAvailability {
+			if availability != 0 {
+				allZero = false
+				break
+			}
+		}
+
+		if allZero {
+			err = s.offerService.UpdateOfferState(ctx, offerId, "Closed")
+			if err != nil {
+				return fmt.Errorf("no se pudo actualizar ela oferta %s: %v", offerId, err)
+			}
+		}
+
 		if customerEmail != "" && len(concatenatedItemNames) > 0 {
 			go func() {
 				err = s.emailService.NotifyOrder(ctx, state, customerEmail, firstOrderAmount, strings.Join(concatenatedItemNames, ", "))
