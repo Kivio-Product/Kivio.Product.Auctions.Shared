@@ -396,24 +396,16 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 			if offerId == "" {
 				offerId = order.OfferId
 			}
-			fmt.Printf("Procesando orden %d: %s, Item: %s, Amount: %d\n", idx+1, order.OrderId, item.Name, order.OfferedAmount)
 			switch state {
 			case "Approved":
 				order.State = "Approved"
 				itemSpec.Availability--
-				fmt.Printf("Actualizando stock del item %s: %d -> %d\n", itemSpec.ItemId, itemSpec.Availability+1, itemSpec.Availability)
 				if itemSpec.IsExternal && item != nil {
-					fmt.Printf("Actualizando stock del item externo %s: %d -> %d\n", itemSpec.ItemId, itemSpec.Availability+1, itemSpec.Availability)
 					credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, order.PointOfSaleId)
-					fmt.Printf("Error obteniendo credenciales de ecommerce: %v\n", err)
 					if err == nil {
-						fmt.Printf("credenciales de ecommerce: %v\n", credentials)
 						itemId := strings.TrimPrefix(itemSpec.ItemId, "kivio-ecommerce∼")
-						fmt.Printf("ItemId: %s\n", itemId)
 						itemRaw, err := s.ecommerceSvc.GetItemByIDRaw(ctx, itemId, credentials.ApiURL, credentials.ApiKey)
-						fmt.Printf("Error obteniendo credenciales de ecommerce item raw: %v\n", itemRaw)
 						if err == nil && itemRaw != nil {
-							fmt.Printf("Actualizando stock del item externo %s\n", itemId)
 							type externalProductResponse struct {
 								Products []struct {
 									StockQuantity int64 `json:"stock_quantity"`
