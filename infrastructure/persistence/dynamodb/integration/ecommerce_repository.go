@@ -180,7 +180,9 @@ func (r *ecommerceRepository) GetCustomerByID(baseUrl, apiKey, id string) (*cust
 func (r *ecommerceRepository) UpdateItemStock(baseUrl, apiKey, itemId string, newStock int64) error {
 	url := fmt.Sprintf("%s/api/products/%s", baseUrl, itemId)
 	payload := map[string]interface{}{
-		"stock_quantity": newStock,
+		"product": map[string]interface{}{
+			"stock_quantity": newStock,
+		},
 	}
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
