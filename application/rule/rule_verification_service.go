@@ -141,6 +141,23 @@ func (s *ruleVerificationService) ProcessRules(ctx context.Context, offerId stri
 		hasActiveRule bool
 	)
 
+	var ecommerceItems map[string]interface{}
+	if len(rules) > 0 {
+		credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, rules[0].PosId)
+		if err != nil {
+			fmt.Printf("Advertencia: Error al obtener credenciales de e-commerce para POS %s: %v\n", rules[0].PosId, err)
+		} else {
+			rawData, err := s.ecommerceSvc.GetAllItemsRaw(ctx, credentials.ApiURL, credentials.ApiKey)
+			if err != nil {
+				fmt.Printf("Advertencia: Error al obtener datos de e-commerce para POS %s: %v\n", rules[0].PosId, err)
+			} else {
+				if err := json.Unmarshal(rawData, &ecommerceItems); err != nil {
+					fmt.Printf("Advertencia: Error al parsear datos de e-commerce para POS %s: %v\n", rules[0].PosId, err)
+				}
+			}
+		}
+	}
+
 	semaphore := make(chan struct{}, 5)
 
 	for i := range rules {
@@ -150,7 +167,7 @@ func (s *ruleVerificationService) ProcessRules(ctx context.Context, offerId stri
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
-			if err := s.processRule(ctx, rule, &hasActiveRule); err != nil {
+			if err := s.processRule(ctx, rule, &hasActiveRule, ecommerceItems); err != nil {
 				fmt.Printf("Error al procesar la regla %s para la oferta %s: %v\n", rule.RuleId, offerId, err)
 			}
 		}(&rules[i])
@@ -160,7 +177,7 @@ func (s *ruleVerificationService) ProcessRules(ctx context.Context, offerId stri
 	return hasActiveRule, nil
 }
 
-func (s *ruleVerificationService) processRule(ctx context.Context, rule *domain.Rule, hasActiveRule *bool) error {
+func (s *ruleVerificationService) processRule(ctx context.Context, rule *domain.Rule, hasActiveRule *bool, ecommerceItems map[string]interface{}) error {
 	var mu sync.Mutex
 	specifications, err := s.ruleRepo.GetRulesSpecification(rule.RuleId)
 	if err != nil {
@@ -170,23 +187,6 @@ func (s *ruleVerificationService) processRule(ctx context.Context, rule *domain.
 	itemSpecs, err := s.itemSpecSvc.GetItemSpecByOfferId(ctx, rule.OfferId, rule.PosId)
 	if err != nil {
 		return fmt.Errorf("fallo al obtener especificaciones de artículo para la oferta %s y POS %s: %w", rule.OfferId, rule.PosId, err)
-	}
-
-	var ecommerceItems map[string]interface{}
-	if len(specifications) > 0 {
-		credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, rule.PosId)
-		if err != nil {
-			fmt.Printf("Advertencia: Error al obtener credenciales de e-commerce para POS %s: %v\n", rule.PosId, err)
-		} else {
-			rawData, err := s.ecommerceSvc.GetItemsRaw(ctx, credentials.ApiURL, credentials.ApiKey, 1, 200, false)
-			if err != nil {
-				fmt.Printf("Advertencia: Error al obtener datos de e-commerce para POS %s: %v\n", rule.PosId, err)
-			} else {
-				if err := json.Unmarshal(rawData, &ecommerceItems); err != nil {
-					fmt.Printf("Advertencia: Error al parsear datos de e-commerce para POS %s: %v\n", rule.PosId, err)
-				}
-			}
-		}
 	}
 
 	isActive := s.evaluateRuleSpecifications(specifications, itemSpecs, rule.ItemSpecificationId, ecommerceItems)

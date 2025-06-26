@@ -20,6 +20,7 @@ type EcommerceRepository interface {
 	GetCustomerByID(baseUrl, apiKey, id string) (*customerDomain.Customer, error)
 	GetApiKey(username, password, tokenUrl string) (string, error)
 	UpdateItemStock(baseUrl, apiKey, itemId string, newStock int64) error
+	GetAllItemsRaw(baseUrl, apiKey string) ([]byte, error)
 }
 
 type ecommerceRepository struct {
@@ -204,4 +205,8 @@ func (r *ecommerceRepository) UpdateItemStock(baseUrl, apiKey, itemId string, ne
 		return fmt.Errorf("failed to update stock, status code: %d", resp.StatusCode)
 	}
 	return nil
+}
+
+func (r *ecommerceRepository) GetAllItemsRaw(baseUrl, apiKey string) ([]byte, error) {
+	return r.client.GetAllItems(baseUrl, apiKey)
 }

@@ -15,6 +15,7 @@ type EcommerceClient interface {
 	GetItemByID(baseUrl, apiKey, itemId string) ([]byte, error)
 	GetCustomers(baseUrl, apiKey string) ([]byte, error)
 	GetCustomerByID(baseUrl, apiKey, id string) ([]byte, error)
+	GetAllItems(baseUrl, apiKey string) ([]byte, error)
 }
 
 type ecommerceClient struct {
@@ -167,6 +168,29 @@ func (c *ecommerceClient) GetCustomerByID(baseUrl, apiKey, id string) ([]byte, e
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	return ioutil.ReadAll(resp.Body)
+}
+
+func (c *ecommerceClient) GetAllItems(baseUrl, apiKey string) ([]byte, error) {
+	url := fmt.Sprintf("%s/api/products", baseUrl)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to get all items, status code: %d", resp.StatusCode)
 	}
 
 	return ioutil.ReadAll(resp.Body)
