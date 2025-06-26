@@ -410,7 +410,8 @@ func interfaceSliceToStringSlice(slice []interface{}) []string {
 }
 
 func verifyNumericValue(value float64, spec ruleSpecDomain.RuleSpecification) bool {
-	parameterValue, err := strconv.ParseFloat(spec.Type, 64)
+	cleanStr := strings.ReplaceAll(spec.Type, ".", "")
+	parameterValue, err := strconv.ParseFloat(cleanStr, 64)
 	if err != nil {
 		fmt.Printf("Error al parsear spec.Type '%s' como float64 en verifyNumericValue: %v\n", spec.Type, err)
 		return false
