@@ -145,7 +145,9 @@ func (r *ecommerceRepository) GetItemByID(baseUrl, apiKey, itemId string) (*item
 }
 
 func (r *ecommerceRepository) GetItemByIDRaw(baseUrl, apiKey, itemId string) ([]byte, error) {
+	fmt.Println("Fetching item by ID:", itemId, "from API URL:", baseUrl)
 	itemId = strings.TrimPrefix(itemId, "kivio-ecommerce∼")
+	fmt.Println("Trimmed itemId:", itemId)
 	return r.client.GetItemByID(baseUrl, apiKey, itemId)
 }
 

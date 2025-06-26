@@ -103,6 +103,7 @@ func (c *ecommerceClient) GetItems(baseUrl, apiKey string, page, limit int, publ
 }
 
 func (c *ecommerceClient) GetItemByID(baseUrl, apiKey, itemId string) ([]byte, error) {
+	fmt.Println("Fetching item by ID:", itemId, "from API URL:", baseUrl)
 	url := fmt.Sprintf("%s/api/products/%s", baseUrl, itemId)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -113,6 +114,7 @@ func (c *ecommerceClient) GetItemByID(baseUrl, apiKey, itemId string) ([]byte, e
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
 
 	resp, err := c.httpClient.Do(req)
+	fmt.Println("Request sent to:", url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
@@ -121,6 +123,8 @@ func (c *ecommerceClient) GetItemByID(baseUrl, apiKey, itemId string) ([]byte, e
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to get item, status code: %d", resp.StatusCode)
 	}
+
+	fmt.Println("Response status code:", resp.Body)
 
 	return ioutil.ReadAll(resp.Body)
 }

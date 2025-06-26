@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 
 	customerDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/customer"
 	itemDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
@@ -43,6 +44,7 @@ func (s *ecommerceService) GetItemByID(ctx context.Context, id, apiUrl, apiKey s
 }
 
 func (s *ecommerceService) GetItemByIDRaw(ctx context.Context, id, apiUrl, apiKey string) ([]byte, error) {
+	fmt.Println("Fetching item by ID:", id, "from API URL:", apiUrl)
 	return s.repo.GetItemByIDRaw(apiUrl, apiKey, id)
 }
 
