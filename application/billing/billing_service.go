@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -390,6 +391,27 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 			case "Approved":
 				order.State = "Approved"
 				itemSpec.Availability--
+				if itemSpec.IsExternal && item != nil {
+					credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, itemSpec.PointOfSaleId)
+					if err == nil {
+						itemId := strings.TrimPrefix(itemSpec.ItemId, "kivio-ecommerce∼")
+						itemRaw, err := s.ecommerceSvc.GetItemByIDRaw(ctx, credentials.ApiURL, credentials.ApiKey, itemId)
+						if err == nil && itemRaw != nil {
+							type externalProductResponse struct {
+								Products []struct {
+									StockQuantity int64 `json:"stock_quantity"`
+								} `json:"products"`
+							}
+							var extResp externalProductResponse
+							if err := json.Unmarshal(itemRaw, &extResp); err == nil && len(extResp.Products) > 0 {
+								stock := extResp.Products[0].StockQuantity
+								if stock > 0 {
+									_ = s.ecommerceSvc.UpdateItemStock(ctx, credentials.ApiURL, credentials.ApiKey, itemId, stock-1)
+								}
+							}
+						}
+					}
+				}
 			case "Rejected", "Error":
 				order.State = "Rejected"
 			default:

@@ -3,6 +3,7 @@ package infrastructure
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 
 	customerDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/customer"
@@ -14,9 +15,11 @@ type EcommerceRepository interface {
 	GetItems(baseUrl, apiKey string, page, limit int) ([]itemDomain.Item, error)
 	GetItemsRaw(baseUrl, apiKey string, page, limit int, publishedStatus bool) ([]byte, error)
 	GetItemByID(baseUrl, apiKey, itemId string) (*itemDomain.Item, error)
+	GetItemByIDRaw(baseUrl, apiKey, itemId string) ([]byte, error)
 	GetCustomers(baseUrl, apiKey string) ([]customerDomain.Customer, error)
 	GetCustomerByID(baseUrl, apiKey, id string) (*customerDomain.Customer, error)
 	GetApiKey(username, password, tokenUrl string) (string, error)
+	UpdateItemStock(baseUrl, apiKey, itemId string, newStock int64) error
 }
 
 type ecommerceRepository struct {
@@ -140,6 +143,11 @@ func (r *ecommerceRepository) GetItemByID(baseUrl, apiKey, itemId string) (*item
 	return item, nil
 }
 
+func (r *ecommerceRepository) GetItemByIDRaw(baseUrl, apiKey, itemId string) ([]byte, error) {
+	itemId = strings.TrimPrefix(itemId, "kivio-ecommerce∼")
+	return r.client.GetItemByID(baseUrl, apiKey, itemId)
+}
+
 func (r *ecommerceRepository) GetCustomers(baseUrl, apiKey string) ([]customerDomain.Customer, error) {
 	respBody, err := r.client.GetCustomers(baseUrl, apiKey)
 	if err != nil {
@@ -166,4 +174,34 @@ func (r *ecommerceRepository) GetCustomerByID(baseUrl, apiKey, id string) (*cust
 	}
 
 	return &customer, nil
+}
+
+func (r *ecommerceRepository) UpdateItemStock(baseUrl, apiKey, itemId string, newStock int64) error {
+	url := fmt.Sprintf("%s/api/products/%s", baseUrl, itemId)
+	payload := map[string]interface{}{
+		"stock_quantity": newStock,
+	}
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	req, err := http.NewRequest("PUT", url, strings.NewReader(string(jsonPayload)))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 && resp.StatusCode != 204 {
+		return fmt.Errorf("failed to update stock, status code: %d", resp.StatusCode)
+	}
+	return nil
 }

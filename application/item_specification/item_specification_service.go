@@ -2,9 +2,11 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
+	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item_specification"
 	itemSpecInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item_specification"
 )
@@ -22,10 +24,22 @@ type ItemSpecificationService interface {
 type itemSpecificationService struct {
 	repo                     itemSpecInfrastructure.ItemSpecificationRepository
 	itemSpecificationFactory domain.ItemSpecificationFactory
+	ecommerceCredSvc         ecommerceService.EcommerceCredentialsService
+	ecommerceSvc             ecommerceService.EcommerceService
 }
 
-func NewItemSpecificationService(repo itemSpecInfrastructure.ItemSpecificationRepository, itemSpecificationFactory domain.ItemSpecificationFactory) ItemSpecificationService {
-	return &itemSpecificationService{repo: repo, itemSpecificationFactory: itemSpecificationFactory}
+func NewItemSpecificationService(
+	repo itemSpecInfrastructure.ItemSpecificationRepository,
+	itemSpecificationFactory domain.ItemSpecificationFactory,
+	ecommerceCredSvc ecommerceService.EcommerceCredentialsService,
+	ecommerceSvc ecommerceService.EcommerceService,
+) ItemSpecificationService {
+	return &itemSpecificationService{
+		repo:                     repo,
+		itemSpecificationFactory: itemSpecificationFactory,
+		ecommerceCredSvc:         ecommerceCredSvc,
+		ecommerceSvc:             ecommerceSvc,
+	}
 }
 
 func (s *itemSpecificationService) Create(ctx context.Context, currency, offerId, itemId, pointOfSaleId string, amount, availability int64, expireAt time.Time, isExternal bool) (*domain.ItemSpecification, error) {
@@ -85,9 +99,31 @@ func (s *itemSpecificationService) GetItemSpecByOfferId(ctx context.Context, id 
 }
 
 func (s *itemSpecificationService) GetItemSpecByItemId(ctx context.Context, id string, pointOfSaleId string) ([]domain.ItemSpecification, error) {
-	order, err := s.repo.GetItemSpecByItem(id, pointOfSaleId)
+	itemSpecs, err := s.repo.GetItemSpecByItem(id, pointOfSaleId)
 	if err != nil {
 		return nil, err
 	}
-	return order, nil
+
+	for i, spec := range itemSpecs {
+		if spec.IsExternal {
+			credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, pointOfSaleId)
+			if err != nil {
+				continue
+			}
+			itemId := spec.ItemId
+			itemRaw, err := s.ecommerceSvc.GetItemByIDRaw(ctx, itemId, credentials.ApiURL, credentials.ApiKey)
+			if err == nil && itemRaw != nil {
+				type externalProductResponse struct {
+					Products []struct {
+						StockQuantity int64 `json:"stock_quantity"`
+					} `json:"products"`
+				}
+				var extResp externalProductResponse
+				if err := json.Unmarshal(itemRaw, &extResp); err == nil && len(extResp.Products) > 0 {
+					itemSpecs[i].Availability = extResp.Products[0].StockQuantity
+				}
+			}
+		}
+	}
+	return itemSpecs, nil
 }
