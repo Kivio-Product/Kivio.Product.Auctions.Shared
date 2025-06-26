@@ -410,7 +410,7 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 						fmt.Printf("credenciales de ecommerce: %v\n", credentials)
 						itemId := strings.TrimPrefix(itemSpec.ItemId, "kivio-ecommerce∼")
 						fmt.Printf("ItemId: %s\n", itemId)
-						itemRaw, err := s.ecommerceSvc.GetItemByIDRaw(ctx, credentials.ApiKey, credentials.ApiURL, itemId)
+						itemRaw, err := s.ecommerceSvc.GetItemByIDRaw(ctx, itemId, credentials.ApiURL, credentials.ApiKey)
 						fmt.Printf("Error obteniendo credenciales de ecommerce item raw: %v\n", itemRaw)
 						if err == nil && itemRaw != nil {
 							fmt.Printf("Actualizando stock del item externo %s\n", itemId)
