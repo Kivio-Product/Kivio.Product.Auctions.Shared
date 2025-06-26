@@ -396,16 +396,20 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 			if offerId == "" {
 				offerId = order.OfferId
 			}
+			fmt.Printf("Procesando orden %d: %s, Item: %s, Amount: %d\n", idx+1, order.OrderId, item.Name, order.OfferedAmount)
 			switch state {
 			case "Approved":
 				order.State = "Approved"
 				itemSpec.Availability--
+				fmt.Printf("Actualizando stock del item %s: %d -> %d\n", itemSpec.ItemId, itemSpec.Availability+1, itemSpec.Availability)
 				if itemSpec.IsExternal && item != nil {
+					fmt.Printf("Actualizando stock del item externo %s: %d -> %d\n", itemSpec.ItemId, itemSpec.Availability+1, itemSpec.Availability)
 					credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, itemSpec.PointOfSaleId)
 					if err == nil {
 						itemId := strings.TrimPrefix(itemSpec.ItemId, "kivio-ecommerce∼")
 						itemRaw, err := s.ecommerceSvc.GetItemByIDRaw(ctx, credentials.ApiURL, credentials.ApiKey, itemId)
 						if err == nil && itemRaw != nil {
+							fmt.Printf("Actualizando stock del item externo %s\n", itemId)
 							type externalProductResponse struct {
 								Products []struct {
 									StockQuantity int64 `json:"stock_quantity"`
