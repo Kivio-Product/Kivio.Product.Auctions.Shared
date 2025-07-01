@@ -2,19 +2,23 @@ package services
 
 import (
 	"context"
+	"strings"
 	"fmt"
 
+	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
 	itemSpecService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/item_specification"
 	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
 	integrationInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/integration"
 	itemInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item"
+	itemSpecInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item_specification"
 )
 
 type ItemService interface {
 	CreateItem(ctx context.Context, name, description, externalId, pointOfSaleId, url string) (*domain.Item, error)
 	GetItems() ([]domain.Item, error)
 	GetItemById(ctx context.Context, id string) (*domain.Item, error)
+	GetItemBySpecId(ctx context.Context, specId string) (*domain.Item, error)
 	UpdateItem(ctx context.Context, id, name, description, externalId, pointOfSaleId, url string) error
 	DeleteItemById(ctx context.Context, id string) error
 	GetItemsByPosId(ctx context.Context, id string) ([]domain.Item, error)
@@ -27,6 +31,9 @@ type itemService struct {
 	itemFactory           domain.ItemFactory
 	itemSpecService       itemSpecService.ItemSpecificationService
 	offerService          offerService.IOfferService
+	itemSpecRepo          itemSpecInfrastructure.ItemSpecificationRepository
+	ecommerceCredSvc      ecommerceService.EcommerceCredentialsService
+	ecommerceSvc          ecommerceService.EcommerceService
 }
 
 func NewItemService(
@@ -35,6 +42,9 @@ func NewItemService(
 	integrationRepository integrationInfrastructure.IntegrationRepository,
 	itemSpecService itemSpecService.ItemSpecificationService,
 	offerService offerService.IOfferService,
+	itemSpecRepo itemSpecInfrastructure.ItemSpecificationRepository,
+	ecommerceCredSvc ecommerceService.EcommerceCredentialsService,
+	ecommerceSvc ecommerceService.EcommerceService,
 ) ItemService {
 	return &itemService{
 		repo:                  repo,
@@ -42,6 +52,9 @@ func NewItemService(
 		integrationRepository: integrationRepository,
 		itemSpecService:       itemSpecService,
 		offerService:          offerService,
+		itemSpecRepo:          itemSpecRepo,
+		ecommerceCredSvc:      ecommerceCredSvc,
+		ecommerceSvc:          ecommerceSvc,
 	}
 }
 
@@ -83,6 +96,35 @@ func (s *itemService) GetItemById(ctx context.Context, id string) (*domain.Item,
 		return &domain.Item{}, err
 	}
 	return items, nil
+}
+
+func (s *itemService) GetItemBySpecId(ctx context.Context, id string) (*domain.Item, error) {
+	var item *domain.Item
+
+	itemSpec, err := s.itemSpecRepo.GetById(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if itemSpec.IsExternal {
+		credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, itemSpec.PointOfSaleId)
+		if err != nil {
+			return nil, err
+		}
+
+		itemId := strings.TrimPrefix(itemSpec.ItemId, "kivio-ecommerce∼")
+		item, err = s.ecommerceSvc.GetItemByID(ctx, credentials.ApiURL, credentials.ApiKey, itemId)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		item, err = s.repo.GetItemById(ctx, itemSpec.ItemId)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return item, nil
 }
 
 func (s *itemService) GetItemsByPosId(ctx context.Context, id string) ([]domain.Item, error) {
