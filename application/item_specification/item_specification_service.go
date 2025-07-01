@@ -125,6 +125,20 @@ func (s *itemSpecificationService) GetItemSpecByItemId(ctx context.Context, id s
 		}
 	}
 
+	if len(itemSpecs) == 0 && stockQuantity > 0 {
+		itemSpecs = append(itemSpecs, domain.ItemSpecification{
+			Id:            "",
+			Amount:        0,
+			Currency:      "",
+			ExpireAt:      time.Now().Add(24 * time.Hour),
+			OfferId:       "",
+			ItemId:        id,
+			Availability:  stockQuantity,
+			IsExternal:    true,
+			PointOfSaleId: pointOfSaleId,
+		})
+	}
+
 	for i, spec := range itemSpecs {
 		if spec.IsExternal {
 			itemSpecs[i].Availability = stockQuantity
