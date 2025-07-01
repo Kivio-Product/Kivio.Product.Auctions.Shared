@@ -2,7 +2,10 @@ package services
 
 import (
 	"context"
+	"fmt"
 
+	itemSpecService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/item_specification"
+	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
 	integrationInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/integration"
 	itemInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item"
@@ -22,17 +25,23 @@ type itemService struct {
 	repo                  itemInfrastructure.ItemRepository
 	integrationRepository integrationInfrastructure.IntegrationRepository
 	itemFactory           domain.ItemFactory
+	itemSpecService       itemSpecService.ItemSpecificationService
+	offerService          offerService.IOfferService
 }
 
 func NewItemService(
 	repo itemInfrastructure.ItemRepository,
 	itemFactory domain.ItemFactory,
 	integrationRepository integrationInfrastructure.IntegrationRepository,
+	itemSpecService itemSpecService.ItemSpecificationService,
+	offerService offerService.IOfferService,
 ) ItemService {
 	return &itemService{
 		repo:                  repo,
 		itemFactory:           itemFactory,
 		integrationRepository: integrationRepository,
+		itemSpecService:       itemSpecService,
+		offerService:          offerService,
 	}
 }
 
@@ -99,6 +108,27 @@ func (s *itemService) UpdateItem(ctx context.Context, id, name, description, ext
 }
 
 func (s *itemService) DeleteItemById(ctx context.Context, id string) error {
-	err := s.repo.DeleteItem(ctx, id)
-	return err
+	itemSpecs, err := s.itemSpecService.GetItemSpecByItemId(ctx, id, "")
+	if err != nil {
+		return err
+	}
+
+	offerIdSet := make(map[string]struct{})
+	for _, spec := range itemSpecs {
+		if spec.OfferId != "" {
+			offerIdSet[spec.OfferId] = struct{}{}
+		}
+	}
+
+	for offerId := range offerIdSet {
+		offer, err := s.offerService.GetOfferById(ctx, offerId)
+		if err != nil {
+			return err
+		}
+		if offer.State == "active" || offer.State == "Active" {
+			return fmt.Errorf("no se puede eliminar el item porque tiene ofertas activas asociadas (OfferId: %s)", offerId)
+		}
+	}
+
+	return s.repo.DeleteItem(ctx, id)
 }
