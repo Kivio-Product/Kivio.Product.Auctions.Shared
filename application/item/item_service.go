@@ -108,7 +108,15 @@ func (s *itemService) UpdateItem(ctx context.Context, id, name, description, ext
 }
 
 func (s *itemService) DeleteItemById(ctx context.Context, id string) error {
-	itemSpecs, err := s.itemSpecService.GetItemSpecByItemId(ctx, id, "")
+	item, err := s.repo.GetItemById(ctx, id)
+	if err != nil {
+		return err
+	}
+	if item.PointOfSaleId == "" {
+		return fmt.Errorf("el item no tiene PointOfSaleId, no se puede continuar")
+	}
+
+	itemSpecs, err := s.itemSpecService.GetItemSpecByItemId(ctx, id, item.PointOfSaleId)
 	if err != nil {
 		return err
 	}
