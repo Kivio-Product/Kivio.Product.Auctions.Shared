@@ -125,7 +125,7 @@ func (s *itemService) DeleteItemById(ctx context.Context, id string) error {
 		if err != nil {
 			return err
 		}
-		if offer.State == "active" || offer.State == "Active" {
+		if offer.State == "Created" || offer.State == "Offered" {
 			return fmt.Errorf("no se puede eliminar el item porque tiene ofertas activas asociadas (OfferId: %s)", offerId)
 		}
 	}
