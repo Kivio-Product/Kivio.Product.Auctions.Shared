@@ -44,10 +44,11 @@ func (r *ecommerceRepository) GetItems(baseUrl, apiKey string, page, limit int) 
 	}
 
 	type Product struct {
-		ID          int    `json:"id"`
-		Name        string `json:"name"`
-		Description string `json:"short_description"`
-		Images      []struct {
+		ID            int    `json:"id"`
+		Name          string `json:"name"`
+		Description   string `json:"short_description"`
+		StockQuantity int64  `json:"stock_quantity"`
+		Images        []struct {
 			Src string `json:"src"`
 		} `json:"images"`
 		Published bool `json:"published"`
@@ -69,6 +70,11 @@ func (r *ecommerceRepository) GetItems(baseUrl, apiKey string, page, limit int) 
 		if !product.Published {
 			continue
 		}
+
+		if product.StockQuantity <= 0 {
+			continue
+		}
+
 		var imageURL string
 		if len(product.Images) > 0 {
 			imageURL = product.Images[0].Src
