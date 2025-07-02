@@ -2,8 +2,9 @@ package services
 
 import (
 	"context"
-	"strings"
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
 	itemSpecService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/item_specification"
@@ -79,7 +80,52 @@ func (s *itemService) GetItems() ([]domain.Item, error) {
 	if err != nil {
 		return nil, err
 	}
-	return items, nil
+
+	var filteredItems []domain.Item
+	for _, item := range items {
+		if !strings.HasPrefix(item.ItemId, "kivio-ecommerce∼") {
+			itemSpecs, err := s.itemSpecRepo.GetItemSpecByItem(item.ItemId, item.PointOfSaleId)
+			if err != nil {
+				continue
+			}
+
+			hasStock := false
+			for _, spec := range itemSpecs {
+				if spec.Availability > 0 {
+					hasStock = true
+					break
+				}
+			}
+
+			if hasStock {
+				filteredItems = append(filteredItems, item)
+			}
+		} else {
+			credentials, err := s.ecommerceCredSvc.GetCredentials(context.Background(), item.PointOfSaleId)
+			if err != nil {
+				continue
+			}
+
+			itemId := strings.TrimPrefix(item.ItemId, "kivio-ecommerce∼")
+			itemRaw, err := s.ecommerceSvc.GetItemByIDRaw(context.Background(), itemId, credentials.ApiURL, credentials.ApiKey)
+			if err != nil {
+				continue
+			}
+
+			var extResp struct {
+				Products []struct {
+					StockQuantity int64 `json:"stock_quantity"`
+				} `json:"products"`
+			}
+			if err := json.Unmarshal(itemRaw, &extResp); err == nil && len(extResp.Products) > 0 {
+				if extResp.Products[0].StockQuantity > 0 {
+					filteredItems = append(filteredItems, item)
+				}
+			}
+		}
+	}
+
+	return filteredItems, nil
 }
 
 func (s *itemService) GetItemsByUserId(ctx context.Context, id string) ([]domain.Item, error) {
