@@ -93,7 +93,7 @@ func (s *ruleVerificationService) processOfferRules(ctx context.Context, offerId
 		return fmt.Errorf("fallo al obtener la oferta con ID %s: %w", offerId, err)
 	}
 
-	if offer.State == "Offered" {
+	if offer.State == "Offered" || offer.State == "Closed" {
 		fmt.Printf("Omitiendo oferta %s: ya está en estado 'Offered'\n", offerId)
 		return nil
 	}
