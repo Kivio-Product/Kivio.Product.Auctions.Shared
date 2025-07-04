@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"sync"
 
@@ -127,8 +128,14 @@ func (s *OfferService) GetOfferById(ctx context.Context, id string) (*domain.Off
 }
 
 func (s *OfferService) DeleteOfferById(ctx context.Context, id string) error {
-	err := s.repo.DeleteOffer(ctx, id)
-	return err
+	offer, err := s.repo.GetOfferById(ctx, id)
+	if err != nil {
+		return err
+	}
+	if offer.State == domain.StateActive {
+		return fmt.Errorf("No se puede eliminar una oferta con estado 'Offered'")
+	}
+	return s.repo.DeleteOffer(ctx, id)
 }
 
 func (s *OfferService) GetOffersByPosId(ctx context.Context, id string, limit string, lastEvaluatedKey map[string]*dynamodb.AttributeValue) ([]domain.Offer, map[string]*dynamodb.AttributeValue, error) {
