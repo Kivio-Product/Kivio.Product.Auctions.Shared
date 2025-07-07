@@ -227,7 +227,7 @@ func (r *orderRepository) GetOrdersPaginated(ctx context.Context, params domain.
 		filterExpression = &expr
 	}
 
-	indexName := "PointOfSaleId-index"
+	indexName := "SortKey-CreatedAt-index"
 
 	input := &dynamodb.QueryInput{
 		TableName:              aws.String(r.orderTable),
