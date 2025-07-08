@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -12,6 +13,7 @@ import (
 	itemDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
 	itemSpecDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item_specification"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/offer"
+	scheduler "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/scheduler"
 	itemRepository "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item"
 	itemSpecRepository "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item_specification"
 	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/offer"
@@ -44,6 +46,7 @@ type OfferService struct {
 	itemSpecRepository itemSpecRepository.ItemSpecificationRepository
 	ecommerceService   ecommerceService.EcommerceService
 	ecommerceCredSvc   ecommerceService.EcommerceCredentialsService
+	scheduler          scheduler.SchedulerService
 }
 
 type OfferWithDetails struct {
@@ -62,7 +65,7 @@ type OfferWithItemsAndSpecs struct {
 	Items []ItemWithSpecs `json:"items"`
 }
 
-func NewofferService(repo infrastructure.IOfferRepository, offerFactory domain.OfferFactory, emailSender emailService.EmailServiceInterface, itemRepository itemRepository.ItemRepository, itemSpecRepository itemSpecRepository.ItemSpecificationRepository, ecommerceService ecommerceService.EcommerceService, ecommerceCredSvc ecommerceService.EcommerceCredentialsService) IOfferService {
+func NewofferService(repo infrastructure.IOfferRepository, offerFactory domain.OfferFactory, emailSender emailService.EmailServiceInterface, itemRepository itemRepository.ItemRepository, itemSpecRepository itemSpecRepository.ItemSpecificationRepository, ecommerceService ecommerceService.EcommerceService, ecommerceCredSvc ecommerceService.EcommerceCredentialsService, scheduler scheduler.SchedulerService) IOfferService {
 	return &OfferService{
 		repo:               repo,
 		offerFactory:       offerFactory,
@@ -71,6 +74,7 @@ func NewofferService(repo infrastructure.IOfferRepository, offerFactory domain.O
 		itemSpecRepository: itemSpecRepository,
 		ecommerceService:   ecommerceService,
 		ecommerceCredSvc:   ecommerceCredSvc,
+		scheduler:          scheduler,
 	}
 }
 
@@ -111,6 +115,16 @@ func (s *OfferService) UpdateOfferState(ctx context.Context, offerId, state stri
 	}
 	if state == domain.StateActive {
 		offer.SetOfferTime(time.Now())
+		if offer.OfferTime != nil {
+			timeToSum := time.Duration(offer.AuctionTime)*time.Hour + 2*time.Minute
+			ruleName := fmt.Sprintf("activate-offer-%s", offer.OfferId)
+			payload := fmt.Sprintf(`{"offerId":"%s"}`, offer.OfferId)
+			lambdaArn := os.Getenv("ORDER_STATE_LAMBDA_ARN")
+			err := s.scheduler.ScheduleLambda(*offer.OfferTime, timeToSum, lambdaArn, ruleName, payload)
+			if err != nil {
+				fmt.Printf("Error programando schedule para oferta %s: %v\n", offer.OfferId, err)
+			}
+		}
 	}
 	return s.repo.SaveOffer(ctx, offer)
 }
