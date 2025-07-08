@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"time"
 
 	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
 	emailService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
@@ -107,6 +108,9 @@ func (s *OfferService) UpdateOfferState(ctx context.Context, offerId, state stri
 	err = offer.UpdateState(state)
 	if err != nil {
 		return err
+	}
+	if state == domain.StateActive {
+		offer.SetOfferTime(time.Now())
 	}
 	return s.repo.SaveOffer(ctx, offer)
 }

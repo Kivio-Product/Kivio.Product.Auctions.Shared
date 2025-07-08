@@ -15,6 +15,7 @@ type Offer struct {
 	Type        string
 	AuctionTime int64
 	SortKey     string
+	OfferTime   *time.Time
 }
 
 var (
@@ -45,4 +46,8 @@ func (o *Offer) UpdateState(state string) error {
 	}
 	o.State = state
 	return nil
+}
+
+func (o *Offer) SetOfferTime(t time.Time) {
+	o.OfferTime = &t
 }
