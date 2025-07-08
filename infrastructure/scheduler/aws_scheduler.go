@@ -13,8 +13,8 @@ type AwsScheduler struct {
 	eventBridge *eventbridge.EventBridge
 }
 
-func NewAwsScheduler(region string) (*AwsScheduler, error) {
-	sess, err := session.NewSession(&aws.Config{Region: aws.String(region)})
+func NewAwsScheduler() (*AwsScheduler, error) {
+	sess, err := session.NewSession(&aws.Config{Region: aws.String("us-east-1")})
 	if err != nil {
 		return nil, err
 	}
