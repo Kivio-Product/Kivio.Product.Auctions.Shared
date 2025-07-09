@@ -115,7 +115,7 @@ func (s *OfferService) UpdateOfferState(ctx context.Context, offerId, state stri
 	}
 	if state == domain.StateActive {
 		offer.SetOfferTime(time.Now())
-		if offer.OfferTime != nil {
+		if offer.OfferTime != nil && offer.Type == "Regular auction" {
 			timeToSum := time.Duration(offer.AuctionTime)*time.Hour + 2*time.Minute
 			ruleName := fmt.Sprintf("activate-offer-%s", offer.OfferId)
 			payload := fmt.Sprintf(`{"offerId":"%s"}`, offer.OfferId)

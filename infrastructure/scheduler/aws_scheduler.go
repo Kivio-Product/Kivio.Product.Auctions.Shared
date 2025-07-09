@@ -24,12 +24,24 @@ func NewAwsScheduler() (*AwsScheduler, error) {
 }
 
 func (s *AwsScheduler) ScheduleLambda(scheduledTime time.Time, timeToSum time.Duration, targetArn, ruleName, payload string) error {
-	execTime := scheduledTime.Add(timeToSum)
-	scheduleStr := execTime.UTC().Format("2006-01-02T15:04:05Z")
+
+	execTime := scheduledTime.Add(timeToSum).UTC()
+
+	cronExpr := fmt.Sprintf(
+		"cron(%d %d %d %d ? %d)",
+		execTime.Minute(),
+		execTime.Hour(),
+		execTime.Day(),
+		int(execTime.Month()),
+		execTime.Year(),
+	)
+
+	fmt.Printf("Scheduling Lambda at %s with payload: %s\n", execTime.Format(time.RFC3339), payload)
+	fmt.Printf("Using cron expression: %s\n", cronExpr)
 
 	_, err := s.eventBridge.PutRule(&eventbridge.PutRuleInput{
 		Name:               aws.String(ruleName),
-		ScheduleExpression: aws.String(fmt.Sprintf("at(%s)", scheduleStr)),
+		ScheduleExpression: aws.String(cronExpr),
 		State:              aws.String("ENABLED"),
 	})
 	if err != nil {
