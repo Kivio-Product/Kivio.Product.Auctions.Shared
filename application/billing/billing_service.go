@@ -353,12 +353,13 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 	var offerId string
 
 	if res.Extra1 == "Quick offer" {
-		for idx, order := range validOrders {
+		for _, order := range validOrders {
 			itemSpec, err := s.itemSpecRepo.GetById(ctx, order.ItemSpecificationId)
 			if err != nil {
 				fmt.Printf("no se encontro el itemSpec con Id: %s\n", order.ItemSpecificationId)
 				continue
 			}
+			concatenatedItemNames = append(concatenatedItemNames, order.ExtraData)
 
 			var item *itemDomain.Item
 			if itemSpec.IsExternal {
@@ -383,10 +384,9 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 			}
 
 			if item != nil {
-				concatenatedItemNames = append(concatenatedItemNames, item.Name)
 				concatenatedItemDescriptions = append(concatenatedItemDescriptions, item.Description)
 			}
-			if idx == 0 {
+			if firstOrderAmount == 0 {
 				firstOrderAmount = order.OfferedAmount
 			}
 			if customerEmail == "" {
