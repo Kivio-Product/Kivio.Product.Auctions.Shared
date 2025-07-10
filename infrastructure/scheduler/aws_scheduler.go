@@ -7,6 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/eventbridge"
+	"github.com/google/uuid"
 )
 
 type AwsScheduler struct {
@@ -53,7 +54,7 @@ func (s *AwsScheduler) ScheduleLambda(scheduledTime time.Time, timeToSum time.Du
 		Targets: []*eventbridge.Target{
 			{
 				Arn:   aws.String(targetArn),
-				Id:    aws.String("1"),
+				Id:    aws.String("target-" + uuid.New().String()),
 				Input: aws.String(payload),
 			},
 		},

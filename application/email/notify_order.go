@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"strconv"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/repository"
@@ -25,6 +26,20 @@ func (uc *NotifyOrderUseCase) Execute(state string, customerEmail string, concat
 	}
 
 	return uc.notifier.SendTemplatedEmail(customerEmail, templateName, templateData)
+}
+
+type NotifyAdminApprovedOrdersUseCase struct {
+	notifier domain.Notifier
+}
+
+func NewNotifyAdminApprovedOrdersUseCase(notifier domain.Notifier) *NotifyAdminApprovedOrdersUseCase {
+	return &NotifyAdminApprovedOrdersUseCase{
+		notifier: notifier,
+	}
+}
+
+func (uc *NotifyAdminApprovedOrdersUseCase) Execute(ctx context.Context, adminEmail string, templateData map[string]string) error {
+	return uc.notifier.SendTemplatedEmail(adminEmail, "AdminApprovedOrders", templateData)
 }
 
 func getTemplateName(state string) string {

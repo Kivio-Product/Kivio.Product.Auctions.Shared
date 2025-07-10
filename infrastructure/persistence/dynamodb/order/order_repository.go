@@ -25,6 +25,7 @@ type OrderRepository interface {
 	UpdateOrder(ctx context.Context, order *domain.Order) error
 	GetOrdersPaginated(ctx context.Context, params domain.PaginationParams) (*domain.OrderRepositoryResult, error)
 	CountOrders(ctx context.Context, pointOfSaleId string) (int64, error)
+	GetOrdersByPointOfSaleId(ctx context.Context, pointOfSaleId string) ([]domain.Order, error)
 }
 
 type orderRepository struct {
@@ -305,4 +306,39 @@ func (r *orderRepository) CountOrders(ctx context.Context, pointOfSaleId string)
 		return 0, fmt.Errorf("error counting orders: %w", err)
 	}
 	return *result.Count, nil
+}
+
+func (r *orderRepository) GetOrdersByPointOfSaleId(ctx context.Context, pointOfSaleId string) ([]domain.Order, error) {
+	var orders []domain.Order
+
+	input := &dynamodb.QueryInput{
+		TableName:              aws.String(r.orderTable),
+		IndexName:              aws.String("PointOfSaleId-CreatedAt-index"),
+		KeyConditionExpression: aws.String("PointOfSaleId = :pointOfSaleId"),
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":pointOfSaleId": {S: aws.String(pointOfSaleId)},
+		},
+		ScanIndexForward: aws.Bool(false),
+	}
+
+	for {
+		result, err := r.client.QueryWithContext(ctx, input)
+		if err != nil {
+			return nil, fmt.Errorf("error querying orders by PointOfSaleId: %w", err)
+		}
+
+		var batch []domain.Order
+		err = dynamodbattribute.UnmarshalListOfMaps(result.Items, &batch)
+		if err != nil {
+			return nil, fmt.Errorf("error unmarshalling orders: %w", err)
+		}
+		orders = append(orders, batch...)
+
+		if result.LastEvaluatedKey == nil {
+			break
+		}
+		input.ExclusiveStartKey = result.LastEvaluatedKey
+	}
+
+	return orders, nil
 }

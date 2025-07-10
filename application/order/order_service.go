@@ -9,6 +9,8 @@ import (
 	itemInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item"
 	itemSpecInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item_specification"
 	orderInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/order"
+
+	emailservices "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
 )
 
 type OrderService interface {
@@ -29,10 +31,11 @@ type orderService struct {
 	orderFactory domain.OrderFactory
 	itemSpecRepo itemSpecInfrastructure.ItemSpecificationRepository
 	itemRepo     itemInfrastructure.ItemRepository
+	emailService emailservices.EmailServiceInterface
 }
 
-func NewOrderService(repo orderInfrastructure.OrderRepository, orderFactory domain.OrderFactory, itemSpecRepo itemSpecInfrastructure.ItemSpecificationRepository, itemRepo itemInfrastructure.ItemRepository) OrderService {
-	return &orderService{repo: repo, orderFactory: orderFactory, itemSpecRepo: itemSpecRepo, itemRepo: itemRepo}
+func NewOrderService(repo orderInfrastructure.OrderRepository, orderFactory domain.OrderFactory, itemSpecRepo itemSpecInfrastructure.ItemSpecificationRepository, itemRepo itemInfrastructure.ItemRepository, emailService emailservices.EmailServiceInterface) OrderService {
+	return &orderService{repo: repo, orderFactory: orderFactory, itemSpecRepo: itemSpecRepo, itemRepo: itemRepo, emailService: emailService}
 }
 
 func (s *orderService) CreateOrder(ctx context.Context, customerId, externalId, itemId, offerId, pointOfSaleId, extraData string, offeredAmount int64, auctionService bool) (*domain.Order, error) {
@@ -190,4 +193,46 @@ func (s *orderService) GetPaginatedOrdersWithDetails(ctx context.Context, params
 		NextToken:  ordersResult.NextToken,
 		TotalCount: totalCount,
 	}, nil
+}
+
+func (s *orderService) NotifyAndCloseApprovedOrdersByPointOfSaleId(ctx context.Context, pointOfSaleId string, adminEmail string) error {
+	orders, err := s.repo.GetOrdersByPointOfSaleId(ctx, pointOfSaleId)
+	if err != nil {
+		return err
+	}
+
+	var approvedOrders []domain.Order
+	for _, order := range orders {
+		if order.State == "Approved" {
+			approvedOrders = append(approvedOrders, order)
+		}
+	}
+
+	if len(approvedOrders) == 0 {
+		return nil
+	}
+
+	body := "Órdenes aprobadas:\n\n"
+	for _, order := range approvedOrders {
+		body += "OrderId: " + order.OrderId + ", CustomerId: " + order.CustomerId + ", Amount: " + fmt.Sprintf("%d", order.OfferedAmount) + "\n"
+	}
+
+	templateData := map[string]string{
+		"ORDERS_LIST": body,
+	}
+
+	err = s.emailService.NotifyAdminApprovedOrders(ctx, adminEmail, templateData)
+	if err != nil {
+		return err
+	}
+
+	for _, order := range approvedOrders {
+		order.State = "Closed"
+		err := s.repo.SaveOrder(ctx, &order)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

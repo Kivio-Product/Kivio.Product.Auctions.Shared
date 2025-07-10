@@ -7,20 +7,24 @@ import (
 type EmailServiceInterface interface {
 	NotifyOffer(ctx context.Context, auctionURL string, offerName string, posId string) error
 	NotifyOrder(ctx context.Context, state string, customerEmail string, totalOfferedAmount int64, concatenatedItemNames string) error
+	NotifyAdminApprovedOrders(ctx context.Context, adminEmail string, templateData map[string]string) error
 }
 
 type EmailService struct {
-	notifyOffer        *NotifyOfferUseCase
-	notifyOrderUseCase *NotifyOrderUseCase
+	notifyOffer                      *NotifyOfferUseCase
+	notifyOrderUseCase               *NotifyOrderUseCase
+	NotifyAdminApprovedOrdersUseCase *NotifyAdminApprovedOrdersUseCase
 }
 
 func NewEmailService(
 	notifyOfferUC *NotifyOfferUseCase,
 	notifyOrderUC *NotifyOrderUseCase,
+	NotifyAdminApprovedOrdersUC *NotifyAdminApprovedOrdersUseCase,
 ) EmailServiceInterface {
 	return &EmailService{
-		notifyOffer:        notifyOfferUC,
-		notifyOrderUseCase: notifyOrderUC,
+		notifyOffer:                      notifyOfferUC,
+		notifyOrderUseCase:               notifyOrderUC,
+		NotifyAdminApprovedOrdersUseCase: NotifyAdminApprovedOrdersUC,
 	}
 }
 
@@ -36,4 +40,8 @@ func (s *EmailService) NotifyOrder(ctx context.Context, state string, customerEm
 		totalOfferedAmount,
 		"",
 	)
+}
+
+func (s *EmailService) NotifyAdminApprovedOrders(ctx context.Context, adminEmail string, templateData map[string]string) error {
+	return s.NotifyAdminApprovedOrdersUseCase.Execute(ctx, adminEmail, templateData)
 }
