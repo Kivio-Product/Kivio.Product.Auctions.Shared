@@ -24,6 +24,7 @@ type OrderService interface {
 	GetAllOrdersWithDetails(ctx context.Context) ([]domain.OrderDetail, error)
 	GetPaginatedOrdersWithDetails(ctx context.Context, params domain.PaginationParams) (*domain.PaginatedOrdersResponse, error)
 	UpdateOrderState(ctx context.Context, orderId string, state string) error
+	NotifyAndCloseApprovedOrdersByPointOfSaleId(ctx context.Context, pointOfSaleId string, adminEmail string) error
 }
 
 type orderService struct {
