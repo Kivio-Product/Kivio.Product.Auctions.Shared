@@ -302,7 +302,12 @@ func (s *ruleVerificationService) verifySpecification(
 	}
 
 	if matchingItem == nil {
-		fmt.Printf("No se encontró artículo de e-commerce coincidente para el ID: %d (original: %s)\n", itemIdInt, matchingSpec.ItemId)
+		fmt.Printf("No se encontró artículo de e-commerce coincidente para el ID: %d (original: %s). Eliminando especificación del artículo.\n", itemIdInt, matchingSpec.ItemId)
+		if err := s.itemSpecSvc.Delete(context.Background(), matchingSpec.Id); err != nil {
+			fmt.Printf("Error al eliminar la especificación del artículo %s: %v\n", matchingSpec.Id, err)
+		} else {
+			fmt.Printf("Especificación del artículo %s eliminada exitosamente.\n", matchingSpec.Id)
+		}
 		return false
 	}
 
