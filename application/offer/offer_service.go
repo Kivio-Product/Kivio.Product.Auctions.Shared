@@ -117,7 +117,7 @@ func (s *OfferService) UpdateOfferState(ctx context.Context, offerId, state stri
 		offer.SetOfferTime(time.Now())
 		if offer.OfferTime != nil && offer.Type == "Regular auction" {
 			timeToSum := time.Duration(offer.AuctionTime)*time.Hour + 2*time.Minute
-			ruleName := fmt.Sprintf("activate-offer-%s", offer.OfferId)
+			ruleName := fmt.Sprintf("%s-activate-offer-%s", os.Getenv("AUCTIONS_ENV"), offer.OfferId)
 			payload := fmt.Sprintf(`{"offerId":"%s"}`, offer.OfferId)
 			lambdaArn := os.Getenv("ORDER_STATE_LAMBDA_ARN")
 			err := s.scheduler.ScheduleLambda(*offer.OfferTime, timeToSum, lambdaArn, ruleName, payload)
