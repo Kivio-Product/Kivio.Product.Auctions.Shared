@@ -9,7 +9,7 @@ import (
 )
 
 type IPosService interface {
-	GeneratePointOfSale(ctx context.Context, description, name, userId string) (*domain.PointOfSale, error)
+	GeneratePointOfSale(ctx context.Context, description, name, userId, url string) (*domain.PointOfSale, error)
 	GetPosByUserId(ctx context.Context, id string) ([]domain.PointOfSale, error)
 	GetPosById(ctx context.Context, id string) (*domain.PointOfSale, error)
 	DeletePosById(ctx context.Context, id string) error
@@ -26,7 +26,7 @@ func NewPosService(repo infrastructure.IPosRepository, posFactory domain.PosFact
 	return &PosService{repo: repo, posFactory: posFactory}
 }
 
-func (s *PosService) GeneratePointOfSale(ctx context.Context, description, name, userId string) (*domain.PointOfSale, error) {
+func (s *PosService) GeneratePointOfSale(ctx context.Context, description, name, userId, url string) (*domain.PointOfSale, error) {
 	existingPos, err := s.repo.GetPosByUser(userId)
 	if err != nil {
 		return nil, fmt.Errorf("error checking existing PointOfSale for user: %w", err)
@@ -36,7 +36,7 @@ func (s *PosService) GeneratePointOfSale(ctx context.Context, description, name,
 		return nil, fmt.Errorf("user '%s' already has a PointOfSale", userId)
 	}
 
-	pointOfSale, err := s.posFactory.CreatePointOfSale(description, name, userId)
+	pointOfSale, err := s.posFactory.CreatePointOfSale(description, name, userId, url)
 	if err != nil {
 		return nil, err
 	}
