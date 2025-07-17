@@ -12,6 +12,7 @@ type PointOfSale struct {
 	Name          string
 	State         string
 	UserId        string
+	Url           string
 }
 
 var (
