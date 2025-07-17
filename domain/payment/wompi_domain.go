@@ -33,6 +33,15 @@ type WompiSignatureResponse struct {
 	ExpirationTime *time.Time `json:"expiration_time,omitempty"`
 }
 
+// https://docs.wompi.co/docs/colombia/tokens-de-aceptacion/
+type WompiAcceptanceTokenResponse struct {
+	Data struct {
+		AcceptanceToken string `json:"acceptance_token"`
+		Permalink       string `json:"permalink"`
+		Type            string `json:"type"`
+	} `json:"data"`
+}
+
 func GenerateWompiSignature(req WompiSignatureRequest) (*WompiSignatureResponse, error) {
 	if req.Reference == "" {
 		return nil, fmt.Errorf("la referencia no puede estar vacía")

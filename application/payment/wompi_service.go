@@ -6,17 +6,21 @@ import (
 	"time"
 
 	paymentDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/payment"
+	wompiapi "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/api/wompi"
 )
 
 type WompiService interface {
 	GenerateIntegritySignature(ctx context.Context, reference string, amountInCents int64, currency string, integritySecret string, expirationTime *time.Time) (*paymentDomain.WompiSignatureResponse, error)
 	CreateTransaction(ctx context.Context, reference string, amountInCents int64, currency string, publicKey string, integritySecret string, redirectURL string, expirationTime *time.Time) (*paymentDomain.WompiTransaction, error)
+	GetAcceptanceToken(ctx context.Context) (string, error)
 }
 
-type wompiService struct{}
+type wompiService struct {
+	client *wompiapi.WompiClient
+}
 
-func NewWompiService() WompiService {
-	return &wompiService{}
+func NewWompiService(client *wompiapi.WompiClient) WompiService {
+	return &wompiService{client: client}
 }
 
 func (s *wompiService) GenerateIntegritySignature(
@@ -71,4 +75,8 @@ func (s *wompiService) CreateTransaction(
 	}
 
 	return transaction, nil
+}
+
+func (s *wompiService) GetAcceptanceToken(ctx context.Context) (string, error) {
+	return s.client.GetAcceptanceToken()
 }
