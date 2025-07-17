@@ -34,11 +34,13 @@ type WompiSignatureResponse struct {
 }
 
 // https://docs.wompi.co/docs/colombia/tokens-de-aceptacion/
-type WompiAcceptanceTokenResponse struct {
+type WompiMerchantResponse struct {
 	Data struct {
-		AcceptanceToken string `json:"acceptance_token"`
-		Permalink       string `json:"permalink"`
-		Type            string `json:"type"`
+		PresignedAcceptance struct {
+			AcceptanceToken string `json:"acceptance_token"`
+			Permalink       string `json:"permalink"`
+			Type            string `json:"type"`
+		} `json:"presigned_acceptance"`
 	} `json:"data"`
 }
 

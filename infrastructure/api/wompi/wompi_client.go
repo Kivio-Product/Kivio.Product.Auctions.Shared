@@ -29,9 +29,9 @@ func (c *WompiClient) GetAcceptanceToken() (string, error) {
 	}
 	defer resp.Body.Close()
 
-	var result domain.WompiAcceptanceTokenResponse
+	var result domain.WompiMerchantResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return "", err
 	}
-	return result.Data.AcceptanceToken, nil
+	return result.Data.PresignedAcceptance.AcceptanceToken, nil
 }
