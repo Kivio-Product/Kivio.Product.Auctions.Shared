@@ -13,6 +13,7 @@ type WompiService interface {
 	GenerateIntegritySignature(ctx context.Context, reference string, amountInCents int64, currency string, integritySecret string, expirationTime *time.Time) (*paymentDomain.WompiSignatureResponse, error)
 	CreateTransaction(ctx context.Context, reference string, amountInCents int64, currency string, publicKey string, integritySecret string, redirectURL string, expirationTime *time.Time) (*paymentDomain.WompiTransaction, error)
 	GetAcceptanceToken(ctx context.Context) (string, error)
+	GetAcceptanceTokenInfo(ctx context.Context) (*paymentDomain.AcceptanceTokenInfo, error)
 }
 
 type wompiService struct {
@@ -79,4 +80,8 @@ func (s *wompiService) CreateTransaction(
 
 func (s *wompiService) GetAcceptanceToken(ctx context.Context) (string, error) {
 	return s.client.GetAcceptanceToken()
+}
+
+func (s *wompiService) GetAcceptanceTokenInfo(ctx context.Context) (*paymentDomain.AcceptanceTokenInfo, error) {
+	return s.client.GetAcceptanceTokenInfo()
 }

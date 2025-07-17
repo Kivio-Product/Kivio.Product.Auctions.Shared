@@ -44,6 +44,12 @@ type WompiMerchantResponse struct {
 	} `json:"data"`
 }
 
+type AcceptanceTokenInfo struct {
+	AcceptanceToken string `json:"acceptance_token"`
+	Permalink       string `json:"permalink"`
+	Type            string `json:"type"`
+}
+
 func GenerateWompiSignature(req WompiSignatureRequest) (*WompiSignatureResponse, error) {
 	if req.Reference == "" {
 		return nil, fmt.Errorf("la referencia no puede estar vacía")

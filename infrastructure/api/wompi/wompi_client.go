@@ -35,3 +35,23 @@ func (c *WompiClient) GetAcceptanceToken() (string, error) {
 	}
 	return result.Data.PresignedAcceptance.AcceptanceToken, nil
 }
+
+func (c *WompiClient) GetAcceptanceTokenInfo() (*domain.AcceptanceTokenInfo, error) {
+	url := fmt.Sprintf("%s/merchants/%s", c.BaseURL, c.PublicKey)
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var result domain.WompiMerchantResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	info := &domain.AcceptanceTokenInfo{
+		AcceptanceToken: result.Data.PresignedAcceptance.AcceptanceToken,
+		Permalink:       result.Data.PresignedAcceptance.Permalink,
+		Type:            result.Data.PresignedAcceptance.Type,
+	}
+	return info, nil
+}
