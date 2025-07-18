@@ -49,9 +49,8 @@ func (c *WompiClient) GetAcceptanceTokenInfo() (*domain.AcceptanceTokenInfo, err
 		return nil, err
 	}
 	info := &domain.AcceptanceTokenInfo{
-		AcceptanceToken: result.Data.PresignedAcceptance.AcceptanceToken,
-		Permalink:       result.Data.PresignedAcceptance.Permalink,
-		Type:            result.Data.PresignedAcceptance.Type,
+		PresignedAcceptance:       result.Data.PresignedAcceptance,
+		PresignedPersonalDataAuth: result.Data.PresignedPersonalDataAuth,
 	}
 	return info, nil
 }

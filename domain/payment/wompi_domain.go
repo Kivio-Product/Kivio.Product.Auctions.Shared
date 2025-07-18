@@ -34,20 +34,22 @@ type WompiSignatureResponse struct {
 }
 
 // https://docs.wompi.co/docs/colombia/tokens-de-aceptacion/
-type WompiMerchantResponse struct {
-	Data struct {
-		PresignedAcceptance struct {
-			AcceptanceToken string `json:"acceptance_token"`
-			Permalink       string `json:"permalink"`
-			Type            string `json:"type"`
-		} `json:"presigned_acceptance"`
-	} `json:"data"`
-}
-
-type AcceptanceTokenInfo struct {
+type PresignedToken struct {
 	AcceptanceToken string `json:"acceptance_token"`
 	Permalink       string `json:"permalink"`
 	Type            string `json:"type"`
+}
+
+type AcceptanceTokenInfo struct {
+	PresignedAcceptance       PresignedToken `json:"presigned_acceptance"`
+	PresignedPersonalDataAuth PresignedToken `json:"presigned_personal_data_auth"`
+}
+
+type WompiMerchantResponse struct {
+	Data struct {
+		PresignedAcceptance       PresignedToken `json:"presigned_acceptance"`
+		PresignedPersonalDataAuth PresignedToken `json:"presigned_personal_data_auth"`
+	} `json:"data"`
 }
 
 func GenerateWompiSignature(req WompiSignatureRequest) (*WompiSignatureResponse, error) {
