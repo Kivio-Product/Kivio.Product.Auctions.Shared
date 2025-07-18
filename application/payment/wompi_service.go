@@ -14,6 +14,7 @@ type WompiService interface {
 	CreateTransaction(ctx context.Context, reference string, amountInCents int64, currency string, publicKey string, integritySecret string, redirectURL string, expirationTime *time.Time) (*paymentDomain.WompiTransaction, error)
 	GetAcceptanceToken(ctx context.Context) (string, error)
 	GetAcceptanceTokenInfo(ctx context.Context) (*paymentDomain.AcceptanceTokenInfo, error)
+	CreateCardToken(ctx context.Context, req *paymentDomain.WompiCardTokenRequest) (*paymentDomain.WompiCardTokenResponse, error)
 }
 
 type wompiService struct {
@@ -84,4 +85,8 @@ func (s *wompiService) GetAcceptanceToken(ctx context.Context) (string, error) {
 
 func (s *wompiService) GetAcceptanceTokenInfo(ctx context.Context) (*paymentDomain.AcceptanceTokenInfo, error) {
 	return s.client.GetAcceptanceTokenInfo()
+}
+
+func (s *wompiService) CreateCardToken(ctx context.Context, req *paymentDomain.WompiCardTokenRequest) (*paymentDomain.WompiCardTokenResponse, error) {
+	return s.client.CreateCardToken(req)
 }

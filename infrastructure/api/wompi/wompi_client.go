@@ -1,6 +1,7 @@
 package wompi
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -53,4 +54,23 @@ func (c *WompiClient) GetAcceptanceTokenInfo() (*domain.AcceptanceTokenInfo, err
 		PresignedPersonalDataAuth: result.Data.PresignedPersonalDataAuth,
 	}
 	return info, nil
+}
+
+func (c *WompiClient) CreateCardToken(req *domain.WompiCardTokenRequest) (*domain.WompiCardTokenResponse, error) {
+	url := fmt.Sprintf("%s/tokens/cards", c.BaseURL)
+	body, _ := json.Marshal(req)
+	httpReq, _ := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var result domain.WompiCardTokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	return &result, nil
 }
