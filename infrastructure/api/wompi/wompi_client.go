@@ -11,14 +11,16 @@ import (
 )
 
 type WompiClient struct {
-	BaseURL   string
-	PublicKey string
+	BaseURL    string
+	PublicKey  string
+	PrivateKey string
 }
 
 func NewWompiClient() *WompiClient {
 	return &WompiClient{
-		BaseURL:   os.Getenv("WOMPI_API_URL"),
-		PublicKey: os.Getenv("WOMPI_PUBLIC_KEY"),
+		BaseURL:    os.Getenv("WOMPI_API_URL"),
+		PublicKey:  os.Getenv("WOMPI_PUBLIC_KEY"),
+		PrivateKey: os.Getenv("WOMPI_PRIVATE_KEY"),
 	}
 }
 
@@ -70,6 +72,26 @@ func (c *WompiClient) CreateCardToken(req *domain.WompiCardTokenRequest) (*domai
 	defer resp.Body.Close()
 
 	var result domain.WompiCardTokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func (c *WompiClient) CreatePaymentSource(req *domain.WompiPaymentSourceRequest) (*domain.WompiPaymentSourceResponse, error) {
+	url := fmt.Sprintf("%s/payment_sources", c.BaseURL)
+	body, _ := json.Marshal(req)
+	httpReq, _ := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+c.PrivateKey)
+
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var result domain.WompiPaymentSourceResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, err
 	}

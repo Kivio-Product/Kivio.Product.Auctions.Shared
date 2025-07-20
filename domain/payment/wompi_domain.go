@@ -76,6 +76,24 @@ type WompiCardTokenResponse struct {
 	} `json:"data"`
 }
 
+type WompiPaymentSourceRequest struct {
+	Type               string `json:"type"`
+	Token              string `json:"token"`
+	CustomerEmail      string `json:"customer_email"`
+	AcceptanceToken    string `json:"acceptance_token"`
+	AcceptPersonalAuth string `json:"accept_personal_auth"`
+}
+
+type WompiPaymentSourceResponse struct {
+	Data struct {
+		ID            int64  `json:"id"`
+		Type          string `json:"type"`
+		Status        string `json:"status"`
+		Token         string `json:"token"`
+		CustomerEmail string `json:"customer_email"`
+	} `json:"data"`
+}
+
 func GenerateWompiSignature(req WompiSignatureRequest) (*WompiSignatureResponse, error) {
 	if req.Reference == "" {
 		return nil, fmt.Errorf("la referencia no puede estar vacía")

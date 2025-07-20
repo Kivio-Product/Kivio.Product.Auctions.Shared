@@ -15,6 +15,7 @@ type WompiService interface {
 	GetAcceptanceToken(ctx context.Context) (string, error)
 	GetAcceptanceTokenInfo(ctx context.Context) (*paymentDomain.AcceptanceTokenInfo, error)
 	CreateCardToken(ctx context.Context, req *paymentDomain.WompiCardTokenRequest) (*paymentDomain.WompiCardTokenResponse, error)
+	CreatePaymentSource(ctx context.Context, req *paymentDomain.WompiPaymentSourceRequest) (*paymentDomain.WompiPaymentSourceResponse, error)
 }
 
 type wompiService struct {
@@ -89,4 +90,8 @@ func (s *wompiService) GetAcceptanceTokenInfo(ctx context.Context) (*paymentDoma
 
 func (s *wompiService) CreateCardToken(ctx context.Context, req *paymentDomain.WompiCardTokenRequest) (*paymentDomain.WompiCardTokenResponse, error) {
 	return s.client.CreateCardToken(req)
+}
+
+func (s *wompiService) CreatePaymentSource(ctx context.Context, req *paymentDomain.WompiPaymentSourceRequest) (*paymentDomain.WompiPaymentSourceResponse, error) {
+	return s.client.CreatePaymentSource(req)
 }
