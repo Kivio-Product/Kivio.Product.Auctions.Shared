@@ -53,11 +53,13 @@ type WompiMerchantResponse struct {
 }
 
 type WompiCardTokenRequest struct {
-	Number     string `json:"number"`
-	ExpMonth   string `json:"exp_month"`
-	ExpYear    string `json:"exp_year"`
-	CVC        string `json:"cvc"`
-	CardHolder string `json:"card_holder"`
+	AcceptanceToken    string `json:"acceptance_token"`
+	AcceptPersonalAuth string `json:"accept_personal_auth"`
+	Number             string `json:"number"`
+	ExpMonth           string `json:"exp_month"`
+	ExpYear            string `json:"exp_year"`
+	CVC                string `json:"cvc"`
+	CardHolder         string `json:"card_holder"`
 }
 
 type WompiCardTokenResponse struct {
