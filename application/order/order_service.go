@@ -14,9 +14,9 @@ import (
 )
 
 type OrderService interface {
-	CreateOrder(ctx context.Context, customerId, externalId, itemId, offerId, pointOfSaleId, extraData string, offeredAmount int64, auctionService bool) (*domain.Order, error)
+	CreateOrder(ctx context.Context, input domain.OrderInput) (*domain.Order, error)
 	GetOrders(ctx context.Context) ([]domain.Order, error)
-	UpdateOrder(ctx context.Context, orderId string, offeredAmount int64, customerId, externalId, itemId, state string) error
+	UpdateOrder(ctx context.Context, input domain.OrderInput) error
 	GetOrderById(ctx context.Context, id string) (*domain.Order, error)
 	GetOrderByItemSpecificationId(ctx context.Context, id string) ([]domain.Order, error)
 	GetOrderByOfferId(ctx context.Context, id string) ([]domain.Order, error)
@@ -39,12 +39,22 @@ func NewOrderService(repo orderInfrastructure.OrderRepository, orderFactory doma
 	return &orderService{repo: repo, orderFactory: orderFactory, itemSpecRepo: itemSpecRepo, itemRepo: itemRepo, emailService: emailService}
 }
 
-func (s *orderService) CreateOrder(ctx context.Context, customerId, externalId, itemId, offerId, pointOfSaleId, extraData string, offeredAmount int64, auctionService bool) (*domain.Order, error) {
-	order, err := s.orderFactory.CreateOrder(customerId, externalId, itemId, offerId, pointOfSaleId, extraData, offeredAmount, auctionService)
+func (s *orderService) CreateOrder(ctx context.Context, input domain.OrderInput) (*domain.Order, error) {
+	order, err := s.orderFactory.CreateOrder(
+		input.CustomerId,
+		input.ExternalId,
+		input.ItemSpecificationId,
+		input.OfferId,
+		input.PointOfSaleId,
+		input.ExtraData,
+		input.OfferedAmount,
+		input.AuctionService,
+	)
 	if err != nil {
 		return &domain.Order{}, err
 	}
 	order.State = "Created"
+	order.WompiIdPayment = input.WompiIdPayment
 	err = s.repo.SaveOrder(ctx, order)
 
 	if err != nil {
@@ -62,12 +72,22 @@ func (s *orderService) GetOrders(ctx context.Context) ([]domain.Order, error) {
 	return orders, nil
 }
 
-func (s *orderService) UpdateOrder(ctx context.Context, orderId string, offeredAmount int64, customerId, externalId, itemId, state string) error {
-	order, err := s.repo.GetIdOrder(ctx, orderId)
-	err = order.Update(customerId, externalId, itemId, state, offeredAmount)
+func (s *orderService) UpdateOrder(ctx context.Context, input domain.OrderInput) error {
+	order, err := s.repo.GetIdOrder(ctx, input.OrderId)
 	if err != nil {
 		return err
 	}
+	err = order.Update(
+		input.CustomerId,
+		input.ExternalId,
+		input.ItemSpecificationId,
+		input.State,
+		input.OfferedAmount,
+	)
+	if err != nil {
+		return err
+	}
+	order.WompiIdPayment = input.WompiIdPayment
 	return s.repo.SaveOrder(ctx, order)
 }
 

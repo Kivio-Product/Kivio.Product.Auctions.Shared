@@ -18,6 +18,7 @@ type Order struct {
 	SortKey             string
 	PointOfSaleId       string
 	AuctionService      bool
+	WompiIdPayment      string
 }
 
 type OrderDetail struct {
@@ -52,6 +53,20 @@ type PaginatedOrdersResponse struct {
 type UpdateOrderStateRequest struct {
 	State   string `json:"state"`
 	OrderId string `json:"order_id"`
+}
+
+type OrderInput struct {
+	OrderId             string
+	CustomerId          string
+	ExternalId          string
+	ItemSpecificationId string
+	OfferId             string
+	PointOfSaleId       string
+	ExtraData           string
+	OfferedAmount       int64
+	AuctionService      bool
+	State               string
+	WompiIdPayment      string
 }
 
 var (
