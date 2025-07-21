@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"time"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 	itemInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item"
@@ -126,7 +127,8 @@ func (s *orderService) UpdateOrder(ctx context.Context, input domain.OrderInput)
 			if integritySecret == "" {
 				return fmt.Errorf("WOMPI_INTEGRITY_SECRET no está configurado")
 			}
-			signatureResp, err := s.wompiService.GenerateIntegritySignature(ctx, order.OrderId, order.OfferedAmount, "COP", integritySecret, nil)
+			expirationTime := time.Now().Add(1 * time.Hour)
+			signatureResp, err := s.wompiService.GenerateIntegritySignature(ctx, order.OrderId, order.OfferedAmount, "COP", integritySecret, &expirationTime)
 			if err != nil {
 				return fmt.Errorf("error generando signature Wompi: %w", err)
 			}
