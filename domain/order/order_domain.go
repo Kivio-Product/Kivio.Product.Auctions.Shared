@@ -19,6 +19,7 @@ type Order struct {
 	PointOfSaleId       string
 	AuctionService      bool
 	WompiIdPayment      string
+	IsWinner            bool
 }
 
 type OrderDetail struct {
@@ -67,6 +68,7 @@ type OrderInput struct {
 	AuctionService      bool
 	State               string
 	WompiIdPayment      string
+	IsWinner            bool
 }
 
 var (
@@ -79,7 +81,7 @@ func GenerateCreatedState(order *Order) *Order {
 	return order
 }
 
-func (o *Order) Update(customerId, externalId, itemSpecificationId, state string, offeredAmount int64) error {
+func (o *Order) Update(customerId, externalId, itemSpecificationId, state string, offeredAmount int64, isWinner bool) error {
 	if customerId == "" {
 		return errors.New("El customerId no puede estar vacío")
 	}
@@ -101,5 +103,6 @@ func (o *Order) Update(customerId, externalId, itemSpecificationId, state string
 	o.OfferedAmount = offeredAmount
 	o.State = state
 	o.SortKey = "ACTIVE"
+	o.IsWinner = isWinner
 	return nil
 }

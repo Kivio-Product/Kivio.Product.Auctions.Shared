@@ -83,6 +83,7 @@ func (s *orderService) UpdateOrder(ctx context.Context, input domain.OrderInput)
 		input.ItemSpecificationId,
 		input.State,
 		input.OfferedAmount,
+		input.IsWinner,
 	)
 	if err != nil {
 		return err

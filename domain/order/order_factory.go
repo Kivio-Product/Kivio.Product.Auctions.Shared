@@ -49,6 +49,7 @@ func (f *DefaultOrderFactory) CreateOrder(customerId, externalId, itemSpecificat
 		SortKey:             "ACTIVE",
 		PointOfSaleId:       pointOfSaleId,
 		AuctionService:      auctionService,
+		IsWinner:            false,
 	}, nil
 }
 
