@@ -100,7 +100,6 @@ func (s *orderService) UpdateOrder(ctx context.Context, input domain.OrderInput)
 	if err != nil {
 		return err
 	}
-	order.WompiIdPayment = input.WompiIdPayment
 
 	if input.IsWinner {
 		offer, err := s.offerService.GetOfferById(ctx, order.OfferId)
