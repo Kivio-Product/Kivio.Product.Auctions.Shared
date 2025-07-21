@@ -53,7 +53,12 @@ func (s *orderService) CreateOrder(ctx context.Context, input domain.OrderInput)
 	if err != nil {
 		return &domain.Order{}, err
 	}
-	order.State = "Created"
+	if input.WompiIdPayment == "" {
+		order.State = "Created"
+	} else {
+		order.State = "Pending"
+	}
+
 	order.WompiIdPayment = input.WompiIdPayment
 	err = s.repo.SaveOrder(ctx, order)
 
