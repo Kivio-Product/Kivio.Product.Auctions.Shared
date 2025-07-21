@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
@@ -11,6 +12,9 @@ import (
 	orderInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/order"
 
 	emailservices "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
+	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
+	payment "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/payment"
+	paymentDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/payment"
 )
 
 type OrderService interface {
@@ -33,10 +37,12 @@ type orderService struct {
 	itemSpecRepo itemSpecInfrastructure.ItemSpecificationRepository
 	itemRepo     itemInfrastructure.ItemRepository
 	emailService emailservices.EmailServiceInterface
+	offerService offerService.IOfferService
+	wompiService payment.WompiService
 }
 
-func NewOrderService(repo orderInfrastructure.OrderRepository, orderFactory domain.OrderFactory, itemSpecRepo itemSpecInfrastructure.ItemSpecificationRepository, itemRepo itemInfrastructure.ItemRepository, emailService emailservices.EmailServiceInterface) OrderService {
-	return &orderService{repo: repo, orderFactory: orderFactory, itemSpecRepo: itemSpecRepo, itemRepo: itemRepo, emailService: emailService}
+func NewOrderService(repo orderInfrastructure.OrderRepository, orderFactory domain.OrderFactory, itemSpecRepo itemSpecInfrastructure.ItemSpecificationRepository, itemRepo itemInfrastructure.ItemRepository, emailService emailservices.EmailServiceInterface, offerService offerService.IOfferService, wompiService payment.WompiService) OrderService {
+	return &orderService{repo: repo, orderFactory: orderFactory, itemSpecRepo: itemSpecRepo, itemRepo: itemRepo, emailService: emailService, offerService: offerService, wompiService: wompiService}
 }
 
 func (s *orderService) CreateOrder(ctx context.Context, input domain.OrderInput) (*domain.Order, error) {
@@ -94,6 +100,45 @@ func (s *orderService) UpdateOrder(ctx context.Context, input domain.OrderInput)
 		return err
 	}
 	order.WompiIdPayment = input.WompiIdPayment
+
+	if input.IsWinner {
+		offer, err := s.offerService.GetOfferById(ctx, order.OfferId)
+		if err != nil {
+			return err
+		}
+		if offer.Type == "Regular auction" && order.WompiIdPayment != "" {
+			wompiReq := &paymentDomain.WompiTransactionRequest{
+				AmountInCents:   order.OfferedAmount,
+				Currency:        "COP",
+				CustomerEmail:   order.CustomerId,
+				PaymentSourceId: 0,
+				Reference:       order.OrderId,
+			}
+
+			var paymentSourceId int64
+			_, err := fmt.Sscan(order.WompiIdPayment, &paymentSourceId)
+			if err != nil {
+				return fmt.Errorf("error convirtiendo WompiIdPayment a int64: %w", err)
+			}
+			wompiReq.PaymentSourceId = paymentSourceId
+
+			integritySecret := os.Getenv("WOMPI_INTEGRITY_SECRET")
+			if integritySecret == "" {
+				return fmt.Errorf("WOMPI_INTEGRITY_SECRET no está configurado")
+			}
+			signatureResp, err := s.wompiService.GenerateIntegritySignature(ctx, order.OrderId, order.OfferedAmount, "COP", integritySecret, nil)
+			if err != nil {
+				return fmt.Errorf("error generando signature Wompi: %w", err)
+			}
+			wompiReq.Signature = signatureResp.Signature
+
+			_, err = s.wompiService.CreateTransaction(ctx, wompiReq)
+			if err != nil {
+				return fmt.Errorf("error creando transacción Wompi: %w", err)
+			}
+		}
+	}
+
 	return s.repo.SaveOrder(ctx, order)
 }
 
