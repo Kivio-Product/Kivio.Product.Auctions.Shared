@@ -97,3 +97,23 @@ func (c *WompiClient) CreatePaymentSource(req *domain.WompiPaymentSourceRequest)
 	}
 	return &result, nil
 }
+
+func (c *WompiClient) CreateTransaction(req *domain.WompiTransactionRequest) (*domain.WompiTransactionResponse, error) {
+	url := fmt.Sprintf("%s/transactions", c.BaseURL)
+	body, _ := json.Marshal(req)
+	httpReq, _ := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+c.PrivateKey)
+
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var result domain.WompiTransactionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}

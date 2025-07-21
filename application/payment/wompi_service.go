@@ -11,7 +11,7 @@ import (
 
 type WompiService interface {
 	GenerateIntegritySignature(ctx context.Context, reference string, amountInCents int64, currency string, integritySecret string, expirationTime *time.Time) (*paymentDomain.WompiSignatureResponse, error)
-	CreateTransaction(ctx context.Context, reference string, amountInCents int64, currency string, publicKey string, integritySecret string, redirectURL string, expirationTime *time.Time) (*paymentDomain.WompiTransaction, error)
+	CreateTransaction(ctx context.Context, req *paymentDomain.WompiTransactionRequest) (*paymentDomain.WompiTransactionResponse, error)
 	GetAcceptanceToken(ctx context.Context) (string, error)
 	GetAcceptanceTokenInfo(ctx context.Context) (*paymentDomain.AcceptanceTokenInfo, error)
 	CreateCardToken(ctx context.Context, req *paymentDomain.WompiCardTokenRequest) (*paymentDomain.WompiCardTokenResponse, error)
@@ -51,33 +51,8 @@ func (s *wompiService) GenerateIntegritySignature(
 	return signatureResponse, nil
 }
 
-func (s *wompiService) CreateTransaction(
-	ctx context.Context,
-	reference string,
-	amountInCents int64,
-	currency string,
-	publicKey string,
-	integritySecret string,
-	redirectURL string,
-	expirationTime *time.Time,
-) (*paymentDomain.WompiTransaction, error) {
-
-	signatureResponse, err := s.GenerateIntegritySignature(ctx, reference, amountInCents, currency, integritySecret, expirationTime)
-	if err != nil {
-		return nil, fmt.Errorf("error generando firma para la transacción: %w", err)
-	}
-
-	transaction := &paymentDomain.WompiTransaction{
-		Reference:      signatureResponse.Reference,
-		AmountInCents:  signatureResponse.AmountInCents,
-		Currency:       signatureResponse.Currency,
-		ExpirationTime: signatureResponse.ExpirationTime,
-		Signature:      signatureResponse.Signature,
-		PublicKey:      publicKey,
-		RedirectURL:    redirectURL,
-	}
-
-	return transaction, nil
+func (s *wompiService) CreateTransaction(ctx context.Context, req *paymentDomain.WompiTransactionRequest) (*paymentDomain.WompiTransactionResponse, error) {
+	return s.client.CreateTransaction(req)
 }
 
 func (s *wompiService) GetAcceptanceToken(ctx context.Context) (string, error) {

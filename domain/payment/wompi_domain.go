@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+// https://docs.wompi.co/docs/colombia/tokens-de-aceptacion/
+
 type WompiTransaction struct {
 	Reference      string     `json:"reference"`
 	AmountInCents  int64      `json:"amount_in_cents"`
@@ -33,7 +35,6 @@ type WompiSignatureResponse struct {
 	ExpirationTime *time.Time `json:"expiration_time,omitempty"`
 }
 
-// https://docs.wompi.co/docs/colombia/tokens-de-aceptacion/
 type PresignedToken struct {
 	AcceptanceToken string `json:"acceptance_token"`
 	Permalink       string `json:"permalink"`
@@ -91,6 +92,32 @@ type WompiPaymentSourceResponse struct {
 		Status        string `json:"status"`
 		Token         string `json:"token"`
 		CustomerEmail string `json:"customer_email"`
+	} `json:"data"`
+}
+
+type WompiTransactionRequest struct {
+	AmountInCents   int64               `json:"amount_in_cents"`
+	Currency        string              `json:"currency"`
+	CustomerEmail   string              `json:"customer_email"`
+	PaymentSourceId int64               `json:"payment_source_id"`
+	Reference       string              `json:"reference"`
+	Signature       string              `json:"signature"`
+	PaymentMethod   *WompiPaymentMethod `json:"payment_method,omitempty"`
+}
+
+type WompiPaymentMethod struct {
+	Installments int `json:"installments,omitempty"`
+}
+
+type WompiTransactionResponse struct {
+	Data struct {
+		ID            string `json:"id"`
+		Status        string `json:"status"`
+		AmountInCents int64  `json:"amount_in_cents"`
+		Currency      string `json:"currency"`
+		CustomerEmail string `json:"customer_email"`
+		Reference     string `json:"reference"`
+		Signature     string `json:"signature"`
 	} `json:"data"`
 }
 
