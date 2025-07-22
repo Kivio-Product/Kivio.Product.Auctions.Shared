@@ -123,3 +123,34 @@ func (c *WompiClient) CreateTransaction(req *domain.WompiTransactionRequest) (*d
 	}
 	return &result, nil
 }
+
+func (c *WompiClient) CreateNequiToken(phoneNumber string) (string, error) {
+	url := fmt.Sprintf("%s/tokens/nequi", c.BaseURL)
+	payload := map[string]string{"phone_number": phoneNumber}
+	body, _ := json.Marshal(payload)
+	httpReq, _ := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+c.PublicKey)
+
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		var errBody bytes.Buffer
+		errBody.ReadFrom(resp.Body)
+		return "", fmt.Errorf("error en /tokens/nequi: status %d, body: %s", resp.StatusCode, errBody.String())
+	}
+
+	var result struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+	return result.Data.ID, nil
+}
