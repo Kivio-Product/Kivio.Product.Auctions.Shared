@@ -2,6 +2,7 @@ package infrastructure
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 
@@ -87,6 +88,24 @@ func getSubjectFromTemplate(templateName string) string {
 	default:
 		return "Notificación del Sistema"
 	}
+}
+
+func (n *SMTPNotifier) SendEmailWithAttachment(email, subject, body, attachmentName string, attachmentContent []byte) error {
+	m := gomail.NewMessage()
+	m.SetHeader("From", n.sender)
+	m.SetHeader("To", email)
+	m.SetHeader("Subject", subject)
+	m.SetBody("text/html", body)
+	if attachmentName != "" && attachmentContent != nil {
+		m.Attach(attachmentName, gomail.SetCopyFunc(func(w io.Writer) error {
+			_, err := w.Write(attachmentContent)
+			return err
+		}))
+	}
+	if err := n.dialer.DialAndSend(m); err != nil {
+		return fmt.Errorf("error sending email with attachment via SMTP: %w", err)
+	}
+	return nil
 }
 
 func generateEmailBody(templateName string, templateData map[string]string) string {
