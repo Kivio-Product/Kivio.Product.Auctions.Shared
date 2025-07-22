@@ -87,17 +87,26 @@ func (s *orderService) GetOrders(ctx context.Context) ([]domain.Order, error) {
 	return orders, nil
 }
 
+func toCents(amount float64) int64 {
+	return int64(amount * 100)
+}
+
 func (s *orderService) UpdateOrder(ctx context.Context, input domain.OrderInput) error {
 	order, err := s.repo.GetIdOrder(ctx, input.OrderId)
 	if err != nil {
 		return err
+	}
+
+	amountInCents := input.OfferedAmount
+	if amountInCents < 1000000 {
+		amountInCents = toCents(float64(input.OfferedAmount))
 	}
 	err = order.Update(
 		input.CustomerId,
 		input.ExternalId,
 		input.ItemSpecificationId,
 		input.State,
-		input.OfferedAmount,
+		amountInCents,
 		input.IsWinner,
 	)
 	if err != nil {
@@ -111,7 +120,7 @@ func (s *orderService) UpdateOrder(ctx context.Context, input domain.OrderInput)
 		}
 		if offer.Type == "Regular auction" && order.WompiIdPayment != "" {
 			wompiReq := &paymentDomain.WompiTransactionRequest{
-				AmountInCents:   order.OfferedAmount,
+				AmountInCents:   amountInCents,
 				Currency:        "COP",
 				CustomerEmail:   order.CustomerId,
 				PaymentSourceId: 0,
@@ -130,7 +139,7 @@ func (s *orderService) UpdateOrder(ctx context.Context, input domain.OrderInput)
 				return fmt.Errorf("WOMPI_INTEGRITY_SECRET no está configurado")
 			}
 			expirationTime := time.Now().Add(1 * time.Hour)
-			signatureResp, err := s.wompiService.GenerateIntegritySignature(ctx, order.OrderId, order.OfferedAmount, "COP", integritySecret, &expirationTime)
+			signatureResp, err := s.wompiService.GenerateIntegritySignature(ctx, order.OrderId, amountInCents, "COP", integritySecret, &expirationTime)
 			if err != nil {
 				return fmt.Errorf("error generando signature Wompi: %w", err)
 			}
