@@ -42,6 +42,10 @@ func (uc *NotifyAdminApprovedOrdersUseCase) Execute(ctx context.Context, adminEm
 	return uc.notifier.SendTemplatedEmail(adminEmail, "AdminApprovedOrders", templateData)
 }
 
+func (uc *NotifyAdminApprovedOrdersUseCase) ExecuteWithAttachment(ctx context.Context, adminEmail string, subject string, body string, attachmentName string, attachmentData []byte) error {
+	return uc.notifier.SendEmailWithAttachment(adminEmail, subject, body, attachmentName, attachmentData)
+}
+
 func getTemplateName(state string) string {
 	switch state {
 	case "Approved":

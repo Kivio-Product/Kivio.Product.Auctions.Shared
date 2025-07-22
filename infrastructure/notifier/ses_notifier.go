@@ -1,6 +1,7 @@
 package infrastructure
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -73,6 +74,44 @@ func (n *SESNotifier) SendTemplatedEmail(email, templateName string, templateDat
 	_, err = n.sesClient.SendTemplatedEmail(input)
 	if err != nil {
 		return fmt.Errorf("error sending templated email: %w", err)
+	}
+
+	return nil
+}
+
+func (n *SESNotifier) SendEmailWithAttachment(email, subject, body string, attachmentName string, attachmentData []byte) error {
+	boundary := "NextPartBoundary"
+
+	headers := "From: " + n.sender + "\r\n" +
+		"To: " + email + "\r\n" +
+		"Subject: " + subject + "\r\n" +
+		"MIME-Version: 1.0\r\n" +
+		"Content-Type: multipart/mixed; boundary=" + boundary + "\r\n\r\n"
+
+	bodyPart := "--" + boundary + "\r\n" +
+		"Content-Type: text/html; charset=utf-8\r\n" +
+		"Content-Transfer-Encoding: 7bit\r\n\r\n" +
+		body + "\r\n\r\n"
+
+	attachmentPart := "--" + boundary + "\r\n" +
+		"Content-Type: application/pdf; name=\"" + attachmentName + "\"\r\n" +
+		"Content-Transfer-Encoding: base64\r\n" +
+		"Content-Disposition: attachment; filename=\"" + attachmentName + "\"\r\n\r\n"
+
+	encodedAttachment := make([]byte, base64.StdEncoding.EncodedLen(len(attachmentData)))
+	base64.StdEncoding.Encode(encodedAttachment, attachmentData)
+
+	ending := "\r\n--" + boundary + "--"
+
+	rawMessage := []byte(headers + bodyPart + attachmentPart + string(encodedAttachment) + ending)
+
+	input := &ses.SendRawEmailInput{
+		RawMessage: &ses.RawMessage{Data: rawMessage},
+	}
+
+	_, err := n.sesClient.SendRawEmail(input)
+	if err != nil {
+		return fmt.Errorf("error sending email with attachment: %w", err)
 	}
 
 	return nil

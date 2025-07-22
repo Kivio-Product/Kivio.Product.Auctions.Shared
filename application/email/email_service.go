@@ -8,6 +8,7 @@ type EmailServiceInterface interface {
 	NotifyOffer(ctx context.Context, auctionURL string, offerName string, posId string) error
 	NotifyOrder(ctx context.Context, state string, customerEmail string, totalOfferedAmount int64, concatenatedItemNames string) error
 	NotifyAdminApprovedOrders(ctx context.Context, adminEmail string, templateData map[string]string) error
+	NotifyAdminApprovedOrdersWithAttachment(ctx context.Context, adminEmail string, subject string, body string, attachmentName string, attachmentData []byte) error
 }
 
 type EmailService struct {
@@ -44,4 +45,8 @@ func (s *EmailService) NotifyOrder(ctx context.Context, state string, customerEm
 
 func (s *EmailService) NotifyAdminApprovedOrders(ctx context.Context, adminEmail string, templateData map[string]string) error {
 	return s.NotifyAdminApprovedOrdersUseCase.Execute(ctx, adminEmail, templateData)
+}
+
+func (s *EmailService) NotifyAdminApprovedOrdersWithAttachment(ctx context.Context, adminEmail string, subject string, body string, attachmentName string, attachmentData []byte) error {
+	return s.NotifyAdminApprovedOrdersUseCase.ExecuteWithAttachment(ctx, adminEmail, subject, body, attachmentName, attachmentData)
 }

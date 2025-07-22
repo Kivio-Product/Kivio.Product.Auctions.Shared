@@ -12,10 +12,13 @@ import (
 	itemSpecInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item_specification"
 	orderInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/order"
 
+	"bytes"
+
 	emailservices "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
 	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
 	payment "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/payment"
 	paymentDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/payment"
+	"github.com/jung-kurt/gofpdf"
 )
 
 type OrderService interface {
@@ -285,16 +288,40 @@ func (s *orderService) NotifyAndCloseApprovedOrdersByPointOfSaleId(ctx context.C
 		return nil
 	}
 
-	body := "Órdenes aprobadas:\n\n"
+	// Generar PDF
+	pdf := gofpdf.New("P", "mm", "A4", "")
+	pdf.AddPage()
+	pdf.SetFont("Arial", "B", 16)
+	pdf.Cell(40, 10, "Resumen de Órdenes Aprobadas")
+	pdf.Ln(12)
+
+	pdf.SetFont("Arial", "B", 12)
+	pdf.Cell(40, 10, "OrderId")
+	pdf.Cell(40, 10, "Producto")
+	pdf.Cell(40, 10, "Monto")
+	pdf.Cell(40, 10, "CustomerId")
+	pdf.Ln(10)
+
+	pdf.SetFont("Arial", "", 12)
 	for _, order := range approvedOrders {
-		body += "OrderId: " + order.OrderId + ", CustomerId: " + order.CustomerId + ", Amount: " + fmt.Sprintf("%d", order.OfferedAmount) + "\n"
+		pdf.Cell(40, 10, order.OrderId)
+		pdf.Cell(40, 10, order.ExtraData)
+		pdf.Cell(40, 10, fmt.Sprintf("%d", order.OfferedAmount))
+		pdf.Cell(40, 10, order.CustomerId)
+		pdf.Ln(10)
 	}
 
-	templateData := map[string]string{
-		"ORDERS_LIST": body,
+	var buf bytes.Buffer
+	err = pdf.Output(&buf)
+	if err != nil {
+		return fmt.Errorf("error generando el PDF: %w", err)
 	}
 
-	err = s.emailService.NotifyAdminApprovedOrders(ctx, adminEmail, templateData)
+	subject := "Resumen de Órdenes Aprobadas Adjunto"
+	body := `<html><body><p>Estimado(a) administrador(a),</p><p>Adjunto a este correo, encontrará el resumen detallado de todas las órdenes aprobadas.</p></body></html>`
+	attachmentName := "ordenes_aprobadas.pdf"
+
+	err = s.emailService.NotifyAdminApprovedOrdersWithAttachment(ctx, adminEmail, subject, body, attachmentName, buf.Bytes())
 	if err != nil {
 		return err
 	}
