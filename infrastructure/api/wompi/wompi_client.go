@@ -111,7 +111,7 @@ func (c *WompiClient) CreateTransaction(req *domain.WompiTransactionRequest) (*d
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusCreated {
 		var errBody bytes.Buffer
 		errBody.ReadFrom(resp.Body)
 		return nil, fmt.Errorf("error en /transactions: status %d, body: %s", resp.StatusCode, errBody.String())
