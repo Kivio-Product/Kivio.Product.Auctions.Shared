@@ -291,24 +291,28 @@ func (s *orderService) NotifyAndCloseApprovedOrdersByPointOfSaleId(ctx context.C
 	// Generar PDF
 	pdf := gofpdf.New("P", "mm", "A4", "")
 	pdf.AddPage()
-	pdf.SetFont("Arial", "B", 16)
-	pdf.Cell(40, 10, "Resumen de Órdenes Aprobadas")
+	pdf.SetFont("Arial", "B", 14) // Título más pequeño
+	pdf.Cell(0, 10, "Resumen de Órdenes Aprobadas")
 	pdf.Ln(12)
 
-	pdf.SetFont("Arial", "B", 12)
-	pdf.Cell(40, 10, "OrderId")
-	pdf.Cell(40, 10, "Producto")
-	pdf.Cell(40, 10, "Monto")
-	pdf.Cell(40, 10, "CustomerId")
-	pdf.Ln(10)
+	pdf.SetFont("Arial", "B", 10)
+	pdf.CellFormat(50, 7, "OrderId", "1", 0, "", false, 0, "")
+	pdf.CellFormat(50, 7, "Producto", "1", 0, "", false, 0, "")
+	pdf.CellFormat(25, 7, "Monto", "1", 0, "", false, 0, "")
+	pdf.CellFormat(60, 7, "CustomerId", "1", 0, "", false, 0, "")
+	pdf.Ln(-1)
 
-	pdf.SetFont("Arial", "", 12)
+	pdf.SetFont("Arial", "", 9)
 	for _, order := range approvedOrders {
-		pdf.Cell(40, 10, order.OrderId)
-		pdf.Cell(40, 10, order.ExtraData)
-		pdf.Cell(40, 10, fmt.Sprintf("%d", order.OfferedAmount))
-		pdf.Cell(40, 10, order.CustomerId)
-		pdf.Ln(10)
+		y := pdf.GetY()
+		x := pdf.GetX()
+		pdf.MultiCell(50, 6, order.OrderId, "1", "", false)
+		pdf.SetXY(x+50, y)
+		pdf.MultiCell(50, 6, order.ExtraData, "1", "", false)
+		pdf.SetXY(x+100, y)
+		pdf.CellFormat(25, 6, fmt.Sprintf("%d", order.OfferedAmount), "1", 0, "", false, 0, "")
+		pdf.CellFormat(60, 6, order.CustomerId, "1", 0, "", false, 0, "")
+		pdf.Ln(-1)
 	}
 
 	var buf bytes.Buffer
