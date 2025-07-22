@@ -116,6 +116,9 @@ func (s *orderService) UpdateOrder(ctx context.Context, input domain.OrderInput)
 				CustomerEmail:   order.CustomerId,
 				PaymentSourceId: 0,
 				Reference:       order.OrderId,
+				PaymentMethod: &paymentDomain.WompiPaymentMethod{
+					Installments: 1,
+				},
 			}
 
 			var paymentSourceId int64
