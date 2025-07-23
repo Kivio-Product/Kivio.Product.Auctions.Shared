@@ -16,7 +16,7 @@ type WompiService interface {
 	GetAcceptanceTokenInfo(ctx context.Context) (*paymentDomain.AcceptanceTokenInfo, error)
 	CreateCardToken(ctx context.Context, req *paymentDomain.WompiCardTokenRequest) (*paymentDomain.WompiCardTokenResponse, error)
 	CreatePaymentSource(ctx context.Context, req *paymentDomain.WompiPaymentSourceRequest) (*paymentDomain.WompiPaymentSourceResponse, error)
-	CreateNequiToken(ctx context.Context, phoneNumber string) (string, error)
+	CreateNequiToken(ctx context.Context, phoneNumber, acceptanceToken, acceptancePersonalAuth string) (*paymentDomain.WompiNequiTokenResponse, error)
 }
 
 type wompiService struct {
@@ -72,6 +72,6 @@ func (s *wompiService) CreatePaymentSource(ctx context.Context, req *paymentDoma
 	return s.client.CreatePaymentSource(req)
 }
 
-func (s *wompiService) CreateNequiToken(ctx context.Context, phoneNumber string) (string, error) {
-	return s.client.CreateNequiToken(phoneNumber)
+func (s *wompiService) CreateNequiToken(ctx context.Context, phoneNumber, acceptanceToken, acceptancePersonalAuth string) (*paymentDomain.WompiNequiTokenResponse, error) {
+	return s.client.CreateNequiToken(phoneNumber, acceptanceToken, acceptancePersonalAuth)
 }

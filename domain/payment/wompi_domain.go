@@ -121,6 +121,15 @@ type WompiTransactionResponse struct {
 	} `json:"data"`
 }
 
+type WompiNequiTokenResponse struct {
+	Data struct {
+		ID          string `json:"id"`
+		Status      string `json:"status"`
+		PhoneNumber string `json:"phone_number"`
+		Name        string `json:"name"`
+	} `json:"data"`
+}
+
 func GenerateWompiSignature(req WompiSignatureRequest) (*WompiSignatureResponse, error) {
 	if req.Reference == "" {
 		return nil, fmt.Errorf("la referencia no puede estar vacía")
