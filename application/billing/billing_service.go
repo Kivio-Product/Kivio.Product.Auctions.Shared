@@ -33,6 +33,7 @@ type BillingService interface {
 	GetBillingById(ctx context.Context, id string) (*domain.Billing, error)
 	GetAllBillingsWithDetail(ctx context.Context) ([]domain.BillingDetailResponse, error)
 	ConfirmPayUResponse(ctx context.Context, res *paymentDomain.ConfirmationResponse, secretKey string) error
+	ConfirmWompiResponse(ctx context.Context, body []byte) error
 	GetPaginatedBillingsWithDetails(ctx context.Context, params orderDomain.PaginationParams) (*domain.PaginatedBillingDetailsResponse, error)
 	GetOrdersBillingByID(ctx context.Context, id string) ([]domain.BillingByOrder, error)
 }
