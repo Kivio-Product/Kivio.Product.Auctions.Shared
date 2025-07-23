@@ -13,6 +13,7 @@ import (
 
 	"bytes"
 
+	billing "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/billing"
 	emailservices "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
 	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
 	payment "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/payment"
@@ -35,17 +36,18 @@ type OrderService interface {
 }
 
 type orderService struct {
-	repo         orderInfrastructure.OrderRepository
-	orderFactory domain.OrderFactory
-	itemSpecRepo itemSpecInfrastructure.ItemSpecificationRepository
-	itemRepo     itemInfrastructure.ItemRepository
-	emailService emailservices.EmailServiceInterface
-	offerService offerService.IOfferService
-	wompiService payment.WompiService
+	repo           orderInfrastructure.OrderRepository
+	orderFactory   domain.OrderFactory
+	itemSpecRepo   itemSpecInfrastructure.ItemSpecificationRepository
+	itemRepo       itemInfrastructure.ItemRepository
+	emailService   emailservices.EmailServiceInterface
+	offerService   offerService.IOfferService
+	wompiService   payment.WompiService
+	billingService billing.BillingService
 }
 
-func NewOrderService(repo orderInfrastructure.OrderRepository, orderFactory domain.OrderFactory, itemSpecRepo itemSpecInfrastructure.ItemSpecificationRepository, itemRepo itemInfrastructure.ItemRepository, emailService emailservices.EmailServiceInterface, offerService offerService.IOfferService, wompiService payment.WompiService) OrderService {
-	return &orderService{repo: repo, orderFactory: orderFactory, itemSpecRepo: itemSpecRepo, itemRepo: itemRepo, emailService: emailService, offerService: offerService, wompiService: wompiService}
+func NewOrderService(repo orderInfrastructure.OrderRepository, orderFactory domain.OrderFactory, itemSpecRepo itemSpecInfrastructure.ItemSpecificationRepository, itemRepo itemInfrastructure.ItemRepository, emailService emailservices.EmailServiceInterface, offerService offerService.IOfferService, wompiService payment.WompiService, billingService billing.BillingService) OrderService {
+	return &orderService{repo: repo, orderFactory: orderFactory, itemSpecRepo: itemSpecRepo, itemRepo: itemRepo, emailService: emailService, offerService: offerService, wompiService: wompiService, billingService: billingService}
 }
 
 func (s *orderService) CreateOrder(ctx context.Context, input domain.OrderInput) (*domain.Order, error) {
@@ -118,19 +120,24 @@ func (s *orderService) UpdateOrder(ctx context.Context, input domain.OrderInput)
 			return err
 		}
 		if offer.Type == "Regular auction" && order.WompiIdPayment != "" {
+			billingReference, err := s.billingService.GetBillingReferenceByOrderId(ctx, order.OrderId)
+			if err != nil {
+				return fmt.Errorf("error obteniendo la referencia de facturación: %w", err)
+			}
+
 			wompiReq := &paymentDomain.WompiTransactionRequest{
 				AmountInCents:   amountInCents,
 				Currency:        "COP",
 				CustomerEmail:   order.CustomerId,
 				PaymentSourceId: 0,
-				Reference:       order.OrderId,
+				Reference:       billingReference,
 				PaymentMethod: &paymentDomain.WompiPaymentMethod{
 					Installments: 1,
 				},
 			}
 
 			var paymentSourceId int64
-			_, err := fmt.Sscan(order.WompiIdPayment, &paymentSourceId)
+			_, err = fmt.Sscan(order.WompiIdPayment, &paymentSourceId)
 			if err != nil {
 				return fmt.Errorf("error convirtiendo WompiIdPayment a int64: %w", err)
 			}
@@ -140,7 +147,7 @@ func (s *orderService) UpdateOrder(ctx context.Context, input domain.OrderInput)
 			if integritySecret == "" {
 				return fmt.Errorf("WOMPI_INTEGRITY_SECRET no está configurado")
 			}
-			signatureResp, err := s.wompiService.GenerateIntegritySignature(ctx, order.OrderId, amountInCents, "COP", integritySecret, nil)
+			signatureResp, err := s.wompiService.GenerateIntegritySignature(ctx, billingReference, amountInCents, "COP", integritySecret, nil)
 			if err != nil {
 				return fmt.Errorf("error generando signature Wompi: %w", err)
 			}

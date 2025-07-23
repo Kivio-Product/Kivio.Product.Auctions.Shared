@@ -36,6 +36,7 @@ type BillingService interface {
 	ConfirmWompiResponse(ctx context.Context, body []byte) error
 	GetPaginatedBillingsWithDetails(ctx context.Context, params orderDomain.PaginationParams) (*domain.PaginatedBillingDetailsResponse, error)
 	GetOrdersBillingByID(ctx context.Context, id string) ([]domain.BillingByOrder, error)
+	GetBillingReferenceByOrderId(ctx context.Context, orderId string) (string, error)
 }
 
 type billingService struct {
@@ -268,6 +269,21 @@ func (s *billingService) GetOrdersByBillingId(ctx context.Context, id string) ([
 		return nil, err
 	}
 	return billing, nil
+}
+
+func (s *billingService) GetBillingReferenceByOrderId(ctx context.Context, orderId string) (string, error) {
+	billingsByOrder, err := s.repo.GetAllOrderBillings(ctx)
+	if err != nil {
+		return "", fmt.Errorf("error obteniendo BillingByOrder: %w", err)
+	}
+
+	for _, billingOrder := range billingsByOrder {
+		if billingOrder.OrderId == orderId {
+			return billingOrder.BillingId, nil
+		}
+	}
+
+	return "", fmt.Errorf("no se encontró billing para el orderId: %s", orderId)
 }
 
 func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDomain.ConfirmationResponse, secretKey string) error {
