@@ -531,7 +531,6 @@ type WompiWebhook struct {
 			PaymentMethod string `json:"payment_method_type"`
 			RedirectURL   string `json:"redirect_url"`
 			Status        string `json:"status"`
-			TransactionID string `json:"id"`
 		} `json:"transaction"`
 	} `json:"data"`
 	Environment string `json:"environment"`
