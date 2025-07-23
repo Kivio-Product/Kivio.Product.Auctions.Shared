@@ -502,6 +502,139 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 	return nil
 }
 
+type WompiWebhook struct {
+	Event string `json:"event"`
+	Data  struct {
+		Transaction struct {
+			ID            string `json:"id"`
+			AmountInCents int64  `json:"amount_in_cents"`
+			Reference     string `json:"reference"`
+			CustomerEmail string `json:"customer_email"`
+			Currency      string `json:"currency"`
+			PaymentMethod string `json:"payment_method_type"`
+			RedirectURL   string `json:"redirect_url"`
+			Status        string `json:"status"`
+			TransactionID string `json:"id"`
+		} `json:"transaction"`
+	} `json:"data"`
+	Environment string `json:"environment"`
+	Signature   struct {
+		Properties []string `json:"properties"`
+		Checksum   string   `json:"checksum"`
+	} `json:"signature"`
+	Timestamp int64  `json:"timestamp"`
+	SentAt    string `json:"sent_at"`
+}
+
+func (s *billingService) ConfirmWompiResponse(ctx context.Context, body []byte) error {
+	fmt.Println("Iniciando ConfirmWompiResponse")
+
+	var webhook WompiWebhook
+	if err := json.Unmarshal(body, &webhook); err != nil {
+		return fmt.Errorf("error al parsear el body de Wompi: %w", err)
+	}
+
+	tx := webhook.Data.Transaction
+	billingId := tx.Reference
+
+	fmt.Printf("Buscando facturación con ID: %s\n", billingId)
+	billing, err := s.repo.GetBillingByID(ctx, billingId)
+	if err != nil {
+		fmt.Printf("Error: no se encontró facturación con ID: %s - %v\n", billingId, err)
+		return fmt.Errorf("no se encontró facturación con ID: %s", billingId)
+	}
+
+	fmt.Printf("Facturación encontrada: %+v\n", billing)
+
+	state := map[string]string{
+		"APPROVED": "Approved",
+		"DECLINED": "Rejected",
+		"PENDING":  "Pending",
+		"VOIDED":   "Error",
+		"ERROR":    "Error",
+	}[strings.ToUpper(tx.Status)]
+
+	fmt.Printf("Estado de la transacción: %s -> %s\n", tx.Status, state)
+
+	billing.State = state
+	billing.PayloadType = tx.PaymentMethod
+	billing.TransactionId = tx.ID
+	billing.ConfirmedAt = time.Now()
+
+	fmt.Printf("Actualizando facturación: State=%s, PayloadType=%s, TransactionId=%s, ConfirmedAt=%v\n",
+		billing.State, billing.PayloadType, billing.TransactionId, billing.ConfirmedAt)
+
+	err = s.repo.UpdateBilling(ctx, billing)
+	if err != nil {
+		fmt.Printf("Error al actualizar la facturación: %v\n", err)
+		return fmt.Errorf("error al actualizar la facturación: %v", err)
+	}
+
+	orders, err := s.repo.GetOrdersBillingByID(ctx, billingId)
+	if err != nil {
+		fmt.Printf("no se encontraron ordenes de facturas con ID: %s\n", billingId)
+		return fmt.Errorf("no se encontraron ordenes de facturas con ID: %s", billingId)
+	}
+
+	var orderIDs []string
+	for _, order := range orders {
+		orderIDs = append(orderIDs, order.OrderId)
+	}
+
+	var validOrders []*orderDomain.Order
+	for _, id := range orderIDs {
+		order, err := s.orderRepo.GetIdOrder(ctx, id)
+		if err == nil {
+			validOrders = append(validOrders, order)
+		}
+	}
+
+	if len(validOrders) == 0 {
+		return fmt.Errorf("no se encontró ninguna orden válida en: %v", orderIDs)
+	}
+
+	var concatenatedItemNames []string
+	var firstOrderAmount int64
+	var customerEmail string
+
+	for _, order := range validOrders {
+		if customerEmail == "" && len(validOrders) > 0 {
+			customerEmail = validOrders[0].CustomerId
+		}
+
+		switch state {
+		case "Approved":
+			order.State = "Pending"
+		case "Rejected", "Error":
+			order.State = "Rejected"
+		default:
+			continue
+		}
+
+		err := s.orderRepo.UpdateOrder(ctx, order)
+		if err != nil {
+			return fmt.Errorf("no se pudo actualizar la orden %s: %v", order.OrderId, err)
+		}
+
+		concatenatedItemNames = append(concatenatedItemNames, order.ExtraData)
+		if firstOrderAmount == 0 {
+			firstOrderAmount = order.OfferedAmount
+		}
+	}
+
+	if customerEmail != "" && len(concatenatedItemNames) > 0 {
+		go func() {
+			err = s.emailService.NotifyOrder(ctx, state, customerEmail, firstOrderAmount, strings.Join(concatenatedItemNames, ", "))
+			if err != nil {
+				fmt.Printf("No se pudo enviar el correo: %s\n", err)
+			}
+		}()
+	}
+
+	fmt.Println("Facturación actualizada correctamente (Wompi)")
+	return nil
+}
+
 func validatePayUSignature(secretKey, merchantId, referenceSale string, valueStr string, currency string, statePol int, incomingSignature string) bool {
 
 	value, _ := strconv.ParseFloat(valueStr, 64)
