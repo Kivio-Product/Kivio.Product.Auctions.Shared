@@ -620,7 +620,7 @@ func (s *billingService) ConfirmWompiResponse(ctx context.Context, body []byte) 
 
 		switch state {
 		case "Approved":
-			order.State = "Pending"
+			order.State = "Approved"
 		case "Rejected", "Error":
 			order.State = "Rejected"
 		default:
