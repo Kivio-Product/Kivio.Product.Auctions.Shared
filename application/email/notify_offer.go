@@ -33,7 +33,7 @@ func NewNotifyOfferUseCase(
 	}
 }
 
-func (uc *NotifyOfferUseCase) Execute(ctx context.Context, auctionURL, offerName, posID string) error {
+func (uc *NotifyOfferUseCase) Execute(ctx context.Context, auctionURL, offerName, posID, posName string) error {
 	s3Key := os.Getenv("S3_EMAILS_FILE")
 	if s3Key == "" {
 		return fmt.Errorf("S3_EMAILS_FILE env variable is required")
@@ -71,7 +71,14 @@ func (uc *NotifyOfferUseCase) Execute(ctx context.Context, auctionURL, offerName
 			"OFFER_DESCRIPTION": offerName,
 			"EXPIRATION_DATE":   expirationDate,
 		}
-		err := uc.notifier.SendTemplatedEmail(email, "OfertaGeneral", templateData)
+
+		templateName := "OfertaGeneral"
+
+		if posName != "" {
+			templateName = templateName + posName
+		}
+
+		err := uc.notifier.SendTemplatedEmail(email, templateName, templateData)
 		if err != nil {
 			fmt.Printf("Error enviando a %s: %v\n", email, err)
 		}
