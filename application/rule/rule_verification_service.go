@@ -329,7 +329,11 @@ func (s *ruleVerificationService) verifySpecification(
 		fmt.Printf("%s no encontrado o no es bool para el artículo %d.\n", spec.Parameter, itemIdInt)
 	case "AvailableStartDate", "AvailableEndDate":
 		if dateStr, ok := matchingItem["available_start_date_time_utc"].(string); ok {
+			if !strings.HasSuffix(dateStr, "Z") {
+				dateStr += "Z"
+			}
 			date, err := time.Parse(time.RFC3339, dateStr)
+
 			if err != nil {
 				fmt.Printf("Error al parsear la cadena de fecha '%s' (RFC3339) para el artículo %d: %v\n", dateStr, itemIdInt, err)
 				return false
@@ -351,24 +355,27 @@ func (s *ruleVerificationService) verifySpecification(
 }
 
 func verifyDateValue(value time.Time, spec ruleSpecDomain.RuleSpecification) bool {
-	formats := []string{
-		time.RFC3339,
-		time.RFC1123,
-		"2006-01-02",
+	dateStr := spec.Type
+	if idx := strings.Index(dateStr, "("); idx != -1 {
+		dateStr = strings.TrimSpace(dateStr[:idx])
 	}
 
+	formats := []string{
+		time.RFC3339,
+		"Mon Jan 02 2006 15:04:05 GMT-0700",
+		"Mon Jan 02 15:04:05 MST 2006",
+		"2006-01-02",
+	}
 	var parameterDate time.Time
 	var err error
-
 	for _, format := range formats {
-		parameterDate, err = time.Parse(format, spec.Type)
+		parameterDate, err = time.Parse(format, dateStr)
 		if err == nil {
 			break
 		}
 	}
-
 	if err != nil {
-		fmt.Printf("Error al parsear spec.Type '%s' como fecha en verifyDateValue (intentando múltiples formatos): %v\n", spec.Type, err)
+		fmt.Printf("Error al parsear spec.Type '%s' como fecha en verifyDateValue (intentando múltiples formatos): %v\n", dateStr, err)
 		return false
 	}
 
