@@ -321,14 +321,22 @@ func (s *orderService) NotifyAndCloseApprovedOrdersByPointOfSaleId(ctx context.C
 
 	pdf.SetFont("Arial", "", 9)
 	for _, order := range approvedOrders {
-		y := pdf.GetY()
 		x := pdf.GetX()
+		y := pdf.GetY()
+
+		orderIdLines := pdf.SplitLines([]byte(order.OrderId), 50)
+		productLines := pdf.SplitLines([]byte(order.ExtraData), 50)
+		maxLines := len(orderIdLines)
+		if len(productLines) > maxLines {
+			maxLines = len(productLines)
+		}
+		rowHeight := float64(maxLines) * 6
 		pdf.MultiCell(50, 6, order.OrderId, "1", "", false)
 		pdf.SetXY(x+50, y)
 		pdf.MultiCell(50, 6, order.ExtraData, "1", "", false)
 		pdf.SetXY(x+100, y)
-		pdf.CellFormat(25, 6, fmt.Sprintf("%d", order.OfferedAmount), "1", 0, "", false, 0, "")
-		pdf.CellFormat(60, 6, order.CustomerId, "1", 0, "", false, 0, "")
+		pdf.CellFormat(25, rowHeight, fmt.Sprintf("%d", order.OfferedAmount), "1", 0, "", false, 0, "")
+		pdf.CellFormat(60, rowHeight, order.CustomerId, "1", 0, "", false, 0, "")
 		pdf.Ln(-1)
 	}
 
