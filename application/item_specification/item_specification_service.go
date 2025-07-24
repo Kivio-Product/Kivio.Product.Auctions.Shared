@@ -17,6 +17,7 @@ type ItemSpecificationService interface {
 	Get() ([]domain.ItemSpecification, error)
 	GetById(ctx context.Context, id string) (*domain.ItemSpecification, error)
 	Update(ctx context.Context, id, currency, offerId, itemId, pointOfSaleId string, amount, availability int64, expireAt time.Time) error
+	UpdateState(ctx context.Context, id string, state domain.ItemSpecificationState) error
 	Delete(ctx context.Context, id string) error
 	GetItemSpecByOfferId(ctx context.Context, id string, pointOfSaleId string) ([]domain.ItemSpecification, error)
 	GetItemSpecByItemId(ctx context.Context, id string, pointOfSaleId string) ([]domain.ItemSpecification, error)
@@ -78,6 +79,18 @@ func (s *itemSpecificationService) GetById(ctx context.Context, id string) (*dom
 func (s *itemSpecificationService) Update(ctx context.Context, id, currency, offerId, itemId, pointOfSaleId string, amount, availability int64, expireAt time.Time) error {
 	item, err := s.repo.GetById(ctx, id)
 	err = item.Update(currency, offerId, itemId, pointOfSaleId, amount, availability, expireAt)
+	if err != nil {
+		return err
+	}
+	return s.repo.Save(ctx, item)
+}
+
+func (s *itemSpecificationService) UpdateState(ctx context.Context, id string, state domain.ItemSpecificationState) error {
+	item, err := s.repo.GetById(ctx, id)
+	if err != nil {
+		return err
+	}
+	err = item.UpdateState(state)
 	if err != nil {
 		return err
 	}

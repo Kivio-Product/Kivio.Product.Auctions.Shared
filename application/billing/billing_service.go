@@ -19,6 +19,7 @@ import (
 
 	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
 	emailService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
+	pointOfSaleService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/point_of_sale"
 
 	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
 	billingInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/billing"
@@ -40,15 +41,16 @@ type BillingService interface {
 }
 
 type billingService struct {
-	repo             billingInfrastructure.BillingRepository
-	billingFactory   domain.BillingFactory
-	orderRepo        orderInfrastructure.OrderRepository
-	itemSpecRepo     itemSpecInfrastructure.ItemSpecificationRepository
-	itemRepo         itemInfrastructure.ItemRepository
-	emailService     emailService.EmailServiceInterface
-	ecommerceCredSvc ecommerceService.EcommerceCredentialsService
-	ecommerceSvc     ecommerceService.EcommerceService
-	offerService     offerService.IOfferService
+	repo               billingInfrastructure.BillingRepository
+	billingFactory     domain.BillingFactory
+	orderRepo          orderInfrastructure.OrderRepository
+	itemSpecRepo       itemSpecInfrastructure.ItemSpecificationRepository
+	itemRepo           itemInfrastructure.ItemRepository
+	pointOfSaleService pointOfSaleService.IPosService
+	emailService       emailService.EmailServiceInterface
+	ecommerceCredSvc   ecommerceService.EcommerceCredentialsService
+	ecommerceSvc       ecommerceService.EcommerceService
+	offerService       offerService.IOfferService
 }
 
 func NewBillingService(
@@ -61,17 +63,19 @@ func NewBillingService(
 	ecommerceCredSvc ecommerceService.EcommerceCredentialsService,
 	ecommerceSvc ecommerceService.EcommerceService,
 	offerService offerService.IOfferService,
+	pointOfSaleService pointOfSaleService.IPosService,
 ) BillingService {
 	return &billingService{
-		repo:             repo,
-		billingFactory:   billingFactory,
-		orderRepo:        orderRepo,
-		itemSpecRepo:     itemSpecRepo,
-		itemRepo:         itemRepo,
-		emailService:     emailService,
-		ecommerceCredSvc: ecommerceCredSvc,
-		ecommerceSvc:     ecommerceSvc,
-		offerService:     offerService,
+		repo:               repo,
+		billingFactory:     billingFactory,
+		orderRepo:          orderRepo,
+		itemSpecRepo:       itemSpecRepo,
+		itemRepo:           itemRepo,
+		emailService:       emailService,
+		ecommerceCredSvc:   ecommerceCredSvc,
+		ecommerceSvc:       ecommerceSvc,
+		offerService:       offerService,
+		pointOfSaleService: pointOfSaleService,
 	}
 }
 
@@ -362,6 +366,16 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 		return fmt.Errorf("no se encontró ninguna orden válida en: %v", orderIDs)
 	}
 
+	var posId = validOrders[0].PointOfSaleId
+
+	var posName string
+	if posId != "" {
+		pos, err := s.pointOfSaleService.GetPosById(ctx, posId)
+		if err == nil {
+			posName = pos.Name
+		}
+	}
+
 	var concatenatedItemNames []string
 	var concatenatedItemDescriptions []string
 	var concatenatedItemSpecsAvailability []int64
@@ -477,7 +491,7 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 
 		if customerEmail != "" && len(concatenatedItemNames) > 0 {
 			go func() {
-				err = s.emailService.NotifyOrder(ctx, state, customerEmail, firstOrderAmount, strings.Join(concatenatedItemNames, ", "))
+				err = s.emailService.NotifyOrder(ctx, state, customerEmail, firstOrderAmount, strings.Join(concatenatedItemNames, ", "), posName)
 				if err != nil {
 					fmt.Printf("No se puedo enviar el correo: %s\n", err)
 				}
@@ -507,7 +521,7 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 		}
 		if customerEmail != "" && len(concatenatedItemNames) > 0 {
 			go func() {
-				err = s.emailService.NotifyOrder(ctx, state, customerEmail, firstOrderAmount, strings.Join(concatenatedItemNames, ", "))
+				err = s.emailService.NotifyOrder(ctx, state, customerEmail, firstOrderAmount, strings.Join(concatenatedItemNames, ", "), posName)
 				if err != nil {
 					fmt.Printf("No se puedo enviar el correo: %s\n", err)
 				}
@@ -609,6 +623,16 @@ func (s *billingService) ConfirmWompiResponse(ctx context.Context, body []byte) 
 		return fmt.Errorf("no se encontró ninguna orden válida en: %v", orderIDs)
 	}
 
+	var posId = validOrders[0].PointOfSaleId
+
+	var posName string
+	if posId != "" {
+		pos, err := s.pointOfSaleService.GetPosById(ctx, posId)
+		if err == nil {
+			posName = pos.Name
+		}
+	}
+
 	var concatenatedItemNames []string
 	var firstOrderAmount int64
 	var customerEmail string
@@ -640,7 +664,7 @@ func (s *billingService) ConfirmWompiResponse(ctx context.Context, body []byte) 
 
 	if customerEmail != "" && len(concatenatedItemNames) > 0 {
 		go func() {
-			err = s.emailService.NotifyOrder(ctx, state, customerEmail, firstOrderAmount, strings.Join(concatenatedItemNames, ", "))
+			err = s.emailService.NotifyOrder(ctx, state, customerEmail, firstOrderAmount, strings.Join(concatenatedItemNames, ", "), posName)
 			if err != nil {
 				fmt.Printf("No se pudo enviar el correo: %s\n", err)
 			}
