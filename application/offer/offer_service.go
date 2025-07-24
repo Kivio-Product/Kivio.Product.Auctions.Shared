@@ -10,7 +10,6 @@ import (
 
 	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
 	emailService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
-	pointOfSaleService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/point_of_sale"
 	itemDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
 	itemSpecDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item_specification"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/offer"
@@ -18,6 +17,7 @@ import (
 	itemRepository "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item"
 	itemSpecRepository "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item_specification"
 	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/offer"
+	pointOfSaleRespository "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/point_of_sale"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
 
@@ -40,15 +40,15 @@ type IOfferService interface {
 }
 
 type OfferService struct {
-	repo               infrastructure.IOfferRepository
-	emailSender        emailService.EmailServiceInterface
-	offerFactory       domain.OfferFactory
-	itemRepository     itemRepository.ItemRepository
-	itemSpecRepository itemSpecRepository.ItemSpecificationRepository
-	ecommerceService   ecommerceService.EcommerceService
-	ecommerceCredSvc   ecommerceService.EcommerceCredentialsService
-	scheduler          scheduler.SchedulerService
-	pointOfSaleService pointOfSaleService.PosService
+	repo                   infrastructure.IOfferRepository
+	emailSender            emailService.EmailServiceInterface
+	offerFactory           domain.OfferFactory
+	itemRepository         itemRepository.ItemRepository
+	itemSpecRepository     itemSpecRepository.ItemSpecificationRepository
+	ecommerceService       ecommerceService.EcommerceService
+	ecommerceCredSvc       ecommerceService.EcommerceCredentialsService
+	scheduler              scheduler.SchedulerService
+	pointOfSaleRespository pointOfSaleRespository.PosRepository
 }
 
 type OfferWithDetails struct {
@@ -67,17 +67,17 @@ type OfferWithItemsAndSpecs struct {
 	Items []ItemWithSpecs `json:"items"`
 }
 
-func NewofferService(repo infrastructure.IOfferRepository, offerFactory domain.OfferFactory, emailSender emailService.EmailServiceInterface, itemRepository itemRepository.ItemRepository, itemSpecRepository itemSpecRepository.ItemSpecificationRepository, ecommerceService ecommerceService.EcommerceService, ecommerceCredSvc ecommerceService.EcommerceCredentialsService, scheduler scheduler.SchedulerService, pointOfSaleService pointOfSaleService.PosService) IOfferService {
+func NewofferService(repo infrastructure.IOfferRepository, offerFactory domain.OfferFactory, emailSender emailService.EmailServiceInterface, itemRepository itemRepository.ItemRepository, itemSpecRepository itemSpecRepository.ItemSpecificationRepository, ecommerceService ecommerceService.EcommerceService, ecommerceCredSvc ecommerceService.EcommerceCredentialsService, scheduler scheduler.SchedulerService, pointOfSaleRespository pointOfSaleRespository.PosRepository) IOfferService {
 	return &OfferService{
-		repo:               repo,
-		offerFactory:       offerFactory,
-		emailSender:        emailSender,
-		itemRepository:     itemRepository,
-		itemSpecRepository: itemSpecRepository,
-		ecommerceService:   ecommerceService,
-		ecommerceCredSvc:   ecommerceCredSvc,
-		scheduler:          scheduler,
-		pointOfSaleService: pointOfSaleService,
+		repo:                   repo,
+		offerFactory:           offerFactory,
+		emailSender:            emailSender,
+		itemRepository:         itemRepository,
+		itemSpecRepository:     itemSpecRepository,
+		ecommerceService:       ecommerceService,
+		ecommerceCredSvc:       ecommerceCredSvc,
+		scheduler:              scheduler,
+		pointOfSaleRespository: pointOfSaleRespository,
 	}
 }
 
@@ -87,7 +87,7 @@ func (s *OfferService) SendOfferEmail(ctx context.Context, auctionURL string, of
 		return err
 	}
 
-	pos, err := s.pointOfSaleService.GetPosById(ctx, offer.PosId)
+	pos, err := s.pointOfSaleRespository.GetPosById(ctx, offer.PosId)
 	if err != nil {
 		return err
 	}
