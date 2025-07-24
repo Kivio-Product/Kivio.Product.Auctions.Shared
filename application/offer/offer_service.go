@@ -48,7 +48,7 @@ type OfferService struct {
 	ecommerceService       ecommerceService.EcommerceService
 	ecommerceCredSvc       ecommerceService.EcommerceCredentialsService
 	scheduler              scheduler.SchedulerService
-	pointOfSaleRespository pointOfSaleRespository.PosRepository
+	pointOfSaleRespository pointOfSaleRespository.IPosRepository
 }
 
 type OfferWithDetails struct {
@@ -67,7 +67,7 @@ type OfferWithItemsAndSpecs struct {
 	Items []ItemWithSpecs `json:"items"`
 }
 
-func NewofferService(repo infrastructure.IOfferRepository, offerFactory domain.OfferFactory, emailSender emailService.EmailServiceInterface, itemRepository itemRepository.ItemRepository, itemSpecRepository itemSpecRepository.ItemSpecificationRepository, ecommerceService ecommerceService.EcommerceService, ecommerceCredSvc ecommerceService.EcommerceCredentialsService, scheduler scheduler.SchedulerService, pointOfSaleRespository pointOfSaleRespository.PosRepository) IOfferService {
+func NewofferService(repo infrastructure.IOfferRepository, offerFactory domain.OfferFactory, emailSender emailService.EmailServiceInterface, itemRepository itemRepository.ItemRepository, itemSpecRepository itemSpecRepository.ItemSpecificationRepository, ecommerceService ecommerceService.EcommerceService, ecommerceCredSvc ecommerceService.EcommerceCredentialsService, scheduler scheduler.SchedulerService, pointOfSaleRespository pointOfSaleRespository.IPosRepository) IOfferService {
 	return &OfferService{
 		repo:                   repo,
 		offerFactory:           offerFactory,
