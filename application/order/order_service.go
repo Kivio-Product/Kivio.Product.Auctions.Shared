@@ -315,8 +315,8 @@ func (s *orderService) NotifyAndCloseApprovedOrdersByPointOfSaleId(ctx context.C
 
 	pdf.SetFont("Arial", "B", 10)
 	pdf.CellFormat(50, 7, "OrderId", "1", 0, "", false, 0, "")
-	pdf.CellFormat(50, 7, "Producto", "1", 0, "", false, 0, "")
-	pdf.CellFormat(25, 7, "Monto", "1", 0, "", false, 0, "")
+	pdf.CellFormat(55, 7, "Producto", "1", 0, "", false, 0, "")
+	pdf.CellFormat(20, 7, "Monto", "1", 0, "", false, 0, "")
 	pdf.CellFormat(60, 7, "CustomerId", "1", 0, "", false, 0, "")
 	pdf.Ln(-1)
 
