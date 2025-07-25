@@ -19,6 +19,7 @@ import (
 	payment "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/payment"
 	paymentDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/payment"
 	"github.com/jung-kurt/gofpdf"
+	"golang.org/x/text/message"
 )
 
 type OrderService interface {
@@ -333,9 +334,16 @@ func (s *orderService) NotifyAndCloseApprovedOrdersByPointOfSaleId(ctx context.C
 		rowHeight := float64(maxLines) * 6
 		pdf.MultiCell(50, 6, order.OrderId, "1", "", false)
 		pdf.SetXY(x+50, y)
-		pdf.MultiCell(50, 6, order.ExtraData, "1", "", false)
+
+		if len(productLines) > 1 {
+			pdf.MultiCell(55, 6, order.ExtraData, "1", "", false)
+		} else {
+			pdf.CellFormat(55, rowHeight, order.ExtraData, "1", 0, "", false, 0, "")
+		}
 		pdf.SetXY(x+100, y)
-		pdf.CellFormat(25, rowHeight, fmt.Sprintf("%d", order.OfferedAmount), "1", 0, "", false, 0, "")
+		p := message.NewPrinter(message.MatchLanguage("es"))
+		formattedAmount := p.Sprintf("%d", order.OfferedAmount)
+		pdf.CellFormat(20, rowHeight, formattedAmount, "1", 0, "", false, 0, "")
 		pdf.CellFormat(60, rowHeight, order.CustomerId, "1", 0, "", false, 0, "")
 		pdf.Ln(-1)
 	}
