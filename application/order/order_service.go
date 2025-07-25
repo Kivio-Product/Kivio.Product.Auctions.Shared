@@ -332,16 +332,20 @@ func (s *orderService) NotifyAndCloseApprovedOrdersByPointOfSaleId(ctx context.C
 			maxLines = len(productLines)
 		}
 		rowHeight := float64(maxLines) * 6
-		pdf.MultiCell(50, 6, order.OrderId, "1", "", false)
+		if len(orderIdLines) == maxLines {
+			pdf.MultiCell(50, 6, order.OrderId, "1", "", false)
+		} else {
+			pdf.CellFormat(50, rowHeight, order.OrderId, "1", 0, "", false, 0, "")
+		}
 		pdf.SetXY(x+50, y)
 
-		if len(productLines) > 1 {
+		if len(productLines) == maxLines {
 			pdf.MultiCell(55, 6, order.ExtraData, "1", "", false)
 		} else {
-			pdf.CellFormat(55, rowHeight, order.ExtraData, "1", 0, "", false, 0, "")
+			pdf.CellFormat(50, rowHeight, order.ExtraData, "1", 0, "", false, 0, "")
 		}
-		pdf.SetXY(x+100, y)
-		p := message.NewPrinter(message.MatchLanguage("es"))
+		pdf.SetXY(x+105, y)
+		p := message.NewPrinter(message.MatchLanguage("en"))
 		formattedAmount := p.Sprintf("%d", order.OfferedAmount)
 		pdf.CellFormat(20, rowHeight, formattedAmount, "1", 0, "", false, 0, "")
 		pdf.CellFormat(60, rowHeight, order.CustomerId, "1", 0, "", false, 0, "")
