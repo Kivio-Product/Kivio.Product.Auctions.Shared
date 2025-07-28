@@ -111,7 +111,13 @@ func (s *itemSpecificationService) Delete(ctx context.Context, id string) error 
 func (s *itemSpecificationService) GetItemSpecByOfferId(ctx context.Context, id string, pointOfSaleId string) ([]domain.ItemSpecification, error) {
 	itemsSpec, err := s.repo.GetItemSpecByOffer(id, pointOfSaleId)
 
-	fmt.Println("itemSpecification", itemsSpec)
+	for _, itemSpec := range itemsSpec {
+		itemSpec.CheckAndUpdateExpiredReservation()
+		itemSpec.CheckAndUpdateAvailabilityState()
+
+		s.repo.Save(ctx, &itemSpec)
+	}
+
 	if err != nil {
 		return nil, err
 	}
