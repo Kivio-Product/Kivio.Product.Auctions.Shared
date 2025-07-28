@@ -69,11 +69,17 @@ func (s *itemSpecificationService) Get() ([]domain.ItemSpecification, error) {
 }
 
 func (s *itemSpecificationService) GetById(ctx context.Context, id string) (*domain.ItemSpecification, error) {
-	items, err := s.repo.GetById(ctx, id)
+	item, err := s.repo.GetById(ctx, id)
 	if err != nil {
 		return &domain.ItemSpecification{}, err
 	}
-	return items, nil
+
+	item.CheckAndUpdateExpiredReservation()
+	item.CheckAndUpdateAvailabilityState()
+
+	s.repo.Save(ctx, item)
+
+	return item, nil
 }
 
 func (s *itemSpecificationService) Update(ctx context.Context, id, currency, offerId, itemId, pointOfSaleId string, amount, availability int64, expireAt time.Time) error {

@@ -25,6 +25,7 @@ type ItemSpecification struct {
 	IsExternal    bool
 	PointOfSaleId string
 	State         ItemSpecificationState
+	ReservedAt    *time.Time
 }
 
 func (o *ItemSpecification) Update(currency, offerId, itemId, pointOfSaleId string, amount, availability int64, expireAt time.Time) error {
@@ -82,5 +83,36 @@ func (o *ItemSpecification) UpdateState(state ItemSpecificationState) error {
 	}
 
 	o.State = state
+
+	if state == StateReserved {
+		now := time.Now()
+		o.ReservedAt = &now
+	} else {
+		o.ReservedAt = nil
+	}
+
+	return nil
+}
+
+func (o *ItemSpecification) IsReservationExpired() bool {
+	if o.State != StateReserved || o.ReservedAt == nil {
+		return false
+	}
+	return time.Since(*o.ReservedAt) > 20*time.Minute
+}
+
+func (o *ItemSpecification) CheckAndUpdateExpiredReservation() error {
+	if o.IsReservationExpired() {
+		o.State = StateAvailable
+		o.ReservedAt = nil
+	}
+	return nil
+}
+
+func (o *ItemSpecification) CheckAndUpdateAvailabilityState() error {
+	if o.Availability == 0 && o.State != StateNoAvailable {
+		o.State = StateNoAvailable
+		o.ReservedAt = nil
+	}
 	return nil
 }

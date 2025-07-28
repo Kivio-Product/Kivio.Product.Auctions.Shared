@@ -52,6 +52,7 @@ func (f *DefaultItemSpecificationFactory) CreateItemSpecification(currency, offe
 		IsExternal:    isExternal,
 		PointOfSaleId: pointOfSaleId,
 		State:         StateAvailable,
+		ReservedAt:    nil,
 	}, nil
 }
 
