@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"sync"
 
@@ -19,6 +20,8 @@ import (
 	payment "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/payment"
 	paymentDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/payment"
 	"github.com/jung-kurt/gofpdf"
+	"golang.org/x/text/encoding/charmap"
+	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 )
 
@@ -309,8 +312,8 @@ func (s *orderService) NotifyAndCloseApprovedOrdersByPointOfSaleId(ctx context.C
 	// Generar PDF
 	pdf := gofpdf.New("P", "mm", "A4", "")
 	pdf.AddPage()
-	pdf.SetFont("Arial", "B", 14) // Título más pequeño
-	pdf.Cell(0, 10, "Resumen de Órdenes Aprobadas")
+	pdf.SetFont("Arial", "B", 14)
+	pdf.Cell(0, 10, cp1252("Resumen de Órdenes Aprobadas"))
 	pdf.Ln(12)
 
 	pdf.SetFont("Arial", "B", 10)
@@ -326,30 +329,41 @@ func (s *orderService) NotifyAndCloseApprovedOrdersByPointOfSaleId(ctx context.C
 		y := pdf.GetY()
 
 		orderIdLines := pdf.SplitLines([]byte(order.OrderId), 50)
-		productLines := pdf.SplitLines([]byte(order.ExtraData), 50)
+		productLines := pdf.SplitLines([]byte(cp1252(order.ExtraData)), 55)
+
 		maxLines := len(orderIdLines)
 		if len(productLines) > maxLines {
 			maxLines = len(productLines)
 		}
-		rowHeight := float64(maxLines) * 6
-		if len(orderIdLines) == maxLines {
-			pdf.MultiCell(50, 6, order.OrderId, "1", "", false)
-		} else {
-			pdf.CellFormat(50, rowHeight, order.OrderId, "1", 0, "", false, 0, "")
-		}
-		pdf.SetXY(x+50, y)
 
-		if len(productLines) == maxLines {
-			pdf.MultiCell(55, 6, order.ExtraData, "1", "", false)
-		} else {
-			pdf.CellFormat(50, rowHeight, order.ExtraData, "1", 0, "", false, 0, "")
+		rowHeight := 6.0
+		totalHeight := float64(maxLines) * rowHeight
+
+		for len(orderIdLines) < maxLines {
+			orderIdLines = append(orderIdLines, []byte{})
 		}
+		for len(productLines) < maxLines {
+			productLines = append(productLines, []byte{})
+		}
+
+		for i := 0; i < maxLines; i++ {
+			pdf.SetXY(x, y+float64(i)*rowHeight)
+			pdf.CellFormat(50, rowHeight, string(orderIdLines[i]), "", 0, "", false, 0, "")
+
+			pdf.SetXY(x+50, y+float64(i)*rowHeight)
+			pdf.CellFormat(55, rowHeight, string(productLines[i]), "", 0, "", false, 0, "")
+		}
+
+		pdf.Rect(x, y, 50, totalHeight, "D")
+		pdf.Rect(x+50, y, 55, totalHeight, "D")
+
 		pdf.SetXY(x+105, y)
-		p := message.NewPrinter(message.MatchLanguage("en"))
+		p := message.NewPrinter(language.Spanish)
 		formattedAmount := p.Sprintf("%d", order.OfferedAmount)
-		pdf.CellFormat(20, rowHeight, formattedAmount, "1", 0, "", false, 0, "")
-		pdf.CellFormat(60, rowHeight, order.CustomerId, "1", 0, "", false, 0, "")
-		pdf.Ln(-1)
+		pdf.CellFormat(20, totalHeight, formattedAmount, "1", 0, "", false, 0, "")
+		pdf.CellFormat(60, totalHeight, order.CustomerId, "1", 0, "", false, 0, "")
+
+		pdf.Ln(totalHeight)
 	}
 
 	var buf bytes.Buffer
@@ -376,4 +390,12 @@ func (s *orderService) NotifyAndCloseApprovedOrdersByPointOfSaleId(ctx context.C
 	}
 
 	return nil
+}
+
+func cp1252(s string) string {
+	encoded, err := charmap.Windows1252.NewEncoder().String(s)
+	if err != nil {
+		log.Fatalf("encoding error: %v", err)
+	}
+	return encoded
 }
