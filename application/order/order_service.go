@@ -19,6 +19,7 @@ import (
 	payment "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/payment"
 	paymentDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/payment"
 	"github.com/jung-kurt/gofpdf"
+	"golang.org/x/text/message"
 )
 
 type OrderService interface {
@@ -314,8 +315,8 @@ func (s *orderService) NotifyAndCloseApprovedOrdersByPointOfSaleId(ctx context.C
 
 	pdf.SetFont("Arial", "B", 10)
 	pdf.CellFormat(50, 7, "OrderId", "1", 0, "", false, 0, "")
-	pdf.CellFormat(50, 7, "Producto", "1", 0, "", false, 0, "")
-	pdf.CellFormat(25, 7, "Monto", "1", 0, "", false, 0, "")
+	pdf.CellFormat(55, 7, "Producto", "1", 0, "", false, 0, "")
+	pdf.CellFormat(20, 7, "Monto", "1", 0, "", false, 0, "")
 	pdf.CellFormat(60, 7, "CustomerId", "1", 0, "", false, 0, "")
 	pdf.Ln(-1)
 
@@ -331,11 +332,22 @@ func (s *orderService) NotifyAndCloseApprovedOrdersByPointOfSaleId(ctx context.C
 			maxLines = len(productLines)
 		}
 		rowHeight := float64(maxLines) * 6
-		pdf.MultiCell(50, 6, order.OrderId, "1", "", false)
+		if len(orderIdLines) == maxLines {
+			pdf.MultiCell(50, 6, order.OrderId, "1", "", false)
+		} else {
+			pdf.CellFormat(50, rowHeight, order.OrderId, "1", 0, "", false, 0, "")
+		}
 		pdf.SetXY(x+50, y)
-		pdf.MultiCell(50, 6, order.ExtraData, "1", "", false)
-		pdf.SetXY(x+100, y)
-		pdf.CellFormat(25, rowHeight, fmt.Sprintf("%d", order.OfferedAmount), "1", 0, "", false, 0, "")
+
+		if len(productLines) == maxLines {
+			pdf.MultiCell(55, 6, order.ExtraData, "1", "", false)
+		} else {
+			pdf.CellFormat(50, rowHeight, order.ExtraData, "1", 0, "", false, 0, "")
+		}
+		pdf.SetXY(x+105, y)
+		p := message.NewPrinter(message.MatchLanguage("en"))
+		formattedAmount := p.Sprintf("%d", order.OfferedAmount)
+		pdf.CellFormat(20, rowHeight, formattedAmount, "1", 0, "", false, 0, "")
 		pdf.CellFormat(60, rowHeight, order.CustomerId, "1", 0, "", false, 0, "")
 		pdf.Ln(-1)
 	}

@@ -328,19 +328,27 @@ func (s *ruleVerificationService) verifySpecification(
 		}
 		fmt.Printf("%s no encontrado o no es bool para el artículo %d.\n", spec.Parameter, itemIdInt)
 	case "AvailableStartDate", "AvailableEndDate":
-		if dateStr, ok := matchingItem["available_start_date_time_utc"].(string); ok {
+		var dateStr string
+		var ok bool
+	
+		if spec.Parameter == "AvailableStartDate" {
+			dateStr, ok = matchingItem["available_start_date_time_utc"].(string)
+		} else {
+			dateStr, ok = matchingItem["available_end_date_time_utc"].(string)
+		}
+	
+		if ok {
 			if !strings.HasSuffix(dateStr, "Z") {
 				dateStr += "Z"
 			}
 			date, err := time.Parse(time.RFC3339, dateStr)
-
 			if err != nil {
 				fmt.Printf("Error al parsear la cadena de fecha '%s' (RFC3339) para el artículo %d: %v\n", dateStr, itemIdInt, err)
 				return false
 			}
 			return verifyDateValue(date, spec)
 		}
-		fmt.Printf("Fecha disponible no encontrada o no es cadena (available_start_date_time_utc) para el artículo %d.\n", itemIdInt)
+		fmt.Printf("Fecha disponible no encontrada o no es cadena (available_start_date_time_utc o available_end_date_time_utc) para el artículo %d.\n", itemIdInt)
 	case "Tags":
 		if tags, ok := matchingItem["tags"].([]interface{}); ok {
 			tagStr := strings.Join(interfaceSliceToStringSlice(tags), ",")
