@@ -65,6 +65,22 @@ func (o *ItemSpecification) UpdateState(state ItemSpecificationState) error {
 	if state != StateAvailable && state != StateReserved && state != StateNoAvailable {
 		return fmt.Errorf("invalid state: %s. Valid states are: available, reserved, noavailable", state)
 	}
+
+	switch o.State {
+	case StateAvailable:
+		if state != StateReserved {
+			return fmt.Errorf("invalid transition from %s to %s. From available, only transition to reserved is allowed", o.State, state)
+		}
+	case StateReserved:
+		if state != StateNoAvailable && state != StateAvailable {
+			return fmt.Errorf("invalid transition from %s to %s. From reserved, only transitions to noavailable or available are allowed", o.State, state)
+		}
+	case StateNoAvailable:
+		return fmt.Errorf("invalid transition from %s to %s. No transitions are allowed from noavailable state", o.State, state)
+	default:
+		return fmt.Errorf("unknown current state: %s", o.State)
+	}
+
 	o.State = state
 	return nil
 }
