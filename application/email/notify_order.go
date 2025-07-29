@@ -2,9 +2,10 @@ package services
 
 import (
 	"context"
-	"strconv"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/repository"
+	"golang.org/x/text/language"
+	"golang.org/x/text/message"
 )
 
 type NotifyOrderUseCase struct {
@@ -19,9 +20,11 @@ func NewNotifyOrderUseCase(notifier domain.Notifier) *NotifyOrderUseCase {
 
 func (uc *NotifyOrderUseCase) Execute(state string, customerEmail string, concatenatedItemNames string, firstOrderAmount int64, concatenatedItemDescriptions string, posName string) error {
 	templateName := getTemplateName(state) + posName
+	p := message.NewPrinter(language.Spanish)
+	formattedAmount := p.Sprintf("%d", firstOrderAmount)
 	templateData := map[string]string{
 		"ITEM_NAME":        concatenatedItemNames,
-		"AMOUNT":           strconv.FormatInt(firstOrderAmount, 10),
+		"AMOUNT":           formattedAmount,
 		"ITEM_DESCRIPTION": concatenatedItemDescriptions,
 	}
 
