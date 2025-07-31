@@ -447,7 +447,7 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 								stock := extResp.Products[0].StockQuantity
 								if stock > 0 {
 									fmt.Printf("Actualizando stock del item %s: %d -> %d\n", itemId, stock, stock-1)
-									_ = s.ecommerceSvc.UpdateItemStock(ctx, credentials.ApiURL, credentials.ApiKey, itemId, stock-1)
+									_ = s.ecommerceSvc.UpdateItemStock(ctx, credentials.ApiURL, credentials.ApiKey, itemId, int(stock-1))
 								}
 							}
 						}

@@ -20,6 +20,7 @@ type OrderRepository interface {
 	GetAllOrders(ctx context.Context) ([]domain.Order, error)
 	GetItemSpecificationOrder(id string) ([]domain.Order, error)
 	GetOfferOrder(id string) ([]domain.Order, error)
+	GetOrdersByOfferId(ctx context.Context, offerId string) ([]domain.Order, error)
 	GetIdOrder(ctx context.Context, eofferId string) (*domain.Order, error)
 	DeleteOrder(ctx context.Context, orderId string) error
 	UpdateOrder(ctx context.Context, order *domain.Order) error
@@ -306,6 +307,39 @@ func (r *orderRepository) CountOrders(ctx context.Context, pointOfSaleId string)
 		return 0, fmt.Errorf("error counting orders: %w", err)
 	}
 	return *result.Count, nil
+}
+
+func (r *orderRepository) GetOrdersByOfferId(ctx context.Context, offerId string) ([]domain.Order, error) {
+	var orders []domain.Order
+
+	input := &dynamodb.ScanInput{
+		TableName:        aws.String(r.orderTable),
+		FilterExpression: aws.String("OfferId = :offerId"),
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":offerId": {S: aws.String(offerId)},
+		},
+	}
+
+	for {
+		result, err := r.client.ScanWithContext(ctx, input)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning orders by OfferId %s: %w", offerId, err)
+		}
+
+		var batch []domain.Order
+		err = dynamodbattribute.UnmarshalListOfMaps(result.Items, &batch)
+		if err != nil {
+			return nil, fmt.Errorf("error unmarshalling orders: %w", err)
+		}
+		orders = append(orders, batch...)
+
+		if result.LastEvaluatedKey == nil {
+			break
+		}
+		input.ExclusiveStartKey = result.LastEvaluatedKey
+	}
+
+	return orders, nil
 }
 
 func (r *orderRepository) GetOrdersByPointOfSaleId(ctx context.Context, pointOfSaleId string) ([]domain.Order, error) {
