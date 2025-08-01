@@ -17,7 +17,7 @@ import (
 )
 
 type IOfferProcessingService interface {
-	ProcessOffer(ctx context.Context, request processingDomain.ProcessOfferRequest) (*processingDomain.ProcessOfferResponse, error)
+	ProcessOffer(ctx context.Context, offerId string) (*processingDomain.ProcessOfferResponse, error)
 }
 
 type OfferProcessingService struct {
@@ -47,13 +47,13 @@ func NewOfferProcessingService(
 	}
 }
 
-func (s *OfferProcessingService) ProcessOffer(ctx context.Context, request processingDomain.ProcessOfferRequest) (*processingDomain.ProcessOfferResponse, error) {
-	offer, err := s.offerRepo.GetOfferById(ctx, request.OfferId)
+func (s *OfferProcessingService) ProcessOffer(ctx context.Context, offerId string) (*processingDomain.ProcessOfferResponse, error) {
+	offer, err := s.offerRepo.GetOfferById(ctx, offerId)
 	if err != nil {
 		return &processingDomain.ProcessOfferResponse{
 			Status:  "error",
-			Message: fmt.Sprintf("Error fetching offer %s: %v", request.OfferId, err),
-			OfferId: request.OfferId,
+			Message: fmt.Sprintf("Error fetching offer %s: %v", offerId, err),
+			OfferId: offerId,
 		}, err
 	}
 
@@ -61,16 +61,16 @@ func (s *OfferProcessingService) ProcessOffer(ctx context.Context, request proce
 		return &processingDomain.ProcessOfferResponse{
 			Status:  "skipped",
 			Message: "Offer not in valid state or type for processing",
-			OfferId: request.OfferId,
+			OfferId: offerId,
 		}, nil
 	}
 
-	orders, err := s.getOrdersByOffer(ctx, request.OfferId)
+	orders, err := s.getOrdersByOffer(ctx, offerId)
 	if err != nil {
 		return &processingDomain.ProcessOfferResponse{
 			Status:  "error",
-			Message: fmt.Sprintf("Error fetching orders for offer %s: %v", request.OfferId, err),
-			OfferId: request.OfferId,
+			Message: fmt.Sprintf("Error fetching orders for offer %s: %v", offerId, err),
+			OfferId: offerId,
 		}, err
 	}
 
@@ -90,7 +90,7 @@ func (s *OfferProcessingService) ProcessOffer(ctx context.Context, request proce
 			return &processingDomain.ProcessOfferResponse{
 				Status:  "error",
 				Message: fmt.Sprintf("Error processing item spec %s: %v", itemSpecId, err),
-				OfferId: request.OfferId,
+				OfferId: offerId,
 			}, err
 		}
 
@@ -100,22 +100,22 @@ func (s *OfferProcessingService) ProcessOffer(ctx context.Context, request proce
 
 	err = s.sendEmailsGroupedByCustomer(ctx, allLosers, "Rejected", offer.PosId)
 	if err != nil {
-		fmt.Printf("Error sending emails for offer %s: %v\n", request.OfferId, err)
+		fmt.Printf("Error sending emails for offer %s: %v\n", offerId, err)
 	}
 
 	err = s.closeOffer(ctx, offer)
 	if err != nil {
 		return &processingDomain.ProcessOfferResponse{
 			Status:  "error",
-			Message: fmt.Sprintf("Error closing offer %s: %v", request.OfferId, err),
-			OfferId: request.OfferId,
+			Message: fmt.Sprintf("Error closing offer %s: %v", offerId, err),
+			OfferId: offerId,
 		}, err
 	}
 
 	return &processingDomain.ProcessOfferResponse{
 		Status:  "success",
-		Message: fmt.Sprintf("Offer %s processed successfully. Winners: %d, Losers: %d", request.OfferId, len(allWinners), len(allLosers)),
-		OfferId: request.OfferId,
+		Message: fmt.Sprintf("Offer %s processed successfully. Winners: %d, Losers: %d", offerId, len(allWinners), len(allLosers)),
+		OfferId: offerId,
 	}, nil
 }
 
