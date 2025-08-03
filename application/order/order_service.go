@@ -15,7 +15,6 @@ import (
 	"bytes"
 
 	billing "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/billing"
-	customerConfigService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/customer_config"
 	emailservices "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
 	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
 	payment "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/payment"
@@ -42,30 +41,31 @@ type OrderService interface {
 }
 
 type orderService struct {
-	repo                  orderInfrastructure.OrderRepository
-	orderFactory          domain.OrderFactory
-	itemSpecRepo          itemSpecInfrastructure.ItemSpecificationRepository
-	itemRepo              itemInfrastructure.ItemRepository
-	emailService          emailservices.EmailServiceInterface
-	offerService          offerService.IOfferService
-	wompiService          payment.WompiService
-	billingService        billing.BillingService
-	customerConfigService customerConfigService.CustomerConfigService
+	repo           orderInfrastructure.OrderRepository
+	orderFactory   domain.OrderFactory
+	itemSpecRepo   itemSpecInfrastructure.ItemSpecificationRepository
+	itemRepo       itemInfrastructure.ItemRepository
+	emailService   emailservices.EmailServiceInterface
+	offerService   offerService.IOfferService
+	wompiService   payment.WompiService
+	billingService billing.BillingService
 }
 
-func NewOrderService(repo orderInfrastructure.OrderRepository, orderFactory domain.OrderFactory, itemSpecRepo itemSpecInfrastructure.ItemSpecificationRepository, itemRepo itemInfrastructure.ItemRepository, emailService emailservices.EmailServiceInterface, offerService offerService.IOfferService, wompiService payment.WompiService, billingService billing.BillingService, customerConfigService customerConfigService.CustomerConfigService) OrderService {
-	return &orderService{repo: repo, orderFactory: orderFactory, itemSpecRepo: itemSpecRepo, itemRepo: itemRepo, emailService: emailService, offerService: offerService, wompiService: wompiService, billingService: billingService, customerConfigService: customerConfigService}
+func NewOrderService(repo orderInfrastructure.OrderRepository, orderFactory domain.OrderFactory, itemSpecRepo itemSpecInfrastructure.ItemSpecificationRepository, itemRepo itemInfrastructure.ItemRepository, emailService emailservices.EmailServiceInterface, offerService offerService.IOfferService, wompiService payment.WompiService, billingService billing.BillingService) OrderService {
+	return &orderService{repo: repo, orderFactory: orderFactory, itemSpecRepo: itemSpecRepo, itemRepo: itemRepo, emailService: emailService, offerService: offerService, wompiService: wompiService, billingService: billingService}
 }
 
 func (s *orderService) CreateOrder(ctx context.Context, input domain.OrderInput) (*domain.Order, error) {
 	if len(input.Items) > 1 {
-		allowMultiple, err := s.customerConfigService.IsMultipleItemsAllowed(ctx, input.CustomerId, input.PointOfSaleId)
-		if err != nil {
-			return &domain.Order{}, fmt.Errorf("error checking customer configuration: %w", err)
-		}
+		for _, orderItem := range input.Items {
+			itemSpec, err := s.itemSpecRepo.GetById(ctx, orderItem.ItemSpecificationId)
+			if err != nil {
+				return &domain.Order{}, fmt.Errorf("error getting item specification %s: %w", orderItem.ItemSpecificationId, err)
+			}
 
-		if !allowMultiple {
-			return &domain.Order{}, fmt.Errorf("customer %s is not allowed to create orders with multiple items", input.CustomerId)
+			if !itemSpec.AllowMultipleItems {
+				return &domain.Order{}, fmt.Errorf("item specification %s does not allow multiple items in orders", orderItem.ItemSpecificationId)
+			}
 		}
 	}
 
@@ -112,19 +112,14 @@ func (s *orderService) CreateMultipleItemsOrder(ctx context.Context, input domai
 		return &domain.Order{}, fmt.Errorf("CreateMultipleItemsOrder requires more than one item")
 	}
 
-	allowMultiple, err := s.customerConfigService.IsMultipleItemsAllowed(ctx, input.CustomerId, input.PointOfSaleId)
-	if err != nil {
-		return &domain.Order{}, fmt.Errorf("error checking customer configuration: %w", err)
-	}
-
-	if !allowMultiple {
-		return &domain.Order{}, fmt.Errorf("customer %s is not allowed to create orders with multiple items", input.CustomerId)
-	}
-
 	for _, orderItem := range input.Items {
 		itemSpec, err := s.itemSpecRepo.GetById(ctx, orderItem.ItemSpecificationId)
 		if err != nil {
 			return &domain.Order{}, fmt.Errorf("error getting item specification %s: %w", orderItem.ItemSpecificationId, err)
+		}
+
+		if !itemSpec.AllowMultipleItems {
+			return &domain.Order{}, fmt.Errorf("item specification %s does not allow multiple items in orders", orderItem.ItemSpecificationId)
 		}
 
 		if itemSpec.Availability < int64(orderItem.Quantity) {

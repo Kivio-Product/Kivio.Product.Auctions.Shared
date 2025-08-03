@@ -5,7 +5,6 @@ import (
 	"time"
 )
 
-// ItemSpecificationState represents the possible states of an item specification
 type ItemSpecificationState string
 
 const (
@@ -15,17 +14,18 @@ const (
 )
 
 type ItemSpecification struct {
-	Id            string
-	Amount        int64
-	Currency      string
-	ExpireAt      time.Time
-	OfferId       string
-	ItemId        string
-	Availability  int64
-	IsExternal    bool
-	PointOfSaleId string
-	State         ItemSpecificationState
-	ReservedAt    *time.Time
+	Id                 string
+	Amount             int64
+	Currency           string
+	ExpireAt           time.Time
+	OfferId            string
+	ItemId             string
+	Availability       int64
+	IsExternal         bool
+	PointOfSaleId      string
+	State              ItemSpecificationState
+	ReservedAt         *time.Time
+	AllowMultipleItems bool `json:"allow_multiple_items"`
 }
 
 func (o *ItemSpecification) Update(currency, offerId, itemId, pointOfSaleId string, amount, availability int64, expireAt time.Time) error {
@@ -60,6 +60,10 @@ func (o *ItemSpecification) Update(currency, offerId, itemId, pointOfSaleId stri
 	o.PointOfSaleId = pointOfSaleId
 
 	return nil
+}
+
+func (o *ItemSpecification) UpdateAllowMultipleItems(allowMultiple bool) {
+	o.AllowMultipleItems = allowMultiple
 }
 
 func (o *ItemSpecification) UpdateState(state ItemSpecificationState) error {

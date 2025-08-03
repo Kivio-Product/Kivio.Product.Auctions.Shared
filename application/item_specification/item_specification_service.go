@@ -14,10 +14,12 @@ import (
 
 type ItemSpecificationService interface {
 	Create(ctx context.Context, currency, offerId, itemId, pointOfSaleId string, amount, availability int64, expireAt time.Time, isExternal bool) (*domain.ItemSpecification, error)
+	CreateWithMultipleItems(ctx context.Context, currency, offerId, itemId, pointOfSaleId string, amount, availability int64, expireAt time.Time, isExternal bool, allowMultipleItems bool) (*domain.ItemSpecification, error)
 	Get() ([]domain.ItemSpecification, error)
 	GetById(ctx context.Context, id string) (*domain.ItemSpecification, error)
 	Update(ctx context.Context, id, currency, offerId, itemId, pointOfSaleId string, amount, availability int64, expireAt time.Time) error
 	UpdateState(ctx context.Context, id string, state domain.ItemSpecificationState) error
+	UpdateAllowMultipleItems(ctx context.Context, id string, allowMultiple bool) error
 	Delete(ctx context.Context, id string) error
 	GetItemSpecByOfferId(ctx context.Context, id string, pointOfSaleId string) ([]domain.ItemSpecification, error)
 	GetItemSpecByItemId(ctx context.Context, id string, pointOfSaleId string) ([]domain.ItemSpecification, error)
@@ -53,6 +55,22 @@ func (s *itemSpecificationService) Create(ctx context.Context, currency, offerId
 
 	err = s.repo.Save(ctx, itemSpecification)
 
+	if err != nil {
+		return &domain.ItemSpecification{}, err
+	}
+
+	return itemSpecification, nil
+}
+
+func (s *itemSpecificationService) CreateWithMultipleItems(ctx context.Context, currency, offerId, itemId, pointOfSaleId string, amount, availability int64, expireAt time.Time, isExternal bool, allowMultipleItems bool) (*domain.ItemSpecification, error) {
+	itemSpecification, err := s.itemSpecificationFactory.CreateItemSpecification(currency, offerId, itemId, pointOfSaleId, amount, availability, expireAt, isExternal)
+	if err != nil {
+		return &domain.ItemSpecification{}, err
+	}
+
+	itemSpecification.UpdateAllowMultipleItems(allowMultipleItems)
+
+	err = s.repo.Save(ctx, itemSpecification)
 	if err != nil {
 		return &domain.ItemSpecification{}, err
 	}
@@ -100,6 +118,16 @@ func (s *itemSpecificationService) UpdateState(ctx context.Context, id string, s
 	if err != nil {
 		return err
 	}
+	return s.repo.Save(ctx, item)
+}
+
+func (s *itemSpecificationService) UpdateAllowMultipleItems(ctx context.Context, id string, allowMultiple bool) error {
+	item, err := s.repo.GetById(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	item.UpdateAllowMultipleItems(allowMultiple)
 	return s.repo.Save(ctx, item)
 }
 
