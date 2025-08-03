@@ -5,6 +5,13 @@ import (
 	"time"
 )
 
+type OrderItem struct {
+	ItemSpecificationId string `json:"item_specification_id"`
+	Quantity            int    `json:"quantity"`
+	UnitAmount          int64  `json:"unit_amount"`
+	TotalAmount         int64  `json:"total_amount"`
+}
+
 type Order struct {
 	OrderId             string
 	OfferId             string
@@ -13,6 +20,7 @@ type Order struct {
 	CustomerId          string
 	ExternalId          string
 	ItemSpecificationId string
+	Items               []OrderItem `json:"items,omitempty"`
 	ExtraData           string
 	State               string
 	SortKey             string
@@ -61,6 +69,7 @@ type OrderInput struct {
 	CustomerId          string
 	ExternalId          string
 	ItemSpecificationId string
+	Items               []OrderItem `json:"items,omitempty"`
 	OfferId             string
 	PointOfSaleId       string
 	ExtraData           string
@@ -79,6 +88,34 @@ var (
 func GenerateCreatedState(order *Order) *Order {
 	order.State = StateCreated
 	return order
+}
+
+func (o *Order) IsMultipleItems() bool {
+	return len(o.Items) > 0
+}
+
+func (o *Order) CalculateTotalAmount() int64 {
+	if !o.IsMultipleItems() {
+		return o.OfferedAmount
+	}
+
+	var total int64
+	for _, item := range o.Items {
+		total += item.TotalAmount
+	}
+	return total
+}
+
+func (o *Order) GetItemCount() int {
+	if !o.IsMultipleItems() {
+		return 1
+	}
+
+	count := 0
+	for _, item := range o.Items {
+		count += item.Quantity
+	}
+	return count
 }
 
 func (o *Order) Update(customerId, externalId, itemSpecificationId, state string, offeredAmount int64, isWinner bool) error {

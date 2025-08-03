@@ -15,6 +15,7 @@ import (
 	"bytes"
 
 	billing "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/billing"
+	customerConfigService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/customer_config"
 	emailservices "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
 	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
 	payment "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/payment"
@@ -27,6 +28,7 @@ import (
 
 type OrderService interface {
 	CreateOrder(ctx context.Context, input domain.OrderInput) (*domain.Order, error)
+	CreateMultipleItemsOrder(ctx context.Context, input domain.OrderInput) (*domain.Order, error)
 	GetOrders(ctx context.Context) ([]domain.Order, error)
 	UpdateOrder(ctx context.Context, input domain.OrderInput) error
 	GetOrderById(ctx context.Context, id string) (*domain.Order, error)
@@ -40,21 +42,33 @@ type OrderService interface {
 }
 
 type orderService struct {
-	repo           orderInfrastructure.OrderRepository
-	orderFactory   domain.OrderFactory
-	itemSpecRepo   itemSpecInfrastructure.ItemSpecificationRepository
-	itemRepo       itemInfrastructure.ItemRepository
-	emailService   emailservices.EmailServiceInterface
-	offerService   offerService.IOfferService
-	wompiService   payment.WompiService
-	billingService billing.BillingService
+	repo                  orderInfrastructure.OrderRepository
+	orderFactory          domain.OrderFactory
+	itemSpecRepo          itemSpecInfrastructure.ItemSpecificationRepository
+	itemRepo              itemInfrastructure.ItemRepository
+	emailService          emailservices.EmailServiceInterface
+	offerService          offerService.IOfferService
+	wompiService          payment.WompiService
+	billingService        billing.BillingService
+	customerConfigService customerConfigService.CustomerConfigService
 }
 
-func NewOrderService(repo orderInfrastructure.OrderRepository, orderFactory domain.OrderFactory, itemSpecRepo itemSpecInfrastructure.ItemSpecificationRepository, itemRepo itemInfrastructure.ItemRepository, emailService emailservices.EmailServiceInterface, offerService offerService.IOfferService, wompiService payment.WompiService, billingService billing.BillingService) OrderService {
-	return &orderService{repo: repo, orderFactory: orderFactory, itemSpecRepo: itemSpecRepo, itemRepo: itemRepo, emailService: emailService, offerService: offerService, wompiService: wompiService, billingService: billingService}
+func NewOrderService(repo orderInfrastructure.OrderRepository, orderFactory domain.OrderFactory, itemSpecRepo itemSpecInfrastructure.ItemSpecificationRepository, itemRepo itemInfrastructure.ItemRepository, emailService emailservices.EmailServiceInterface, offerService offerService.IOfferService, wompiService payment.WompiService, billingService billing.BillingService, customerConfigService customerConfigService.CustomerConfigService) OrderService {
+	return &orderService{repo: repo, orderFactory: orderFactory, itemSpecRepo: itemSpecRepo, itemRepo: itemRepo, emailService: emailService, offerService: offerService, wompiService: wompiService, billingService: billingService, customerConfigService: customerConfigService}
 }
 
 func (s *orderService) CreateOrder(ctx context.Context, input domain.OrderInput) (*domain.Order, error) {
+	if len(input.Items) > 1 {
+		allowMultiple, err := s.customerConfigService.IsMultipleItemsAllowed(ctx, input.CustomerId, input.PointOfSaleId)
+		if err != nil {
+			return &domain.Order{}, fmt.Errorf("error checking customer configuration: %w", err)
+		}
+
+		if !allowMultiple {
+			return &domain.Order{}, fmt.Errorf("customer %s is not allowed to create orders with multiple items", input.CustomerId)
+		}
+	}
+
 	order, err := s.orderFactory.CreateOrder(
 		input.CustomerId,
 		input.ExternalId,
@@ -68,6 +82,15 @@ func (s *orderService) CreateOrder(ctx context.Context, input domain.OrderInput)
 	if err != nil {
 		return &domain.Order{}, err
 	}
+
+	if len(input.Items) > 0 {
+		order.Items = input.Items
+		var totalAmount int64
+		for _, item := range input.Items {
+			totalAmount += item.TotalAmount
+		}
+		order.OfferedAmount = totalAmount
+	}
 	if input.WompiIdPayment == "" {
 		order.State = "Created"
 	} else {
@@ -77,6 +100,86 @@ func (s *orderService) CreateOrder(ctx context.Context, input domain.OrderInput)
 	order.WompiIdPayment = input.WompiIdPayment
 	err = s.repo.SaveOrder(ctx, order)
 
+	if err != nil {
+		return &domain.Order{}, err
+	}
+
+	return order, nil
+}
+
+func (s *orderService) CreateMultipleItemsOrder(ctx context.Context, input domain.OrderInput) (*domain.Order, error) {
+	if len(input.Items) <= 1 {
+		return &domain.Order{}, fmt.Errorf("CreateMultipleItemsOrder requires more than one item")
+	}
+
+	allowMultiple, err := s.customerConfigService.IsMultipleItemsAllowed(ctx, input.CustomerId, input.PointOfSaleId)
+	if err != nil {
+		return &domain.Order{}, fmt.Errorf("error checking customer configuration: %w", err)
+	}
+
+	if !allowMultiple {
+		return &domain.Order{}, fmt.Errorf("customer %s is not allowed to create orders with multiple items", input.CustomerId)
+	}
+
+	for _, orderItem := range input.Items {
+		itemSpec, err := s.itemSpecRepo.GetById(ctx, orderItem.ItemSpecificationId)
+		if err != nil {
+			return &domain.Order{}, fmt.Errorf("error getting item specification %s: %w", orderItem.ItemSpecificationId, err)
+		}
+
+		if itemSpec.Availability < int64(orderItem.Quantity) {
+			return &domain.Order{}, fmt.Errorf("insufficient availability for item %s: required %d, available %d",
+				orderItem.ItemSpecificationId, orderItem.Quantity, itemSpec.Availability)
+		}
+	}
+
+	order, err := s.orderFactory.CreateOrder(
+		input.CustomerId,
+		input.ExternalId,
+		"",
+		input.OfferId,
+		input.PointOfSaleId,
+		input.ExtraData,
+		0,
+		input.AuctionService,
+	)
+	if err != nil {
+		return &domain.Order{}, err
+	}
+
+	order.Items = input.Items
+	var totalAmount int64
+	for _, item := range input.Items {
+		totalAmount += item.TotalAmount
+	}
+	order.OfferedAmount = totalAmount
+
+	if input.WompiIdPayment == "" {
+		order.State = "Created"
+	} else {
+		order.State = "Pending"
+	}
+	order.WompiIdPayment = input.WompiIdPayment
+
+	for _, orderItem := range input.Items {
+		itemSpec, err := s.itemSpecRepo.GetById(ctx, orderItem.ItemSpecificationId)
+		if err != nil {
+			return &domain.Order{}, fmt.Errorf("error getting item specification for update %s: %w", orderItem.ItemSpecificationId, err)
+		}
+
+		itemSpec.Availability -= int64(orderItem.Quantity)
+		err = itemSpec.CheckAndUpdateAvailabilityState()
+		if err != nil {
+			return &domain.Order{}, fmt.Errorf("error updating availability state: %w", err)
+		}
+
+		err = s.itemSpecRepo.Save(ctx, itemSpec)
+		if err != nil {
+			return &domain.Order{}, fmt.Errorf("error saving updated item specification: %w", err)
+		}
+	}
+
+	err = s.repo.SaveOrder(ctx, order)
 	if err != nil {
 		return &domain.Order{}, err
 	}
