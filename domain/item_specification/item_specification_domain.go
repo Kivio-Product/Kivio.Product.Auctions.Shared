@@ -25,7 +25,7 @@ type ItemSpecification struct {
 	PointOfSaleId      string
 	State              ItemSpecificationState
 	ReservedAt         *time.Time
-	AllowMultipleItems bool `json:"allow_multiple_items"`
+	AllowMultipleItems bool
 }
 
 func (o *ItemSpecification) Update(currency, offerId, itemId, pointOfSaleId string, amount, availability int64, expireAt time.Time) error {
