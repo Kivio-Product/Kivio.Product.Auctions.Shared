@@ -242,7 +242,7 @@ func (s *OfferService) GetOffersWithSpecsAndItems(
 			if err != nil {
 				return
 			}
-			item, err := s.ecommerceService.GetItemByID(ctx, creds.ApiURL, creds.ApiKey, spec.ItemId)
+			item, err := s.ecommerceService.GetItemByID(ctx, spec.ItemId, creds.ApiURL, creds.ApiKey)
 			if err != nil || item == nil {
 				return
 			}
