@@ -56,18 +56,6 @@ func NewOrderService(repo orderInfrastructure.OrderRepository, orderFactory doma
 }
 
 func (s *orderService) CreateOrder(ctx context.Context, input domain.OrderInput) (*domain.Order, error) {
-	if len(input.Items) > 1 {
-		for _, orderItem := range input.Items {
-			itemSpec, err := s.itemSpecRepo.GetById(ctx, orderItem.ItemSpecificationId)
-			if err != nil {
-				return &domain.Order{}, fmt.Errorf("error getting item specification %s: %w", orderItem.ItemSpecificationId, err)
-			}
-
-			if !itemSpec.AllowMultipleItems {
-				return &domain.Order{}, fmt.Errorf("item specification %s does not allow multiple items in orders", orderItem.ItemSpecificationId)
-			}
-		}
-	}
 
 	order, err := s.orderFactory.CreateOrder(
 		input.CustomerId,
@@ -78,19 +66,12 @@ func (s *orderService) CreateOrder(ctx context.Context, input domain.OrderInput)
 		input.ExtraData,
 		input.OfferedAmount,
 		input.AuctionService,
+		1, // Default quantity to 1 for single item orders
 	)
 	if err != nil {
 		return &domain.Order{}, err
 	}
 
-	if len(input.Items) > 0 {
-		order.Items = input.Items
-		var totalAmount int64
-		for _, item := range input.Items {
-			totalAmount += item.TotalAmount
-		}
-		order.OfferedAmount = totalAmount
-	}
 	if input.WompiIdPayment == "" {
 		order.State = "Created"
 	} else {
@@ -108,8 +89,18 @@ func (s *orderService) CreateOrder(ctx context.Context, input domain.OrderInput)
 }
 
 func (s *orderService) CreateMultipleItemsOrder(ctx context.Context, input domain.OrderInput) (*domain.Order, error) {
-	if len(input.Items) <= 1 {
-		return &domain.Order{}, fmt.Errorf("CreateMultipleItemsOrder requires more than one item")
+
+	if len(input.Items) > 1 {
+		for _, orderItem := range input.Items {
+			itemSpec, err := s.itemSpecRepo.GetById(ctx, orderItem.ItemSpecificationId)
+			if err != nil {
+				return &domain.Order{}, fmt.Errorf("error getting item specification %s: %w", orderItem.ItemSpecificationId, err)
+			}
+
+			if !itemSpec.AllowMultipleItems {
+				return &domain.Order{}, fmt.Errorf("item specification %s does not allow multiple items in orders", orderItem.ItemSpecificationId)
+			}
+		}
 	}
 
 	for _, orderItem := range input.Items {
@@ -131,12 +122,13 @@ func (s *orderService) CreateMultipleItemsOrder(ctx context.Context, input domai
 	order, err := s.orderFactory.CreateOrder(
 		input.CustomerId,
 		input.ExternalId,
-		"",
+		input.ItemSpecificationId,
 		input.OfferId,
 		input.PointOfSaleId,
 		input.ExtraData,
-		0,
+		input.OfferedAmount,
 		input.AuctionService,
+		0,
 	)
 	if err != nil {
 		return &domain.Order{}, err
@@ -144,10 +136,13 @@ func (s *orderService) CreateMultipleItemsOrder(ctx context.Context, input domai
 
 	order.Items = input.Items
 	var totalAmount int64
+	var quantity int
 	for _, item := range input.Items {
-		totalAmount += item.TotalAmount
+		totalAmount += item.UnitAmount * int64(item.Quantity)
+		quantity += item.Quantity
 	}
 	order.OfferedAmount = totalAmount
+	order.TotalQuantity = quantity
 
 	if input.WompiIdPayment == "" {
 		order.State = "Created"

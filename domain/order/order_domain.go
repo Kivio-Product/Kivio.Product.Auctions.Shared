@@ -9,7 +9,6 @@ type OrderItem struct {
 	ItemSpecificationId string `json:"item_specification_id"`
 	Quantity            int    `json:"quantity"`
 	UnitAmount          int64  `json:"unit_amount"`
-	TotalAmount         int64  `json:"total_amount"`
 }
 
 type Order struct {
@@ -28,6 +27,7 @@ type Order struct {
 	AuctionService      bool
 	WompiIdPayment      string
 	IsWinner            bool
+	TotalQuantity       int
 }
 
 type OrderDetail struct {
@@ -101,7 +101,7 @@ func (o *Order) CalculateTotalAmount() int64 {
 
 	var total int64
 	for _, item := range o.Items {
-		total += item.TotalAmount
+		total += item.UnitAmount * int64(item.Quantity) // Assuming UnitAmount is the price per item
 	}
 	return total
 }
