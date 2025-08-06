@@ -174,7 +174,7 @@ func (s *OfferProcessingService) processItemSpecOrders(ctx context.Context, item
 			return nil, nil, fmt.Errorf("error getting ecommerce credentials: %v", err)
 		}
 
-		item, err := s.ecommerceService.GetItemByID(ctx, creds.ApiURL, creds.ApiKey, itemSpec.ItemId)
+		item, err := s.ecommerceService.GetItemByID(ctx, itemSpec.ItemId, creds.ApiURL, creds.ApiKey)
 		if err != nil || item == nil {
 			fmt.Printf("Error fetching external item %s or item not found\n", itemSpec.ItemId)
 			availability = 0
