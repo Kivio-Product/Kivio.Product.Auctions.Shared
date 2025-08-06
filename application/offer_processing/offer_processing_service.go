@@ -76,8 +76,8 @@ func (s *OfferProcessingService) ProcessOffer(ctx context.Context, offerId strin
 
 	groupedOrders := s.groupOrdersByItemSpec(orders)
 
-	var allWinners []processingDomain.Order
-	var allLosers []processingDomain.Order
+	var allWinners []*orderDomain.Order
+	var allLosers []*orderDomain.Order
 
 	for itemSpecId, ordersGroup := range groupedOrders {
 		pendingOrders := s.filterPendingOrders(ordersGroup)
@@ -119,39 +119,30 @@ func (s *OfferProcessingService) ProcessOffer(ctx context.Context, offerId strin
 	}, nil
 }
 
-func (s *OfferProcessingService) getOrdersByOffer(ctx context.Context, offerId string) ([]processingDomain.Order, error) {
+func (s *OfferProcessingService) getOrdersByOffer(ctx context.Context, offerId string) ([]*orderDomain.Order, error) {
 	domainOrders, err := s.orderRepo.GetOrdersByOfferId(ctx, offerId)
 	if err != nil {
 		return nil, err
 	}
 
-	orders := make([]processingDomain.Order, len(domainOrders))
-	for i, order := range domainOrders {
-		orders[i] = processingDomain.Order{
-			OrderId:             order.OrderId,
-			OfferId:             order.OfferId,
-			CustomerId:          order.CustomerId,
-			ExternalId:          order.ExternalId,
-			ItemSpecificationId: order.ItemSpecificationId,
-			OfferedAmount:       order.OfferedAmount,
-			State:               order.State,
-			ExtraData:           order.ExtraData,
-		}
+	orders := make([]*orderDomain.Order, len(domainOrders))
+	for i := range domainOrders {
+		orders[i] = &domainOrders[i]
 	}
 
 	return orders, nil
 }
 
-func (s *OfferProcessingService) groupOrdersByItemSpec(orders []processingDomain.Order) map[string][]processingDomain.Order {
-	grouped := make(map[string][]processingDomain.Order)
+func (s *OfferProcessingService) groupOrdersByItemSpec(orders []*orderDomain.Order) map[string][]*orderDomain.Order {
+	grouped := make(map[string][]*orderDomain.Order)
 	for _, order := range orders {
 		grouped[order.ItemSpecificationId] = append(grouped[order.ItemSpecificationId], order)
 	}
 	return grouped
 }
 
-func (s *OfferProcessingService) filterPendingOrders(orders []processingDomain.Order) []processingDomain.Order {
-	var pending []processingDomain.Order
+func (s *OfferProcessingService) filterPendingOrders(orders []*orderDomain.Order) []*orderDomain.Order {
+	var pending []*orderDomain.Order
 	for _, order := range orders {
 		if order.State == "Pending" {
 			pending = append(pending, order)
@@ -160,7 +151,7 @@ func (s *OfferProcessingService) filterPendingOrders(orders []processingDomain.O
 	return pending
 }
 
-func (s *OfferProcessingService) processItemSpecOrders(ctx context.Context, itemSpecId string, orders []processingDomain.Order, posId string) ([]processingDomain.Order, []processingDomain.Order, error) {
+func (s *OfferProcessingService) processItemSpecOrders(ctx context.Context, itemSpecId string, orders []*orderDomain.Order, posId string) ([]*orderDomain.Order, []*orderDomain.Order, error) {
 	itemSpec, err := s.itemSpecRepo.GetById(ctx, itemSpecId)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error fetching item specification %s: %v", itemSpecId, err)
@@ -189,7 +180,7 @@ func (s *OfferProcessingService) processItemSpecOrders(ctx context.Context, item
 		return orders[i].OfferedAmount > orders[j].OfferedAmount
 	})
 
-	var winners, losers []processingDomain.Order
+	var winners, losers []*orderDomain.Order
 	if availability > len(orders) {
 		winners = orders
 	} else {
@@ -230,19 +221,10 @@ func (s *OfferProcessingService) processItemSpecOrders(ctx context.Context, item
 	return winners, losers, nil
 }
 
-func (s *OfferProcessingService) updateOrderState(ctx context.Context, order processingDomain.Order, state string, isWinner bool) error {
-	domainOrder := &orderDomain.Order{
-		OrderId:             order.OrderId,
-		OfferId:             order.OfferId,
-		CustomerId:          order.CustomerId,
-		ExternalId:          order.ExternalId,
-		ItemSpecificationId: order.ItemSpecificationId,
-		OfferedAmount:       order.OfferedAmount,
-		State:               state,
-		IsWinner:            isWinner,
-	}
-
-	return s.orderRepo.SaveOrder(ctx, domainOrder)
+func (s *OfferProcessingService) updateOrderState(ctx context.Context, order *orderDomain.Order, state string, isWinner bool) error {
+	order.State = state
+	order.IsWinner = isWinner
+	return s.orderRepo.SaveOrder(ctx, order)
 }
 
 func (s *OfferProcessingService) updateExternalItemStock(ctx context.Context, posId, itemId string, newStock int) error {
@@ -259,8 +241,8 @@ func (s *OfferProcessingService) updateItemSpecAvailability(ctx context.Context,
 	return s.itemSpecRepo.UpdateItemSpec(ctx, itemSpec)
 }
 
-func (s *OfferProcessingService) sendEmailsGroupedByCustomer(ctx context.Context, orders []processingDomain.Order, status, posId string) error {
-	groupedByCustomer := make(map[string][]processingDomain.Order)
+func (s *OfferProcessingService) sendEmailsGroupedByCustomer(ctx context.Context, orders []*orderDomain.Order, status, posId string) error {
+	groupedByCustomer := make(map[string][]*orderDomain.Order)
 	for _, order := range orders {
 		groupedByCustomer[order.CustomerId] = append(groupedByCustomer[order.CustomerId], order)
 	}

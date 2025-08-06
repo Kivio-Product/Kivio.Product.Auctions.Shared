@@ -24,7 +24,6 @@ type Order struct {
 	State               string
 	SortKey             string
 	PointOfSaleId       string
-	AuctionService      bool
 	WompiIdPayment      string
 	IsWinner            bool
 	TotalQuantity       int
@@ -74,7 +73,6 @@ type OrderInput struct {
 	PointOfSaleId       string
 	ExtraData           string
 	OfferedAmount       int64
-	AuctionService      bool
 	State               string
 	WompiIdPayment      string
 	IsWinner            bool

@@ -65,7 +65,6 @@ func (s *orderService) CreateOrder(ctx context.Context, input domain.OrderInput)
 		input.PointOfSaleId,
 		input.ExtraData,
 		input.OfferedAmount,
-		input.AuctionService,
 		1, // Default quantity to 1 for single item orders
 	)
 	if err != nil {
@@ -127,7 +126,6 @@ func (s *orderService) CreateMultipleItemsOrder(ctx context.Context, input domai
 		input.PointOfSaleId,
 		input.ExtraData,
 		input.OfferedAmount,
-		input.AuctionService,
 		0,
 	)
 	if err != nil {
