@@ -14,6 +14,7 @@ import (
 	itemSpecRepository "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item_specification"
 	offerRepository "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/offer"
 	orderRepository "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/order"
+	posRepository "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/point_of_sale"
 )
 
 type IOfferProcessingService interface {
@@ -24,6 +25,7 @@ type OfferProcessingService struct {
 	offerRepo        offerRepository.IOfferRepository
 	orderRepo        orderRepository.OrderRepository
 	itemSpecRepo     itemSpecRepository.ItemSpecificationRepository
+	posRepo          posRepository.IPosRepository
 	ecommerceService ecommerceService.EcommerceService
 	ecommerceCredSvc ecommerceService.EcommerceCredentialsService
 	emailSender      emailService.EmailServiceInterface
@@ -33,6 +35,7 @@ func NewOfferProcessingService(
 	offerRepo offerRepository.IOfferRepository,
 	orderRepo orderRepository.OrderRepository,
 	itemSpecRepo itemSpecRepository.ItemSpecificationRepository,
+	posRepo posRepository.IPosRepository,
 	ecommerceService ecommerceService.EcommerceService,
 	ecommerceCredSvc ecommerceService.EcommerceCredentialsService,
 	emailSender emailService.EmailServiceInterface,
@@ -41,6 +44,7 @@ func NewOfferProcessingService(
 		offerRepo:        offerRepo,
 		orderRepo:        orderRepo,
 		itemSpecRepo:     itemSpecRepo,
+		posRepo:          posRepo,
 		ecommerceService: ecommerceService,
 		ecommerceCredSvc: ecommerceCredSvc,
 		emailSender:      emailSender,
@@ -247,6 +251,12 @@ func (s *OfferProcessingService) sendEmailsGroupedByCustomer(ctx context.Context
 		groupedByCustomer[order.CustomerId] = append(groupedByCustomer[order.CustomerId], order)
 	}
 
+	pos, err := s.posRepo.GetPosById(ctx, posId)
+	if err != nil {
+		fmt.Printf("Error getting POS name for ID %s: %v\n", posId, err)
+		return err
+	}
+
 	for customerId, customerOrders := range groupedByCustomer {
 		var itemNames []string
 		var offeredAmount int64
@@ -263,7 +273,7 @@ func (s *OfferProcessingService) sendEmailsGroupedByCustomer(ctx context.Context
 			OfferedAmount:     offeredAmount,
 			Status:            status,
 			ConcatenatedNames: joinStrings(itemNames, ", "),
-			PointOfSaleId:     posId,
+			PointOfSaleId:     pos.Name,
 		}
 
 		err := s.sendEmailNotification(ctx, notification)
