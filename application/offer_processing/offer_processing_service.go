@@ -105,6 +105,11 @@ func (s *OfferProcessingService) ProcessOffer(ctx context.Context, offerId strin
 		allLosers = append(allLosers, losers...)
 	}
 
+	err = s.processPaymentsByCustomer(ctx, allWinners)
+	if err != nil {
+		fmt.Printf("Error processing payments for offer %s: %v\n", offerId, err)
+	}
+
 	err = s.sendEmailsGroupedByCustomer(ctx, allLosers, "Rejected", offer.PosId)
 	if err != nil {
 		fmt.Printf("Error sending emails for offer %s: %v\n", offerId, err)
@@ -211,11 +216,6 @@ func (s *OfferProcessingService) processItemSpecOrders(ctx context.Context, item
 		err := s.orderService.UpdateOrder(ctx, input)
 		if err != nil {
 			fmt.Printf("Error updating winner order %s: %v\n", winner.OrderId, err)
-		} else {
-			err = s.paymentService.ProcessPaymentForOrder(ctx, winner)
-			if err != nil {
-				fmt.Printf("Error processing payment for order %s: %v\n", winner.OrderId, err)
-			}
 		}
 	}
 
@@ -315,6 +315,25 @@ func (s *OfferProcessingService) sendEmailNotification(ctx context.Context, noti
 
 func (s *OfferProcessingService) closeOffer(ctx context.Context, offer *offerDomain.Offer) error {
 	return s.offerService.UpdateOfferState(ctx, offer.OfferId, "Closed")
+}
+
+func (s *OfferProcessingService) processPaymentsByCustomer(ctx context.Context, allWinners []*orderDomain.Order) error {
+	winnersByCustomer := make(map[string][]*orderDomain.Order)
+	
+	for _, winner := range allWinners {
+		winnersByCustomer[winner.CustomerId] = append(winnersByCustomer[winner.CustomerId], winner)
+	}
+
+	for customerId, orders := range winnersByCustomer {
+		err := s.paymentService.ProcessPaymentForCustomer(ctx, orders)
+		if err != nil {
+			fmt.Printf("Error processing payment for customer %s: %v\n", customerId, err)
+			continue
+		}
+		fmt.Printf("Successfully processed payment for customer %s with %d orders (total orders: %d)\n", customerId, len(orders), len(orders))
+	}
+
+	return nil
 }
 
 func joinStrings(strs []string, sep string) string {
