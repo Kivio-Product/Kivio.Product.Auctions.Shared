@@ -51,10 +51,7 @@ func (s *paymentService) ProcessPaymentForCustomer(ctx context.Context, orders [
 
 	var totalAmount int64
 	for _, order := range orders {
-		amountInCents := order.OfferedAmount
-		if amountInCents < 1000000 {
-			amountInCents = int64(float64(order.OfferedAmount) * 100)
-		}
+		amountInCents := int64(float64(order.OfferedAmount) * 100)
 		totalAmount += amountInCents
 	}
 

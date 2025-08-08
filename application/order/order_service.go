@@ -181,10 +181,6 @@ func (s *orderService) GetOrders(ctx context.Context) ([]domain.Order, error) {
 	return orders, nil
 }
 
-func toCents(amount float64) int64 {
-	return int64(amount * 100)
-}
-
 func (s *orderService) UpdateOrder(ctx context.Context, input domain.OrderInput) error {
 	order, err := s.repo.GetIdOrder(ctx, input.OrderId)
 	if err != nil {
