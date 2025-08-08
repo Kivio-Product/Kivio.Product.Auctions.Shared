@@ -7,14 +7,14 @@ import (
 
 	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
 	emailService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
-	itemSpecDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item_specification"
+	itemSpecService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/item_specification"
+	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
+	orderService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/order"
+	paymentService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/payment"
+	pointOfSaleService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/point_of_sale"
 	offerDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/offer"
 	processingDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/offer_processing"
 	orderDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
-	itemSpecRepository "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item_specification"
-	offerRepository "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/offer"
-	orderRepository "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/order"
-	posRepository "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/point_of_sale"
 )
 
 type IOfferProcessingService interface {
@@ -22,37 +22,40 @@ type IOfferProcessingService interface {
 }
 
 type OfferProcessingService struct {
-	offerRepo        offerRepository.IOfferRepository
-	orderRepo        orderRepository.OrderRepository
-	itemSpecRepo     itemSpecRepository.ItemSpecificationRepository
-	posRepo          posRepository.IPosRepository
+	offerService     offerService.IOfferService
+	orderService     orderService.OrderService
+	itemSpecService  itemSpecService.ItemSpecificationService
+	posService       pointOfSaleService.IPosService
 	ecommerceService ecommerceService.EcommerceService
 	ecommerceCredSvc ecommerceService.EcommerceCredentialsService
 	emailSender      emailService.EmailServiceInterface
+	paymentService   paymentService.PaymentService
 }
 
 func NewOfferProcessingService(
-	offerRepo offerRepository.IOfferRepository,
-	orderRepo orderRepository.OrderRepository,
-	itemSpecRepo itemSpecRepository.ItemSpecificationRepository,
-	posRepo posRepository.IPosRepository,
+	offerService offerService.IOfferService,
+	orderService orderService.OrderService,
+	itemSpecService itemSpecService.ItemSpecificationService,
+	posService pointOfSaleService.IPosService,
 	ecommerceService ecommerceService.EcommerceService,
 	ecommerceCredSvc ecommerceService.EcommerceCredentialsService,
 	emailSender emailService.EmailServiceInterface,
+	paymentService paymentService.PaymentService,
 ) IOfferProcessingService {
 	return &OfferProcessingService{
-		offerRepo:        offerRepo,
-		orderRepo:        orderRepo,
-		itemSpecRepo:     itemSpecRepo,
-		posRepo:          posRepo,
+		offerService:     offerService,
+		orderService:     orderService,
+		itemSpecService:  itemSpecService,
+		posService:       posService,
 		ecommerceService: ecommerceService,
 		ecommerceCredSvc: ecommerceCredSvc,
 		emailSender:      emailSender,
+		paymentService:   paymentService,
 	}
 }
 
 func (s *OfferProcessingService) ProcessOffer(ctx context.Context, offerId string) (*processingDomain.ProcessOfferResponse, error) {
-	offer, err := s.offerRepo.GetOfferById(ctx, offerId)
+	offer, err := s.offerService.GetOfferById(ctx, offerId)
 	if err != nil {
 		return &processingDomain.ProcessOfferResponse{
 			Status:  "error",
@@ -124,7 +127,7 @@ func (s *OfferProcessingService) ProcessOffer(ctx context.Context, offerId strin
 }
 
 func (s *OfferProcessingService) getOrdersByOffer(ctx context.Context, offerId string) ([]*orderDomain.Order, error) {
-	domainOrders, err := s.orderRepo.GetOrdersByOfferId(ctx, offerId)
+	domainOrders, err := s.orderService.GetOrderByOfferId(ctx, offerId)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +159,7 @@ func (s *OfferProcessingService) filterPendingOrders(orders []*orderDomain.Order
 }
 
 func (s *OfferProcessingService) processItemSpecOrders(ctx context.Context, itemSpecId string, orders []*orderDomain.Order, posId string) ([]*orderDomain.Order, []*orderDomain.Order, error) {
-	itemSpec, err := s.itemSpecRepo.GetById(ctx, itemSpecId)
+	itemSpec, err := s.itemSpecService.GetById(ctx, itemSpecId)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error fetching item specification %s: %v", itemSpecId, err)
 	}
@@ -185,22 +188,48 @@ func (s *OfferProcessingService) processItemSpecOrders(ctx context.Context, item
 	})
 
 	var winners, losers []*orderDomain.Order
-	if availability > len(orders) {
-		winners = orders
-	} else {
-		winners = orders[:availability]
-		losers = orders[availability:]
+	winnerCount := 0
+	for _, order := range orders {
+		if winnerCount < availability {
+			winners = append(winners, order)
+			winnerCount++
+		} else {
+			losers = append(losers, order)
+		}
 	}
 
 	for _, winner := range winners {
-		err := s.updateOrderState(ctx, winner, "Approved", true)
+		input := orderDomain.OrderInput{
+			OrderId:              winner.OrderId,
+			CustomerId:           winner.CustomerId,
+			ExternalId:           winner.ExternalId,
+			ItemSpecificationId:  winner.ItemSpecificationId,
+			State:                "Approved",
+			OfferedAmount:        winner.OfferedAmount,
+			IsWinner:             true,
+		}
+		err := s.orderService.UpdateOrder(ctx, input)
 		if err != nil {
 			fmt.Printf("Error updating winner order %s: %v\n", winner.OrderId, err)
+		} else {
+			err = s.paymentService.ProcessPaymentForOrder(ctx, winner)
+			if err != nil {
+				fmt.Printf("Error processing payment for order %s: %v\n", winner.OrderId, err)
+			}
 		}
 	}
 
 	for _, loser := range losers {
-		err := s.updateOrderState(ctx, loser, "Rejected", false)
+		input := orderDomain.OrderInput{
+			OrderId:              loser.OrderId,
+			CustomerId:           loser.CustomerId,
+			ExternalId:           loser.ExternalId,
+			ItemSpecificationId:  loser.ItemSpecificationId,
+			State:                "Rejected",
+			OfferedAmount:        loser.OfferedAmount,
+			IsWinner:             false,
+		}
+		err := s.orderService.UpdateOrder(ctx, input)
 		if err != nil {
 			fmt.Printf("Error updating loser order %s: %v\n", loser.OrderId, err)
 		}
@@ -216,19 +245,13 @@ func (s *OfferProcessingService) processItemSpecOrders(ctx context.Context, item
 		}
 	} else {
 		newAvailability := availability - len(winners)
-		err := s.updateItemSpecAvailability(ctx, itemSpec, newAvailability)
+		err := s.itemSpecService.Update(ctx, itemSpec.Id, itemSpec.Currency, itemSpec.OfferId, itemSpec.ItemId, itemSpec.PointOfSaleId, itemSpec.Amount, int64(newAvailability), itemSpec.ExpireAt)
 		if err != nil {
 			fmt.Printf("Error updating item spec availability %s: %v\n", itemSpecId, err)
 		}
 	}
 
 	return winners, losers, nil
-}
-
-func (s *OfferProcessingService) updateOrderState(ctx context.Context, order *orderDomain.Order, state string, isWinner bool) error {
-	order.State = state
-	order.IsWinner = isWinner
-	return s.orderRepo.SaveOrder(ctx, order)
 }
 
 func (s *OfferProcessingService) updateExternalItemStock(ctx context.Context, posId, itemId string, newStock int) error {
@@ -240,18 +263,13 @@ func (s *OfferProcessingService) updateExternalItemStock(ctx context.Context, po
 	return s.ecommerceService.UpdateItemStock(ctx, creds.ApiURL, creds.ApiKey, itemId, newStock)
 }
 
-func (s *OfferProcessingService) updateItemSpecAvailability(ctx context.Context, itemSpec *itemSpecDomain.ItemSpecification, newAvailability int) error {
-	itemSpec.Availability = int64(newAvailability)
-	return s.itemSpecRepo.UpdateItemSpec(ctx, itemSpec)
-}
-
 func (s *OfferProcessingService) sendEmailsGroupedByCustomer(ctx context.Context, orders []*orderDomain.Order, status, posId string) error {
 	groupedByCustomer := make(map[string][]*orderDomain.Order)
 	for _, order := range orders {
 		groupedByCustomer[order.CustomerId] = append(groupedByCustomer[order.CustomerId], order)
 	}
 
-	pos, err := s.posRepo.GetPosById(ctx, posId)
+	pos, err := s.posService.GetPosById(ctx, posId)
 	if err != nil {
 		fmt.Printf("Error getting POS name for ID %s: %v\n", posId, err)
 		return err
@@ -296,11 +314,7 @@ func (s *OfferProcessingService) sendEmailNotification(ctx context.Context, noti
 }
 
 func (s *OfferProcessingService) closeOffer(ctx context.Context, offer *offerDomain.Offer) error {
-	err := offer.UpdateState("Closed")
-	if err != nil {
-		return err
-	}
-	return s.offerRepo.SaveOffer(ctx, offer)
+	return s.offerService.UpdateOfferState(ctx, offer.OfferId, "Closed")
 }
 
 func joinStrings(strs []string, sep string) string {
