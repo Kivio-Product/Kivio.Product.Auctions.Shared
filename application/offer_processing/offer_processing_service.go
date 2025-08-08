@@ -2,8 +2,10 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 
 	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
 	emailService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
@@ -180,12 +182,24 @@ func (s *OfferProcessingService) processItemSpecOrders(ctx context.Context, item
 			return nil, nil, fmt.Errorf("error getting ecommerce credentials: %v", err)
 		}
 
-		item, err := s.ecommerceService.GetItemByID(ctx, itemSpec.ItemId, creds.ApiURL, creds.ApiKey)
-		if err != nil || item == nil {
+		itemId := strings.TrimPrefix(itemSpec.ItemId, "kivio-ecommerce∼")
+		itemRaw, err := s.ecommerceService.GetItemByIDRaw(ctx, itemId, creds.ApiURL, creds.ApiKey)
+		if err != nil || itemRaw == nil {
 			fmt.Printf("Error fetching external item %s or item not found\n", itemSpec.ItemId)
 			availability = 0
 		} else {
-			availability = 0
+			type externalProductResponse struct {
+				Products []struct {
+					StockQuantity int64 `json:"stock_quantity"`
+				} `json:"products"`
+			}
+			var extResp externalProductResponse
+			if err := json.Unmarshal(itemRaw, &extResp); err == nil && len(extResp.Products) > 0 {
+				availability = int(extResp.Products[0].StockQuantity)
+			} else {
+				fmt.Printf("Error parsing external item response or no products found for %s\n", itemSpec.ItemId)
+				availability = 0
+			}
 		}
 	} else {
 		availability = int(itemSpec.Availability)
