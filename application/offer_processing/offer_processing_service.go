@@ -105,9 +105,12 @@ func (s *OfferProcessingService) ProcessOffer(ctx context.Context, offerId strin
 		allLosers = append(allLosers, losers...)
 	}
 
-	err = s.processPaymentsByCustomer(ctx, allWinners)
+	successfulPaymentCustomers := s.processPaymentsByCustomer(ctx, allWinners)
+
+	winnersWithSuccessfulPayment := s.filterWinnersBySuccessfulPayment(allWinners, successfulPaymentCustomers)
+	err = s.sendEmailsGroupedByCustomer(ctx, winnersWithSuccessfulPayment, "Approved", offer.PosId)
 	if err != nil {
-		fmt.Printf("Error processing payments for offer %s: %v\n", offerId, err)
+		fmt.Printf("Error sending emails to winners for offer %s: %v\n", offerId, err)
 	}
 
 	err = s.sendEmailsGroupedByCustomer(ctx, allLosers, "Rejected", offer.PosId)
@@ -277,18 +280,16 @@ func (s *OfferProcessingService) sendEmailsGroupedByCustomer(ctx context.Context
 
 	for customerId, customerOrders := range groupedByCustomer {
 		var itemNames []string
-		var offeredAmount int64
+		var totalOfferedAmount int64
 
 		for _, order := range customerOrders {
 			itemNames = append(itemNames, order.ExtraData)
-			if offeredAmount == 0 {
-				offeredAmount = order.OfferedAmount
-			}
+			totalOfferedAmount += order.OfferedAmount
 		}
 
 		notification := processingDomain.EmailNotification{
 			CustomerId:        customerId,
-			OfferedAmount:     offeredAmount,
+			OfferedAmount:     totalOfferedAmount,
 			Status:            status,
 			ConcatenatedNames: joinStrings(itemNames, ", "),
 			PointOfSaleId:     pos.Name,
@@ -317,8 +318,9 @@ func (s *OfferProcessingService) closeOffer(ctx context.Context, offer *offerDom
 	return s.offerService.UpdateOfferState(ctx, offer.OfferId, "Closed")
 }
 
-func (s *OfferProcessingService) processPaymentsByCustomer(ctx context.Context, allWinners []*orderDomain.Order) error {
+func (s *OfferProcessingService) processPaymentsByCustomer(ctx context.Context, allWinners []*orderDomain.Order) []string {
 	winnersByCustomer := make(map[string][]*orderDomain.Order)
+	var successfulCustomers []string
 	
 	for _, winner := range allWinners {
 		winnersByCustomer[winner.CustomerId] = append(winnersByCustomer[winner.CustomerId], winner)
@@ -330,10 +332,27 @@ func (s *OfferProcessingService) processPaymentsByCustomer(ctx context.Context, 
 			fmt.Printf("Error processing payment for customer %s: %v\n", customerId, err)
 			continue
 		}
-		fmt.Printf("Successfully processed payment for customer %s with %d orders (total orders: %d)\n", customerId, len(orders), len(orders))
+		fmt.Printf("Successfully processed payment for customer %s with %d orders\n", customerId, len(orders))
+		successfulCustomers = append(successfulCustomers, customerId)
 	}
 
-	return nil
+	return successfulCustomers
+}
+
+func (s *OfferProcessingService) filterWinnersBySuccessfulPayment(allWinners []*orderDomain.Order, successfulCustomers []string) []*orderDomain.Order {
+	successfulCustomersMap := make(map[string]bool)
+	for _, customerId := range successfulCustomers {
+		successfulCustomersMap[customerId] = true
+	}
+
+	var winnersWithSuccessfulPayment []*orderDomain.Order
+	for _, winner := range allWinners {
+		if successfulCustomersMap[winner.CustomerId] {
+			winnersWithSuccessfulPayment = append(winnersWithSuccessfulPayment, winner)
+		}
+	}
+
+	return winnersWithSuccessfulPayment
 }
 
 func joinStrings(strs []string, sep string) string {
