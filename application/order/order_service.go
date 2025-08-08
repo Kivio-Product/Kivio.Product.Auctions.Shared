@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"sync"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
@@ -18,7 +17,6 @@ import (
 	emailservices "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
 	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
 	payment "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/payment"
-	paymentDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/payment"
 	"github.com/jung-kurt/gofpdf"
 	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/language"
@@ -193,10 +191,6 @@ func (s *orderService) UpdateOrder(ctx context.Context, input domain.OrderInput)
 		return err
 	}
 
-	amountInCents := input.OfferedAmount
-	if amountInCents < 1000000 {
-		amountInCents = toCents(float64(input.OfferedAmount))
-	}
 	err = order.Update(
 		input.CustomerId,
 		input.ExternalId,
@@ -207,52 +201,6 @@ func (s *orderService) UpdateOrder(ctx context.Context, input domain.OrderInput)
 	)
 	if err != nil {
 		return err
-	}
-
-	if input.IsWinner {
-		offer, err := s.offerService.GetOfferById(ctx, order.OfferId)
-		if err != nil {
-			return err
-		}
-		if offer.Type == "Regular auction" && order.WompiIdPayment != "" {
-			billingReference, err := s.billingService.GetBillingReferenceByOrderId(ctx, order.OrderId)
-			if err != nil {
-				return fmt.Errorf("error obteniendo la referencia de facturación: %w", err)
-			}
-
-			wompiReq := &paymentDomain.WompiTransactionRequest{
-				AmountInCents:   amountInCents,
-				Currency:        "COP",
-				CustomerEmail:   order.CustomerId,
-				PaymentSourceId: 0,
-				Reference:       billingReference,
-				PaymentMethod: &paymentDomain.WompiPaymentMethod{
-					Installments: 1,
-				},
-			}
-
-			var paymentSourceId int64
-			_, err = fmt.Sscan(order.WompiIdPayment, &paymentSourceId)
-			if err != nil {
-				return fmt.Errorf("error convirtiendo WompiIdPayment a int64: %w", err)
-			}
-			wompiReq.PaymentSourceId = paymentSourceId
-
-			integritySecret := os.Getenv("WOMPI_INTEGRITY_SECRET")
-			if integritySecret == "" {
-				return fmt.Errorf("WOMPI_INTEGRITY_SECRET no está configurado")
-			}
-			signatureResp, err := s.wompiService.GenerateIntegritySignature(ctx, billingReference, amountInCents, "COP", integritySecret, nil)
-			if err != nil {
-				return fmt.Errorf("error generando signature Wompi: %w", err)
-			}
-			wompiReq.Signature = signatureResp.Signature
-
-			_, err = s.wompiService.CreateTransaction(ctx, wompiReq)
-			if err != nil {
-				return fmt.Errorf("error creando transacción Wompi: %w", err)
-			}
-		}
 	}
 
 	return s.repo.SaveOrder(ctx, order)
