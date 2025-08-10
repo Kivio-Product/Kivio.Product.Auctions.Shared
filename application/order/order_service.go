@@ -153,7 +153,6 @@ func (s *orderService) CreateMultipleItemsOrder(ctx context.Context, input domai
 			return &domain.Order{}, fmt.Errorf("error getting item specification for update %s: %w", orderItem.ItemSpecificationId, err)
 		}
 
-		itemSpec.Availability -= int64(orderItem.Quantity)
 		err = itemSpec.CheckAndUpdateAvailabilityState()
 		if err != nil {
 			return &domain.Order{}, fmt.Errorf("error updating availability state: %w", err)
