@@ -277,7 +277,7 @@ func (s *OfferProcessingService) updateExternalItemStock(ctx context.Context, po
 		return err
 	}
 
-	itemId = strings.TrimPrefix(itemId, "kivio-ecommerce~")
+	itemId = strings.TrimPrefix(itemId, "kivio-ecommerce∼")
 
 	return s.ecommerceService.UpdateItemStock(ctx, creds.ApiURL, creds.ApiKey, itemId, newStock)
 }
