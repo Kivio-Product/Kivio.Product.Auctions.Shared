@@ -222,13 +222,13 @@ func (s *OfferProcessingService) processItemSpecOrders(ctx context.Context, item
 
 	for _, winner := range winners {
 		input := orderDomain.OrderInput{
-			OrderId:              winner.OrderId,
-			CustomerId:           winner.CustomerId,
-			ExternalId:           winner.ExternalId,
-			ItemSpecificationId:  winner.ItemSpecificationId,
-			State:                "Approved",
-			OfferedAmount:        winner.OfferedAmount,
-			IsWinner:             true,
+			OrderId:             winner.OrderId,
+			CustomerId:          winner.CustomerId,
+			ExternalId:          winner.ExternalId,
+			ItemSpecificationId: winner.ItemSpecificationId,
+			State:               "Approved",
+			OfferedAmount:       winner.OfferedAmount,
+			IsWinner:            true,
 		}
 		err := s.orderService.UpdateOrder(ctx, input)
 		if err != nil {
@@ -238,13 +238,13 @@ func (s *OfferProcessingService) processItemSpecOrders(ctx context.Context, item
 
 	for _, loser := range losers {
 		input := orderDomain.OrderInput{
-			OrderId:              loser.OrderId,
-			CustomerId:           loser.CustomerId,
-			ExternalId:           loser.ExternalId,
-			ItemSpecificationId:  loser.ItemSpecificationId,
-			State:                "Rejected",
-			OfferedAmount:        loser.OfferedAmount,
-			IsWinner:             false,
+			OrderId:             loser.OrderId,
+			CustomerId:          loser.CustomerId,
+			ExternalId:          loser.ExternalId,
+			ItemSpecificationId: loser.ItemSpecificationId,
+			State:               "Rejected",
+			OfferedAmount:       loser.OfferedAmount,
+			IsWinner:            false,
 		}
 		err := s.orderService.UpdateOrder(ctx, input)
 		if err != nil {
@@ -276,6 +276,8 @@ func (s *OfferProcessingService) updateExternalItemStock(ctx context.Context, po
 	if err != nil {
 		return err
 	}
+
+	itemId = strings.TrimPrefix(itemId, "kivio-ecommerce~")
 
 	return s.ecommerceService.UpdateItemStock(ctx, creds.ApiURL, creds.ApiKey, itemId, newStock)
 }
@@ -335,7 +337,7 @@ func (s *OfferProcessingService) closeOffer(ctx context.Context, offer *offerDom
 func (s *OfferProcessingService) processPaymentsByCustomer(ctx context.Context, allWinners []*orderDomain.Order) []string {
 	winnersByCustomer := make(map[string][]*orderDomain.Order)
 	var successfulCustomers []string
-	
+
 	for _, winner := range allWinners {
 		winnersByCustomer[winner.CustomerId] = append(winnersByCustomer[winner.CustomerId], winner)
 	}
