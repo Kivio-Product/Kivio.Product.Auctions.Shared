@@ -295,12 +295,21 @@ func (s *OfferProcessingService) sendEmailsGroupedByCustomer(ctx context.Context
 	}
 
 	for customerId, customerOrders := range groupedByCustomer {
-		var itemNames []string
+		itemCounts := make(map[string]int)
 		var totalOfferedAmount int64
 
 		for _, order := range customerOrders {
-			itemNames = append(itemNames, order.ExtraData)
+			itemCounts[order.ExtraData]++
 			totalOfferedAmount += order.OfferedAmount
+		}
+
+		var itemNames []string
+		for itemName, count := range itemCounts {
+			if count > 1 {
+				itemNames = append(itemNames, fmt.Sprintf("%s x%d unds", itemName, count))
+			} else {
+				itemNames = append(itemNames, itemName)
+			}
 		}
 
 		notification := processingDomain.EmailNotification{
