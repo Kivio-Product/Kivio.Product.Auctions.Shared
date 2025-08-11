@@ -44,9 +44,6 @@ func (o *ItemSpecification) Update(currency, offerId, itemId, pointOfSaleId stri
 	if amount == 0 {
 		return fmt.Errorf("amount cannot be empty")
 	}
-	if availability == 0 {
-		return fmt.Errorf("amount cannot be empty")
-	}
 	if expireAt.String() == "" {
 		return fmt.Errorf("expireAt cannot be empty")
 	}
