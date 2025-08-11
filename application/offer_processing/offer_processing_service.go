@@ -210,11 +210,11 @@ func (s *OfferProcessingService) processItemSpecOrders(ctx context.Context, item
 	})
 
 	var winners, losers []*orderDomain.Order
-	winnerCount := 0
+	totalQuantityAllocated := 0
 	for _, order := range orders {
-		if winnerCount < availability {
+		if totalQuantityAllocated+order.TotalQuantity <= availability {
 			winners = append(winners, order)
-			winnerCount++
+			totalQuantityAllocated += order.TotalQuantity
 		} else {
 			losers = append(losers, order)
 		}
@@ -304,14 +304,14 @@ func (s *OfferProcessingService) sendEmailsGroupedByCustomer(ctx context.Context
 		var totalOfferedAmount int64
 
 		for _, order := range customerOrders {
-			itemCounts[order.ExtraData]++
+			itemCounts[order.ExtraData] += order.TotalQuantity
 			totalOfferedAmount += order.OfferedAmount
 		}
 
 		var itemNames []string
-		for itemName, count := range itemCounts {
-			if count > 1 {
-				itemNames = append(itemNames, fmt.Sprintf("%s x%d unds", itemName, count))
+		for itemName, totalQuantity := range itemCounts {
+			if totalQuantity > 1 {
+				itemNames = append(itemNames, fmt.Sprintf("%s x%d unds", itemName, totalQuantity))
 			} else {
 				itemNames = append(itemNames, itemName)
 			}
