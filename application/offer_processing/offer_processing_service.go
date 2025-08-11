@@ -252,16 +252,21 @@ func (s *OfferProcessingService) processItemSpecOrders(ctx context.Context, item
 		}
 	}
 
+	totalQuantityToReduce := 0
+	for _, winner := range winners {
+		totalQuantityToReduce += winner.TotalQuantity
+	}
+
 	if itemSpec.IsExternal {
-		if len(winners) > 0 {
-			newStock := availability - len(winners)
+		if totalQuantityToReduce > 0 {
+			newStock := availability - totalQuantityToReduce
 			err := s.updateExternalItemStock(ctx, posId, itemSpec.ItemId, newStock)
 			if err != nil {
 				fmt.Printf("Error updating external stock for item %s: %v\n", itemSpec.ItemId, err)
 			}
 		}
 	} else {
-		newAvailability := availability - len(winners)
+		newAvailability := availability - totalQuantityToReduce
 		err := s.itemSpecService.Update(ctx, itemSpec.Id, itemSpec.Currency, itemSpec.OfferId, itemSpec.ItemId, itemSpec.PointOfSaleId, itemSpec.Amount, int64(newAvailability), itemSpec.ExpireAt)
 		if err != nil {
 			fmt.Printf("Error updating item spec availability %s: %v\n", itemSpecId, err)
