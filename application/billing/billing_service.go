@@ -19,6 +19,7 @@ import (
 
 	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
 	emailService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
+	invoiceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/invoice"
 	pointOfSaleService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/point_of_sale"
 
 	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
@@ -51,6 +52,7 @@ type billingService struct {
 	ecommerceCredSvc   ecommerceService.EcommerceCredentialsService
 	ecommerceSvc       ecommerceService.EcommerceService
 	offerService       offerService.IOfferService
+	invoiceService     invoiceService.InvoiceService
 }
 
 func NewBillingService(
@@ -64,6 +66,7 @@ func NewBillingService(
 	ecommerceSvc ecommerceService.EcommerceService,
 	offerService offerService.IOfferService,
 	pointOfSaleService pointOfSaleService.IPosService,
+	invoiceService invoiceService.InvoiceService,
 ) BillingService {
 	return &billingService{
 		repo:               repo,
@@ -76,6 +79,7 @@ func NewBillingService(
 		ecommerceSvc:       ecommerceSvc,
 		offerService:       offerService,
 		pointOfSaleService: pointOfSaleService,
+		invoiceService:     invoiceService,
 	}
 }
 
@@ -497,6 +501,10 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 				}
 			}()
 		}
+
+		if state == "Approved" && len(validOrders) > 0 {
+			go s.createInvoiceForApprovedPayment(ctx, billingId, validOrders, posName)
+		}
 	}
 
 	if res.Extra1 == "Regular auction" {
@@ -527,10 +535,29 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 				}
 			}()
 		}
+
+		if state == "Approved" && len(validOrders) > 0 {
+			go s.createInvoiceForApprovedPayment(ctx, billingId, validOrders, posName)
+		}
 	}
 
 	fmt.Println("Facturación actualizada correctamente")
 	return nil
+}
+
+func (s *billingService) createInvoiceForApprovedPayment(ctx context.Context, billingId string, orders []*orderDomain.Order, posName string) {
+	if len(orders) == 0 {
+		fmt.Printf("No orders provided for invoice creation for billing %s\n", billingId)
+		return
+	}
+
+	_, err := s.invoiceService.CreateInvoiceForOrders(ctx, billingId, orders, posName)
+	if err != nil {
+		fmt.Printf("Error creating invoice for billing %s: %v\n", billingId, err)
+		return
+	}
+
+	fmt.Printf("Invoice created successfully for billing %s with %d orders\n", billingId, len(orders))
 }
 
 type WompiWebhook struct {
@@ -669,6 +696,10 @@ func (s *billingService) ConfirmWompiResponse(ctx context.Context, body []byte) 
 				fmt.Printf("No se pudo enviar el correo: %s\n", err)
 			}
 		}()
+	}
+
+	if state == "Approved" && len(validOrders) > 0 {
+		go s.createInvoiceForApprovedPayment(ctx, billingId, validOrders, posName)
 	}
 
 	fmt.Println("Facturación actualizada correctamente (Wompi)")

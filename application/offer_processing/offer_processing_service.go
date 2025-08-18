@@ -9,6 +9,7 @@ import (
 
 	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
 	emailService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
+	invoiceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/invoice"
 	itemSpecService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/item_specification"
 	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
 	orderService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/order"
@@ -32,6 +33,7 @@ type OfferProcessingService struct {
 	ecommerceCredSvc ecommerceService.EcommerceCredentialsService
 	emailSender      emailService.EmailServiceInterface
 	paymentService   paymentService.PaymentService
+	invoiceService   invoiceService.InvoiceService
 }
 
 func NewOfferProcessingService(
@@ -43,6 +45,7 @@ func NewOfferProcessingService(
 	ecommerceCredSvc ecommerceService.EcommerceCredentialsService,
 	emailSender emailService.EmailServiceInterface,
 	paymentService paymentService.PaymentService,
+	invoiceService invoiceService.InvoiceService,
 ) IOfferProcessingService {
 	return &OfferProcessingService{
 		offerService:     offerService,
@@ -53,6 +56,7 @@ func NewOfferProcessingService(
 		ecommerceCredSvc: ecommerceCredSvc,
 		emailSender:      emailSender,
 		paymentService:   paymentService,
+		invoiceService:   invoiceService,
 	}
 }
 
@@ -363,6 +367,9 @@ func (s *OfferProcessingService) processPaymentsByCustomer(ctx context.Context, 
 			continue
 		}
 		fmt.Printf("Successfully processed payment for customer %s with %d orders\n", customerId, len(orders))
+
+		go s.createInvoiceForSuccessfulPayment(ctx, orders, customerId)
+
 		successfulCustomers = append(successfulCustomers, customerId)
 	}
 
@@ -383,6 +390,30 @@ func (s *OfferProcessingService) filterWinnersBySuccessfulPayment(allWinners []*
 	}
 
 	return winnersWithSuccessfulPayment
+}
+
+func (s *OfferProcessingService) createInvoiceForSuccessfulPayment(ctx context.Context, orders []*orderDomain.Order, customerId string) {
+	if len(orders) == 0 {
+		fmt.Printf("No orders provided for invoice creation for customer %s\n", customerId)
+		return
+	}
+
+	posId := orders[0].PointOfSaleId
+	pos, err := s.posService.GetPosById(ctx, posId)
+	if err != nil {
+		fmt.Printf("Error getting POS info for invoice creation (customer %s): %v\n", customerId, err)
+		return
+	}
+
+	billingId := fmt.Sprintf("invoice-%s-%s", customerId, orders[0].OrderId)
+
+	_, err = s.invoiceService.CreateInvoiceForOrders(ctx, billingId, orders, pos.Name)
+	if err != nil {
+		fmt.Printf("Error creating invoice for customer %s: %v\n", customerId, err)
+		return
+	}
+
+	fmt.Printf("Invoice created successfully for customer %s with %d orders\n", customerId, len(orders))
 }
 
 func joinStrings(strs []string, sep string) string {
