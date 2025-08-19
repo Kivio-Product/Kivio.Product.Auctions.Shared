@@ -45,20 +45,40 @@ func NewSiigoClient() SiigoClient {
 	username := os.Getenv("SIIGO_API_USERNAME")
 	accessKey := os.Getenv("SIIGO_API_ACCESS_KEY")
 
+	fmt.Printf("DEBUG: Siigo client initialization - baseURL: %s, username: %s, accessKey length: %d\n",
+		baseURL, username, len(accessKey))
+
+	if baseURL == "" {
+		fmt.Println("WARNING: SIIGO_API_BASE_URL is empty")
+	}
+	if username == "" {
+		fmt.Println("WARNING: SIIGO_API_USERNAME is empty")
+	}
+	if accessKey == "" {
+		fmt.Println("WARNING: SIIGO_API_ACCESS_KEY is empty")
+	}
+
 	return &siigoClient{
 		baseURL:   baseURL,
 		username:  username,
 		accessKey: accessKey,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 45 * time.Second,
 		},
 	}
 }
 
 func (c *siigoClient) Authenticate(ctx context.Context) error {
+	fmt.Printf("DEBUG: Starting authentication - token exists: %t, token expired: %t\n",
+		c.accessToken != "", time.Now().After(c.tokenExpiry))
+
 	if c.accessToken != "" && time.Now().Before(c.tokenExpiry) {
+		fmt.Println("DEBUG: Using existing valid token")
 		return nil
 	}
+
+	fmt.Printf("DEBUG: Preparing auth request with username: %s, accessKey length: %d\n",
+		c.username, len(c.accessKey))
 
 	authReq := authRequest{
 		Username:  c.username,
@@ -67,35 +87,64 @@ func (c *siigoClient) Authenticate(ctx context.Context) error {
 
 	jsonData, err := json.Marshal(authReq)
 	if err != nil {
+		fmt.Printf("DEBUG: Error marshaling auth request: %v\n", err)
 		return fmt.Errorf("error marshaling auth request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/auth", bytes.NewBuffer(jsonData))
+	authURL := c.baseURL + "/auth"
+	fmt.Printf("DEBUG: Making auth request to: %s\n", authURL)
+
+	select {
+	case <-ctx.Done():
+		fmt.Printf("DEBUG: Context already cancelled before request: %v\n", ctx.Err())
+		return fmt.Errorf("context cancelled before auth request: %w", ctx.Err())
+	default:
+	}
+
+	if deadline, ok := ctx.Deadline(); ok {
+		fmt.Printf("DEBUG: Context deadline: %v (time remaining: %v)\n", deadline, time.Until(deadline))
+	} else {
+		fmt.Println("DEBUG: Context has no deadline")
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", authURL, bytes.NewBuffer(jsonData))
 	if err != nil {
+		fmt.Printf("DEBUG: Error creating auth request: %v\n", err)
 		return fmt.Errorf("error creating auth request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Partner-Id", "kivio-auctions")
 
+	fmt.Println("DEBUG: About to make HTTP request...")
+	start := time.Now()
 	resp, err := c.httpClient.Do(req)
+	duration := time.Since(start)
+
 	if err != nil {
+		fmt.Printf("DEBUG: HTTP request failed after %v: %v\n", duration, err)
 		return fmt.Errorf("error making auth request: %w", err)
 	}
 	defer resp.Body.Close()
 
+	fmt.Printf("DEBUG: HTTP request completed in %v with status: %d\n", duration, resp.StatusCode)
+
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+		fmt.Printf("DEBUG: Auth failed with status %d, body: %s\n", resp.StatusCode, string(body))
 		return fmt.Errorf("auth failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
 	var authResp authResponse
 	if err := json.NewDecoder(resp.Body).Decode(&authResp); err != nil {
+		fmt.Printf("DEBUG: Error decoding auth response: %v\n", err)
 		return fmt.Errorf("error decoding auth response: %w", err)
 	}
 
 	c.accessToken = authResp.AccessToken
 	c.tokenExpiry = time.Now().Add(time.Duration(authResp.ExpiresIn-300) * time.Second)
+
+	fmt.Printf("DEBUG: Authentication successful - token expires at: %v\n", c.tokenExpiry)
 
 	return nil
 }
