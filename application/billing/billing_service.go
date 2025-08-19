@@ -551,7 +551,12 @@ func (s *billingService) createInvoiceForApprovedPayment(ctx context.Context, bi
 		return
 	}
 
-	_, err := s.invoiceService.CreateInvoiceForOrders(ctx, billingId, orders, posName)
+	invoiceCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	fmt.Printf("DEBUG: Creating invoice with new context for billing %s\n", billingId)
+
+	_, err := s.invoiceService.CreateInvoiceForOrders(invoiceCtx, billingId, orders, posName)
 	if err != nil {
 		fmt.Printf("Error creating invoice for billing %s: %v\n", billingId, err)
 		return
