@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"time"
 
 	invoiceDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/invoice"
@@ -38,7 +39,12 @@ type authResponse struct {
 	TokenType   string `json:"token_type"`
 }
 
-func NewSiigoClient(baseURL, username, accessKey string) SiigoClient {
+func NewSiigoClient() SiigoClient {
+
+	baseURL := os.Getenv("SIIGO_API_BASE_URL")
+	username := os.Getenv("SIIGO_API_USERNAME")
+	accessKey := os.Getenv("SIIGO_API_ACCESS_KEY")
+
 	return &siigoClient{
 		baseURL:   baseURL,
 		username:  username,
