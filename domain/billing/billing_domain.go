@@ -6,14 +6,16 @@ import (
 )
 
 type Billing struct {
-	Id            string    `json:"id" dynamodbav:"id"`
-	TransactionId string    `json:"transactionId" dynamodbav:"transactionId"`
-	State         string    `json:"state" dynamodbav:"state"`
-	CreatedAt     time.Time `json:"createdAt" dynamodbav:"createdAt"`
-	Provider      string    `json:"provider" dynamodbav:"provider"`
-	PayloadType   string    `json:"payloadType" dynamodbav:"payloadType"`
-	ConfirmedAt   time.Time `json:"confirmedAt" dynamodbav:"confirmedAt"`
-	CustomerId    *string   `json:"customerId" dynamodbav:"customerId"`
+	Id            string         `json:"id" dynamodbav:"id"`
+	TransactionId string         `json:"transactionId" dynamodbav:"transactionId"`
+	State         string         `json:"state" dynamodbav:"state"`
+	CreatedAt     time.Time      `json:"createdAt" dynamodbav:"createdAt"`
+	Provider      string         `json:"provider" dynamodbav:"provider"`
+	PayloadType   string         `json:"payloadType" dynamodbav:"payloadType"`
+	ConfirmedAt   time.Time      `json:"confirmedAt" dynamodbav:"confirmedAt"`
+	CustomerId    *string        `json:"customerId" dynamodbav:"customerId"`
+	Customer      *Customer      `json:"customer" dynamodbav:"customer"`
+	InvoiceConfig *InvoiceConfig `json:"invoiceConfig" dynamodbav:"invoiceConfig"`
 }
 
 type BillingResponse struct {
@@ -76,4 +78,52 @@ func (b *Billing) Update(state string) error {
 	}
 	b.State = state
 	return nil
+}
+
+type Customer struct {
+	ID             string            `json:"id" dynamodbav:"id"`
+	Email          string            `json:"email" dynamodbav:"email"`
+	PersonType     string            `json:"personType" dynamodbav:"personType"`
+	IDType         string            `json:"idType" dynamodbav:"idType"`
+	Identification string            `json:"identification" dynamodbav:"identification"`
+	Name           []string          `json:"name" dynamodbav:"name"`
+	Address        CustomerAddress   `json:"address" dynamodbav:"address"`
+	Phones         []CustomerPhone   `json:"phones" dynamodbav:"phones"`
+	Contacts       []CustomerContact `json:"contacts" dynamodbav:"contacts"`
+	CreatedAt      time.Time         `json:"createdAt" dynamodbav:"createdAt"`
+	UpdatedAt      time.Time         `json:"updatedAt" dynamodbav:"updatedAt"`
+}
+
+type CustomerAddress struct {
+	Address    string       `json:"address" dynamodbav:"address"`
+	City       CustomerCity `json:"city" dynamodbav:"city"`
+	PostalCode string       `json:"postalCode" dynamodbav:"postalCode"`
+}
+
+type CustomerCity struct {
+	CountryCode string `json:"countryCode" dynamodbav:"countryCode"`
+	CountryName string `json:"countryName" dynamodbav:"countryName"`
+	StateCode   string `json:"stateCode" dynamodbav:"stateCode"`
+	StateName   string `json:"stateName" dynamodbav:"stateName"`
+	CityCode    string `json:"cityCode" dynamodbav:"cityCode"`
+	CityName    string `json:"cityName" dynamodbav:"cityName"`
+}
+
+type CustomerPhone struct {
+	Indicative string `json:"indicative" dynamodbav:"indicative"`
+	Number     string `json:"number" dynamodbav:"number"`
+	Extension  string `json:"extension" dynamodbav:"extension"`
+}
+
+type CustomerContact struct {
+	FirstName string        `json:"firstName" dynamodbav:"firstName"`
+	LastName  string        `json:"lastName" dynamodbav:"lastName"`
+	Email     string        `json:"email" dynamodbav:"email"`
+	Phone     CustomerPhone `json:"phone" dynamodbav:"phone"`
+}
+
+type InvoiceConfig struct {
+	DocumentID int `json:"documentId" dynamodbav:"documentId"`
+	SellerID   int `json:"sellerId" dynamodbav:"sellerId"`
+	PaymentID  int `json:"paymentId" dynamodbav:"paymentId"`
 }

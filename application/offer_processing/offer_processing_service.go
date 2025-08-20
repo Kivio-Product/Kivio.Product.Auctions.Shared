@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	billingService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/billing"
 	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
 	emailService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
 	invoiceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/invoice"
@@ -34,6 +35,7 @@ type OfferProcessingService struct {
 	emailSender      emailService.EmailServiceInterface
 	paymentService   paymentService.PaymentService
 	invoiceService   invoiceService.InvoiceService
+	billingService   billingService.BillingService
 }
 
 func NewOfferProcessingService(
@@ -46,6 +48,7 @@ func NewOfferProcessingService(
 	emailSender emailService.EmailServiceInterface,
 	paymentService paymentService.PaymentService,
 	invoiceService invoiceService.InvoiceService,
+	billingService billingService.BillingService,
 ) IOfferProcessingService {
 	return &OfferProcessingService{
 		offerService:     offerService,
@@ -57,6 +60,7 @@ func NewOfferProcessingService(
 		emailSender:      emailSender,
 		paymentService:   paymentService,
 		invoiceService:   invoiceService,
+		billingService:   billingService,
 	}
 }
 
@@ -398,6 +402,23 @@ func (s *OfferProcessingService) createInvoiceForSuccessfulPayment(ctx context.C
 		return
 	}
 
+	billingReference, err := s.billingService.GetBillingReferenceByOrderId(ctx, orders[0].OrderId)
+	if err != nil {
+		fmt.Printf("Error getting billing reference for customer %s: %v\n", customerId, err)
+		return
+	}
+
+	billing, err := s.billingService.GetBillingById(ctx, billingReference)
+	if err != nil {
+		fmt.Printf("Error getting billing details for customer %s: %v\n", customerId, err)
+		return
+	}
+
+	if billing.Customer == nil || billing.InvoiceConfig == nil {
+		fmt.Printf("Missing customer or invoice config for billing %s (customer %s)\n", billingReference, customerId)
+		return
+	}
+
 	posId := orders[0].PointOfSaleId
 	pos, err := s.posService.GetPosById(ctx, posId)
 	if err != nil {
@@ -405,15 +426,13 @@ func (s *OfferProcessingService) createInvoiceForSuccessfulPayment(ctx context.C
 		return
 	}
 
-	billingId := fmt.Sprintf("invoice-%s-%s", customerId, orders[0].OrderId)
-
-	_, err = s.invoiceService.CreateInvoiceForOrders(ctx, billingId, orders, pos.Name)
+	_, err = s.invoiceService.CreateInvoiceForOrders(ctx, billingReference, orders, billing.Customer, billing.InvoiceConfig, pos.Name)
 	if err != nil {
 		fmt.Printf("Error creating invoice for customer %s: %v\n", customerId, err)
 		return
 	}
 
-	fmt.Printf("Invoice created successfully for customer %s with %d orders\n", customerId, len(orders))
+	fmt.Printf("Invoice created successfully for customer %s with %d orders using billing %s\n", customerId, len(orders), billingReference)
 }
 
 func joinStrings(strs []string, sep string) string {

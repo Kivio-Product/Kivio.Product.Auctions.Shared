@@ -30,7 +30,7 @@ import (
 )
 
 type BillingService interface {
-	CreateBilling(ctx context.Context, provider string, orderIds []string) (*domain.Billing, error)
+	CreateBilling(ctx context.Context, provider string, customer *domain.Customer, invoiceConfig *domain.InvoiceConfig, orderIds []string) (*domain.Billing, error)
 	GetAllBillings(ctx context.Context) ([]domain.Billing, error)
 	GetBillingById(ctx context.Context, id string) (*domain.Billing, error)
 	GetAllBillingsWithDetail(ctx context.Context) ([]domain.BillingDetailResponse, error)
@@ -83,8 +83,8 @@ func NewBillingService(
 	}
 }
 
-func (s *billingService) CreateBilling(ctx context.Context, provider string, orderIds []string) (*domain.Billing, error) {
-	billing, err := s.billingFactory.CreateBilling(provider)
+func (s *billingService) CreateBilling(ctx context.Context, provider string, customer *domain.Customer, invoiceConfig *domain.InvoiceConfig, orderIds []string) (*domain.Billing, error) {
+	billing, err := s.billingFactory.CreateBilling(provider, customer, invoiceConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -551,12 +551,23 @@ func (s *billingService) createInvoiceForApprovedPayment(ctx context.Context, bi
 		return
 	}
 
+	billing, err := s.GetBillingById(ctx, billingId)
+	if err != nil {
+		fmt.Printf("Error getting billing details for %s: %v\n", billingId, err)
+		return
+	}
+
+	if billing.Customer == nil || billing.InvoiceConfig == nil {
+		fmt.Printf("Missing customer or invoice config for billing %s\n", billingId)
+		return
+	}
+
 	invoiceCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
 	fmt.Printf("DEBUG: Creating invoice with new context for billing %s\n", billingId)
 
-	_, err := s.invoiceService.CreateInvoiceForOrders(invoiceCtx, billingId, orders, posName)
+	_, err = s.invoiceService.CreateInvoiceForOrders(invoiceCtx, billingId, orders, billing.Customer, billing.InvoiceConfig, posName)
 	if err != nil {
 		fmt.Printf("Error creating invoice for billing %s: %v\n", billingId, err)
 		return

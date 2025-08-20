@@ -4,13 +4,14 @@ import (
 	"context"
 	"fmt"
 
+	billingDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/billing"
 	invoiceDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/invoice"
 	orderDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 	siigoClient "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/api/siigo"
 )
 
 type InvoiceService interface {
-	CreateInvoiceForOrders(ctx context.Context, billingID string, orders []*orderDomain.Order, posName string) (*invoiceDomain.SiigoInvoiceResponse, error)
+	CreateInvoiceForOrders(ctx context.Context, billingID string, orders []*orderDomain.Order, customer *billingDomain.Customer, invoiceConfig *billingDomain.InvoiceConfig, posName string) (*invoiceDomain.SiigoInvoiceResponse, error)
 }
 
 type invoiceService struct {
@@ -25,13 +26,12 @@ func NewInvoiceService(siigoClient siigoClient.SiigoClient, invoiceFactory invoi
 	}
 }
 
-func (s *invoiceService) CreateInvoiceForOrders(ctx context.Context, billingID string, orders []*orderDomain.Order, posName string) (*invoiceDomain.SiigoInvoiceResponse, error) {
+func (s *invoiceService) CreateInvoiceForOrders(ctx context.Context, billingID string, orders []*orderDomain.Order, customer *billingDomain.Customer, invoiceConfig *billingDomain.InvoiceConfig, posName string) (*invoiceDomain.SiigoInvoiceResponse, error) {
 	if len(orders) == 0 {
 		return nil, fmt.Errorf("no orders provided for invoice creation")
 	}
 
 	firstOrder := orders[0]
-	customerEmail := firstOrder.CustomerId
 	posID := firstOrder.PointOfSaleId
 
 	var orderInfos []*invoiceDomain.OrderInfo
@@ -56,15 +56,60 @@ func (s *invoiceService) CreateInvoiceForOrders(ctx context.Context, billingID s
 		totalAmount += float64(order.OfferedAmount)
 	}
 
+	invoiceAddress := invoiceDomain.InvoiceAddress{
+		Address: customer.Address.Address,
+		City: invoiceDomain.InvoiceCity{
+			CountryCode: customer.Address.City.CountryCode,
+			CountryName: customer.Address.City.CountryName,
+			StateCode:   customer.Address.City.StateCode,
+			StateName:   customer.Address.City.StateName,
+			CityCode:    customer.Address.City.CityCode,
+			CityName:    customer.Address.City.CityName,
+		},
+		PostalCode: customer.Address.PostalCode,
+	}
+
+	var invoicePhones []invoiceDomain.InvoicePhone
+	for _, phone := range customer.Phones {
+		invoicePhones = append(invoicePhones, invoiceDomain.InvoicePhone{
+			Indicative: phone.Indicative,
+			Number:     phone.Number,
+			Extension:  phone.Extension,
+		})
+	}
+
+	var invoiceContacts []invoiceDomain.InvoiceContact
+	for _, contact := range customer.Contacts {
+		invoiceContacts = append(invoiceContacts, invoiceDomain.InvoiceContact{
+			FirstName: contact.FirstName,
+			LastName:  contact.LastName,
+			Email:     contact.Email,
+			Phone: invoiceDomain.InvoicePhone{
+				Indicative: contact.Phone.Indicative,
+				Number:     contact.Phone.Number,
+				Extension:  contact.Phone.Extension,
+			},
+		})
+	}
+
 	invoiceRequest := &invoiceDomain.InvoiceRequest{
-		CustomerEmail:   customerEmail,
-		CustomerID:      customerEmail,
-		Orders:          orderInfos,
-		PointOfSaleID:   posID,
-		PointOfSaleName: posName,
-		TotalAmount:     totalAmount,
-		Currency:        "COP",
-		BillingID:       billingID,
+		DocumentID:         invoiceConfig.DocumentID,
+		CustomerEmail:      customer.Email,
+		CustomerID:         customer.Identification,
+		CustomerPersonType: customer.PersonType,
+		CustomerIDType:     customer.IDType,
+		CustomerName:       customer.Name,
+		CustomerAddress:    invoiceAddress,
+		CustomerPhones:     invoicePhones,
+		CustomerContacts:   invoiceContacts,
+		SellerID:           invoiceConfig.SellerID,
+		Orders:             orderInfos,
+		PaymentID:          invoiceConfig.PaymentID,
+		PointOfSaleID:      posID,
+		PointOfSaleName:    posName,
+		TotalAmount:        totalAmount,
+		Currency:           "COP",
+		BillingID:          billingID,
 	}
 
 	siigoInvoice, err := s.invoiceFactory.CreateSiigoInvoice(invoiceRequest)
