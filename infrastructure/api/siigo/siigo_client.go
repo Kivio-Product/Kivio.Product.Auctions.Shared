@@ -114,7 +114,7 @@ func (c *siigoClient) Authenticate(ctx context.Context) error {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Partner-Id", "kivio-auctions")
+	req.Header.Set("Partner-Id", "kivio")
 
 	fmt.Println("DEBUG: About to make HTTP request...")
 	start := time.Now()
@@ -166,7 +166,7 @@ func (c *siigoClient) CreateInvoice(ctx context.Context, invoice *invoiceDomain.
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.accessToken)
-	req.Header.Set("Partner-Id", "kivio-auctions")
+	req.Header.Set("Partner-Id", "kivio")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -202,7 +202,7 @@ func (c *siigoClient) GetInvoice(ctx context.Context, invoiceID string) (*invoic
 	}
 
 	req.Header.Set("Authorization", "Bearer "+c.accessToken)
-	req.Header.Set("Partner-Id", "kivio-auctions")
+	req.Header.Set("Partner-Id", "kivio")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

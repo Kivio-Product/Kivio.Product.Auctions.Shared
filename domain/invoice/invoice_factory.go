@@ -40,8 +40,7 @@ func (f *invoiceFactory) CreateSiigoInvoice(request *InvoiceRequest) (*SiigoInvo
 			Discount:    0,
 			Taxes: []SiigoTax{
 				{
-					ID:    1,
-					Value: 19,
+					ID: 1,
 				},
 			},
 		}
@@ -49,28 +48,72 @@ func (f *invoiceFactory) CreateSiigoInvoice(request *InvoiceRequest) (*SiigoInvo
 		total += order.TotalPrice
 	}
 
-	invoice := &SiigoInvoice{
-		DocumentID: "1",
-		Name:       fmt.Sprintf("Factura Kivio - %s", request.BillingID),
-		Date:       time.Now().Format("2006-01-02"),
-		Customer: SiigoCustomer{
-			Identification: request.CustomerEmail,
-			BranchOffice:   0,
+	siigoAddress := SiigoAddress{
+		Address: request.CustomerAddress.Address,
+		City: SiigoCity{
+			CountryCode: request.CustomerAddress.City.CountryCode,
+			CountryName: request.CustomerAddress.City.CountryName,
+			StateCode:   request.CustomerAddress.City.StateCode,
+			StateName:   request.CustomerAddress.City.StateName,
+			CityCode:    request.CustomerAddress.City.CityCode,
+			CityName:    request.CustomerAddress.City.CityName,
 		},
+		PostalCode: request.CustomerAddress.PostalCode,
+	}
+
+	var siigoPhones []SiigoPhone
+	for _, phone := range request.CustomerPhones {
+		siigoPhones = append(siigoPhones, SiigoPhone{
+			Indicative: phone.Indicative,
+			Number:     phone.Number,
+			Extension:  phone.Extension,
+		})
+	}
+
+	var siigoContacts []SiigoContact
+	for _, contact := range request.CustomerContacts {
+		siigoContacts = append(siigoContacts, SiigoContact{
+			FirstName: contact.FirstName,
+			LastName:  contact.LastName,
+			Email:     contact.Email,
+			Phone: SiigoPhone{
+				Indicative: contact.Phone.Indicative,
+				Number:     contact.Phone.Number,
+				Extension:  contact.Phone.Extension,
+			},
+		})
+	}
+
+	invoice := &SiigoInvoice{
+		Document: SiigoDocument{
+			ID: request.DocumentID,
+		},
+		Date: time.Now().Format("2006-01-02"),
+		Customer: SiigoCustomer{
+			PersonType:     request.CustomerPersonType,
+			IDType:         request.CustomerIDType,
+			Identification: request.CustomerID,
+			BranchOffice:   0,
+			Name:           request.CustomerName,
+			Address:        siigoAddress,
+			Phones:         siigoPhones,
+			Contacts:       siigoContacts,
+		},
+		Seller: request.SellerID,
 		Currency: SiigoCurrency{
 			Code: "COP",
 		},
 		Items: items,
 		Payments: []SiigoPayment{
 			{
-				ID:      1,
+				ID:      request.PaymentID,
 				Value:   total,
 				DueDate: time.Now().Format("2006-01-02"),
 			},
 		},
 		Observations: fmt.Sprintf("Factura generada para punto de venta: %s - ID de facturación: %s",
 			request.PointOfSaleName, request.BillingID),
-		Metadata: map[string]string{
+		AdditionalFields: map[string]interface{}{
 			"billing_id":     request.BillingID,
 			"pos_id":         request.PointOfSaleID,
 			"customer_email": request.CustomerEmail,
