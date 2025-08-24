@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -30,7 +31,7 @@ import (
 )
 
 type BillingService interface {
-	CreateBilling(ctx context.Context, provider string, customer *domain.Customer, invoiceConfig *domain.InvoiceConfig, orderIds []string) (*domain.Billing, error)
+	CreateBilling(ctx context.Context, provider string, customer *domain.Customer, orderIds []string) (*domain.Billing, error)
 	GetAllBillings(ctx context.Context) ([]domain.Billing, error)
 	GetBillingById(ctx context.Context, id string) (*domain.Billing, error)
 	GetAllBillingsWithDetail(ctx context.Context) ([]domain.BillingDetailResponse, error)
@@ -83,7 +84,9 @@ func NewBillingService(
 	}
 }
 
-func (s *billingService) CreateBilling(ctx context.Context, provider string, customer *domain.Customer, invoiceConfig *domain.InvoiceConfig, orderIds []string) (*domain.Billing, error) {
+func (s *billingService) CreateBilling(ctx context.Context, provider string, customer *domain.Customer, orderIds []string) (*domain.Billing, error) {
+
+	invoiceConfig := getInvoiceConfigFromEnv()
 	billing, err := s.billingFactory.CreateBilling(provider, customer, invoiceConfig)
 	if err != nil {
 		return nil, err
@@ -750,4 +753,20 @@ func validatePayUSignature(secretKey, merchantId, referenceSale string, valueStr
 	fmt.Printf("¿Las firmas coinciden? %t\n", strings.EqualFold(expected, incomingSignature))
 
 	return strings.EqualFold(expected, incomingSignature)
+}
+
+func getInvoiceConfigFromEnv() *domain.InvoiceConfig {
+	documentIDStr := os.Getenv("INVOICE_DOCUMENT_ID")
+	sellerIDStr := os.Getenv("INVOICE_SELLER_ID")
+	paymentIDStr := os.Getenv("INVOICE_PAYMENT_ID")
+
+	documentID, _ := strconv.Atoi(documentIDStr)
+	sellerID, _ := strconv.Atoi(sellerIDStr)
+	paymentID, _ := strconv.Atoi(paymentIDStr)
+
+	return &domain.InvoiceConfig{
+		DocumentID: documentID,
+		SellerID:   sellerID,
+		PaymentID:  paymentID,
+	}
 }
