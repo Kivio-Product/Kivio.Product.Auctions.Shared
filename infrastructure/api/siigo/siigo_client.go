@@ -150,17 +150,38 @@ func (c *siigoClient) Authenticate(ctx context.Context) error {
 }
 
 func (c *siigoClient) CreateInvoice(ctx context.Context, invoice *invoiceDomain.SiigoInvoice) (*invoiceDomain.SiigoInvoiceResponse, error) {
+
 	if err := c.Authenticate(ctx); err != nil {
+		fmt.Printf("DEBUG: CreateInvoice authentication failed: %v\n", err)
 		return nil, fmt.Errorf("authentication failed: %w", err)
 	}
 
+	fmt.Println("DEBUG: Marshaling invoice data...")
 	jsonData, err := json.Marshal(invoice)
 	if err != nil {
+		fmt.Printf("DEBUG: Error marshaling invoice: %v\n", err)
 		return nil, fmt.Errorf("error marshaling invoice: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/v1/invoices", bytes.NewBuffer(jsonData))
+	invoiceURL := c.baseURL + "/v1/invoices"
+	fmt.Printf("DEBUG: Making invoice request to: %s\n", invoiceURL)
+
+	select {
+	case <-ctx.Done():
+		fmt.Printf("DEBUG: Context already cancelled before invoice request: %v\n", ctx.Err())
+		return nil, fmt.Errorf("context cancelled before invoice request: %w", ctx.Err())
+	default:
+	}
+
+	if deadline, ok := ctx.Deadline(); ok {
+		fmt.Printf("DEBUG: Context deadline: %v (time remaining: %v)\n", deadline, time.Until(deadline))
+	} else {
+		fmt.Println("DEBUG: Context has no deadline")
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", invoiceURL, bytes.NewBuffer(jsonData))
 	if err != nil {
+		fmt.Printf("DEBUG: Error creating invoice request: %v\n", err)
 		return nil, fmt.Errorf("error creating invoice request: %w", err)
 	}
 
@@ -168,25 +189,38 @@ func (c *siigoClient) CreateInvoice(ctx context.Context, invoice *invoiceDomain.
 	req.Header.Set("Authorization", "Bearer "+c.accessToken)
 	req.Header.Set("Partner-Id", "kivio")
 
+	fmt.Println("DEBUG: About to make invoice HTTP request...")
+	start := time.Now()
 	resp, err := c.httpClient.Do(req)
+	duration := time.Since(start)
+
 	if err != nil {
+		fmt.Printf("DEBUG: Invoice HTTP request failed after %v: %v\n", duration, err)
 		return nil, fmt.Errorf("error making invoice request: %w", err)
 	}
 	defer resp.Body.Close()
 
+	fmt.Printf("DEBUG: Invoice HTTP request completed in %v with status: %d\n", duration, resp.StatusCode)
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		fmt.Printf("DEBUG: Error reading invoice response: %v\n", err)
 		return nil, fmt.Errorf("error reading response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		fmt.Printf("DEBUG: Invoice creation failed with status %d, body: %s\n", resp.StatusCode, string(body))
 		return nil, fmt.Errorf("invoice creation failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
+	fmt.Println("DEBUG: Decoding invoice response...")
 	var invoiceResp invoiceDomain.SiigoInvoiceResponse
 	if err := json.Unmarshal(body, &invoiceResp); err != nil {
+		fmt.Printf("DEBUG: Error decoding invoice response: %v\n", err)
 		return nil, fmt.Errorf("error decoding invoice response: %w", err)
 	}
+
+	fmt.Printf("DEBUG: Invoice creation successful - ID: %s\n", invoiceResp.ID)
 
 	return &invoiceResp, nil
 }
