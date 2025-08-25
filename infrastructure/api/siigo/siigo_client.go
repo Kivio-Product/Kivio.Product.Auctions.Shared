@@ -190,6 +190,7 @@ func (c *siigoClient) CreateInvoice(ctx context.Context, invoice *invoiceDomain.
 	req.Header.Set("Partner-Id", "kivio")
 
 	fmt.Println("DEBUG: About to make invoice HTTP request...")
+	fmt.Printf("DEBUG: Invoice request payload: %s\n", string(jsonData))
 	start := time.Now()
 	resp, err := c.httpClient.Do(req)
 	duration := time.Since(start)
