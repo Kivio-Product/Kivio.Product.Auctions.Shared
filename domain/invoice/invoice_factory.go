@@ -55,7 +55,7 @@ func (f *invoiceFactory) CreateSiigoInvoice(request *InvoiceRequest) (*SiigoInvo
 			CountryName: request.CustomerAddress.City.CountryName,
 			StateCode:   request.CustomerAddress.City.StateCode,
 			StateName:   request.CustomerAddress.City.StateName,
-			CityCode:    request.CustomerAddress.City.CityCode,
+			CityCode:    request.CustomerAddress.City.StateCode + request.CustomerAddress.City.CityCode,
 			CityName:    request.CustomerAddress.City.CityName,
 		},
 		PostalCode: request.CustomerAddress.PostalCode,
