@@ -27,6 +27,12 @@ func (f *DefaultBillingFactory) CreateBilling(provider string, customer *Custome
 	if invoiceConfig == nil {
 		return nil, fmt.Errorf("invoiceConfig no puede estar vacío")
 	}
+	if customer.PersonType != "Person" {
+		return nil, fmt.Errorf("PersonType debe ser 'Person'")
+	}
+	if customer.IDType != "13" {
+		return nil, fmt.Errorf("IDType debe ser '13' (cédula)")
+	}
 
 	return &Billing{
 		Id:            generateUUID(),

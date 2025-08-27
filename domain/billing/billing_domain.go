@@ -126,4 +126,5 @@ type InvoiceConfig struct {
 	DocumentID int `json:"documentId" dynamodbav:"documentId"`
 	SellerID   int `json:"sellerId" dynamodbav:"sellerId"`
 	PaymentID  int `json:"paymentId" dynamodbav:"paymentId"`
+	TaxID      int `json:"taxId" dynamodbav:"taxId"`
 }

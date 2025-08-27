@@ -33,14 +33,14 @@ func (f *invoiceFactory) CreateSiigoInvoice(request *InvoiceRequest) (*SiigoInvo
 
 	for _, order := range request.Orders {
 		item := SiigoInvoiceItem{
-			Code:        order.OrderID,
+			Code:        "1",
 			Description: order.ItemDescription,
 			Quantity:    order.Quantity,
 			Price:       order.UnitPrice,
 			Discount:    0,
 			Taxes: []SiigoTax{
 				{
-					ID: 1,
+					ID: request.TaxID,
 				},
 			},
 		}

@@ -105,6 +105,7 @@ func (s *invoiceService) CreateInvoiceForOrders(ctx context.Context, billingID s
 		SellerID:           invoiceConfig.SellerID,
 		Orders:             orderInfos,
 		PaymentID:          invoiceConfig.PaymentID,
+		TaxID:              invoiceConfig.TaxID,
 		PointOfSaleID:      posID,
 		PointOfSaleName:    posName,
 		TotalAmount:        totalAmount,

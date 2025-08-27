@@ -35,13 +35,12 @@ type SiigoCurrency struct {
 }
 
 type SiigoInvoiceItem struct {
-	Code        string         `json:"code"`
-	Description string         `json:"description"`
-	Quantity    int            `json:"quantity"`
-	Price       float64        `json:"price"`
-	Discount    float64        `json:"discount,omitempty"`
-	Taxes       []SiigoTax     `json:"taxes,omitempty"`
-	Transport   SiigoTransport `json:"transport,omitempty"`
+	Code        string     `json:"code"`
+	Description string     `json:"description"`
+	Quantity    int        `json:"quantity"`
+	Price       float64    `json:"price"`
+	Discount    float64    `json:"discount,omitempty"`
+	Taxes       []SiigoTax `json:"taxes,omitempty"`
 }
 
 type SiigoTax struct {
@@ -88,6 +87,7 @@ type InvoiceRequest struct {
 	SellerID           int
 	Orders             []*OrderInfo
 	PaymentID          int
+	TaxID              int
 	PointOfSaleID      string
 	PointOfSaleName    string
 	TotalAmount        float64
