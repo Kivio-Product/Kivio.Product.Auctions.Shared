@@ -8,7 +8,7 @@ import (
 )
 
 type BillingFactory interface {
-	CreateBilling(provider string, customer *Customer, invoiceConfig *InvoiceConfig) (*Billing, error)
+	CreateBilling(provider, posId string, customer *Customer, invoiceConfig *InvoiceConfig) (*Billing, error)
 }
 
 type DefaultBillingFactory struct{}
@@ -17,7 +17,7 @@ func NewBillingFactory() BillingFactory {
 	return &DefaultBillingFactory{}
 }
 
-func (f *DefaultBillingFactory) CreateBilling(provider string, customer *Customer, invoiceConfig *InvoiceConfig) (*Billing, error) {
+func (f *DefaultBillingFactory) CreateBilling(provider, posId string, customer *Customer, invoiceConfig *InvoiceConfig) (*Billing, error) {
 	if provider == "" {
 		return nil, fmt.Errorf("provider no puede estar vacío")
 	}
@@ -34,6 +34,10 @@ func (f *DefaultBillingFactory) CreateBilling(provider string, customer *Custome
 		return nil, fmt.Errorf("IDType debe ser '13' (cédula)")
 	}
 
+	if posId == "" {
+		return nil, fmt.Errorf("posId no puede estar vacío")
+	}
+
 	return &Billing{
 		Id:            generateUUID(),
 		State:         "Pending",
@@ -41,6 +45,7 @@ func (f *DefaultBillingFactory) CreateBilling(provider string, customer *Custome
 		CreatedAt:     time.Now(),
 		TransactionId: "",
 		PayloadType:   "",
+		PointOfSaleId: posId,
 		ConfirmedAt:   time.Time{},
 		Customer:      customer,
 		InvoiceConfig: invoiceConfig,

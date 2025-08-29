@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"sync"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 	itemInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item"
@@ -33,7 +32,8 @@ type OrderService interface {
 	GetOrderByOfferId(ctx context.Context, id string) ([]domain.Order, error)
 	DeleteOrderById(ctx context.Context, id string) error
 	GetAllOrdersWithDetails(ctx context.Context) ([]domain.OrderDetail, error)
-	GetPaginatedOrdersWithDetails(ctx context.Context, params domain.PaginationParams) (*domain.PaginatedOrdersResponse, error)
+	GetOrdersBillingByID(ctx context.Context, id string) ([]domain.Order, error)
+	GetPaginatedOrdersWithDetails(ctx context.Context, params domain.PaginationParams, filters map[string]string) (*domain.PaginatedOrdersResponse, error)
 	UpdateOrderState(ctx context.Context, orderId string, state string) error
 	NotifyAndCloseApprovedOrdersByPointOfSaleId(ctx context.Context, pointOfSaleId string, adminEmail string) error
 }
@@ -61,6 +61,7 @@ func (s *orderService) CreateOrder(ctx context.Context, input domain.OrderInput)
 		input.ItemSpecificationId,
 		input.OfferId,
 		input.PointOfSaleId,
+		input.BillingId,
 		input.ExtraData,
 		input.OfferedAmount,
 		1, // Default quantity to 1 for single item orders
@@ -122,6 +123,7 @@ func (s *orderService) CreateMultipleItemsOrder(ctx context.Context, input domai
 		input.ItemSpecificationId,
 		input.OfferId,
 		input.PointOfSaleId,
+		input.BillingId,
 		input.ExtraData,
 		input.OfferedAmount,
 		0,
@@ -272,7 +274,7 @@ func (s *orderService) DeleteOrderById(ctx context.Context, id string) error {
 	return err
 }
 
-func (s *orderService) GetPaginatedOrdersWithDetails(ctx context.Context, params domain.PaginationParams) (*domain.PaginatedOrdersResponse, error) {
+func (s *orderService) GetPaginatedOrdersWithDetails(ctx context.Context, params domain.PaginationParams, filters map[string]string) (*domain.PaginatedOrdersResponse, error) {
 	if params.PageSize < 1 {
 		params.PageSize = 10
 	}
@@ -283,28 +285,12 @@ func (s *orderService) GetPaginatedOrdersWithDetails(ctx context.Context, params
 	if params.PointOfSaleId == "" {
 		return nil, fmt.Errorf("pointOfSaleId is required")
 	}
-
-	var (
-		wg         sync.WaitGroup
-		totalCount int64
-		countErr   error
-	)
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		totalCount, countErr = s.repo.CountOrders(ctx, params.PointOfSaleId)
-	}()
-
-	ordersResult, err := s.repo.GetOrdersPaginated(ctx, params)
+	
+	ordersResult, err := s.repo.GetOrdersPaginated(ctx, params, filters)
 	if err != nil {
 		return nil, fmt.Errorf("error al obtener órdenes paginadas: %w", err)
 	}
 
-	wg.Wait()
-	if countErr != nil {
-		fmt.Printf("Error al obtener el conteo total de órdenes: %v\n", countErr)
-	}
 
 	var orderDetails []domain.OrderDetail
 	for _, order := range ordersResult.Orders {
@@ -322,8 +308,16 @@ func (s *orderService) GetPaginatedOrdersWithDetails(ctx context.Context, params
 	return &domain.PaginatedOrdersResponse{
 		Orders:     orderDetails,
 		NextToken:  ordersResult.NextToken,
-		TotalCount: totalCount,
+		TotalCount: ordersResult.TotalCount,
 	}, nil
+}
+
+func (s *orderService) GetOrdersBillingByID(ctx context.Context, id string) ([]domain.Order, error) {
+	order, err := s.repo.GetOrdersBillingByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return order, nil
 }
 
 func (s *orderService) NotifyAndCloseApprovedOrdersByPointOfSaleId(ctx context.Context, pointOfSaleId string, adminEmail string) error {

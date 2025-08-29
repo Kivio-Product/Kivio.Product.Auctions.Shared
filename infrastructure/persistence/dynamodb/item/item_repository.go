@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
 	"github.com/aws/aws-sdk-go/aws"
@@ -18,7 +19,7 @@ type ItemRepository interface {
 	GetAllItems() ([]domain.Item, error)
 	GetItemById(ctx context.Context, itemId string) (*domain.Item, error)
 	DeleteItem(ctx context.Context, itemId string) error
-	GetItemsByPosId(id string) ([]domain.Item, error)
+	GetItemsByPosId(id string, filters map[string]string) ([]domain.Item, error)
 	GetItemsByUserID(userID string) ([]domain.Item, error)
 	BatchGetItemsByIds(ctx context.Context, itemIds []string) ([]domain.Item, error)
 	GetItemsByPosIdPaged(ctx context.Context, posID string, limit int, lastEvaluatedKey map[string]*dynamodb.AttributeValue) ([]domain.Item, map[string]*dynamodb.AttributeValue, error)
@@ -124,14 +125,33 @@ func (r *itemRepository) GetItemById(ctx context.Context, itemId string) (*domai
 	return &item, nil
 }
 
-func (r *itemRepository) GetItemsByPosId(posId string) ([]domain.Item, error) {
+func (r *itemRepository) GetItemsByPosId(posId string, filters map[string]string) ([]domain.Item, error) {
+	exprAttrNames := map[string]*string{}
+	exprAttrValues := map[string]*dynamodb.AttributeValue{}
+	var filterExpr []string
+
+	exprAttrValues[":posId"] = &dynamodb.AttributeValue{S: aws.String(posId)}
+
+	if name, ok := filters["name"]; ok && name != "" {
+		exprAttrNames["#name"] = aws.String("Name")
+		exprAttrValues[":nameValue"] = &dynamodb.AttributeValue{S: aws.String(name)}
+		filterExpr = append(filterExpr, "contains(#name, :nameValue)")
+	}
+
 	input := &dynamodb.QueryInput{
 		TableName:              aws.String(r.itemTable),
 		IndexName:              aws.String("PointOfSaleId-index"),
 		KeyConditionExpression: aws.String("PointOfSaleId = :posId"),
-		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-			":posId": {S: aws.String(posId)},
-		},
+	}
+
+	if len(exprAttrNames) > 0 {
+		input.ExpressionAttributeNames = exprAttrNames
+	}
+	if len(exprAttrValues) > 0 {
+		input.ExpressionAttributeValues = exprAttrValues
+	}
+	if len(filterExpr) > 0 {
+		input.FilterExpression = aws.String(strings.Join(filterExpr, " AND "))
 	}
 
 	result, err := r.client.Query(input)

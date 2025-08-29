@@ -31,14 +31,12 @@ import (
 )
 
 type BillingService interface {
-	CreateBilling(ctx context.Context, provider string, customer *domain.Customer, orderIds []string) (*domain.Billing, error)
+	CreateBilling(ctx context.Context, provider, posId, customerId string, customer *domain.Customer) (*domain.Billing, error)
 	GetAllBillings(ctx context.Context) ([]domain.Billing, error)
 	GetBillingById(ctx context.Context, id string) (*domain.Billing, error)
-	GetAllBillingsWithDetail(ctx context.Context) ([]domain.BillingDetailResponse, error)
 	ConfirmPayUResponse(ctx context.Context, res *paymentDomain.ConfirmationResponse, secretKey string) error
 	ConfirmWompiResponse(ctx context.Context, body []byte) error
-	GetPaginatedBillingsWithDetails(ctx context.Context, params orderDomain.PaginationParams) (*domain.PaginatedBillingDetailsResponse, error)
-	GetOrdersBillingByID(ctx context.Context, id string) ([]domain.BillingByOrder, error)
+	GetPaginatedBillingsWithDetails(ctx context.Context, params orderDomain.PaginationParams, filters map[string]string) (*domain.PaginatedBillingDetailsResponse, error)
 	GetBillingReferenceByOrderId(ctx context.Context, orderId string) (string, error)
 }
 
@@ -84,40 +82,26 @@ func NewBillingService(
 	}
 }
 
-func (s *billingService) CreateBilling(ctx context.Context, provider string, customer *domain.Customer, orderIds []string) (*domain.Billing, error) {
-
+func (s *billingService) CreateBilling(ctx context.Context, provider, posId, customerId string, customer *domain.Customer) (*domain.Billing, error) {
 	invoiceConfig := getInvoiceConfigFromEnv()
-	billing, err := s.billingFactory.CreateBilling(provider, customer, invoiceConfig)
+	billing, err := s.billingFactory.CreateBilling(provider, posId, customer, invoiceConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	order, err := s.orderRepo.GetIdOrder(ctx, orderIds[0])
 	if err != nil {
 		return nil, err
 	}
 
-	if order != nil {
-		customerId := order.CustomerId
-		billing.CustomerId = &customerId
-	} else {
-		return nil, fmt.Errorf("no se encontró la orden con ID: %s", orderIds[0])
-	}
+	billing.CustomerId = &customerId
 
-	err = s.repo.SaveBillingWithOrders(ctx, billing, orderIds)
+	err = s.repo.SaveBilling(ctx, billing)
+
 	if err != nil {
 		return nil, err
 	}
 
 	return billing, nil
-}
-
-func (s *billingService) GetOrdersBillingByID(ctx context.Context, id string) ([]domain.BillingByOrder, error) {
-	order, err := s.repo.GetOrdersBillingByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	return order, nil
 }
 
 func (s *billingService) GetAllBillings(ctx context.Context) ([]domain.Billing, error) {
@@ -128,84 +112,7 @@ func (s *billingService) GetAllBillings(ctx context.Context) ([]domain.Billing, 
 	return billings, nil
 }
 
-func (s *billingService) GetAllBillingsWithDetail(ctx context.Context) ([]domain.BillingDetailResponse, error) {
-	billingOrders, err := s.repo.GetAllOrderBillings(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	billingsMap := make(map[string]*domain.BillingDetailResponse)
-
-	for _, billingOrder := range billingOrders {
-		order, err := s.orderRepo.GetIdOrder(ctx, billingOrder.OrderId)
-		if err != nil {
-			return nil, err
-		}
-
-		billing, err := s.repo.GetBillingByID(ctx, billingOrder.BillingId)
-		if err != nil {
-			return nil, err
-		}
-
-		itemSpec, err := s.itemSpecRepo.GetById(ctx, order.ItemSpecificationId)
-		if err != nil {
-			return nil, err
-		}
-
-		var item *itemDomain.Item
-		if itemSpec.IsExternal {
-			credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, itemSpec.PointOfSaleId)
-			if err != nil {
-				return nil, fmt.Errorf("error getting ecommerce credentials: %w", err)
-			}
-
-			itemId := strings.TrimPrefix(itemSpec.ItemId, "kivio-ecommerce∼")
-
-			item, err = s.ecommerceSvc.GetItemByID(ctx, credentials.ApiURL, credentials.ApiKey, itemId)
-			if err != nil {
-				return nil, fmt.Errorf("error getting item from ecommerce: %w", err)
-			}
-		} else {
-			item, err = s.itemRepo.GetItemById(ctx, itemSpec.ItemId)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		billOrder := domain.BillOrder{
-			OfferId:         order.OfferId,
-			ItemName:        item.Name,
-			ItemDescription: item.Description,
-			OrderAmount:     order.OfferedAmount,
-			ItemPrice:       itemSpec.Amount,
-		}
-
-		if _, exists := billingsMap[billing.Id]; !exists {
-			billingsMap[billing.Id] = &domain.BillingDetailResponse{
-				BillId:        billing.Id,
-				TransactionId: billing.TransactionId,
-				State:         billing.State,
-				Provider:      billing.Provider,
-				PayloadType:   billing.PayloadType,
-				CreatedAt:     billing.CreatedAt,
-				ConfirmedAt:   billing.ConfirmedAt,
-				UserEmail:     order.CustomerId,
-				Orders:        []domain.BillOrder{},
-			}
-		}
-
-		billingsMap[billing.Id].Orders = append(billingsMap[billing.Id].Orders, billOrder)
-	}
-
-	billingDetails := make([]domain.BillingDetailResponse, 0, len(billingsMap))
-	for _, detail := range billingsMap {
-		billingDetails = append(billingDetails, *detail)
-	}
-
-	return billingDetails, nil
-}
-
-func (s *billingService) GetPaginatedBillingsWithDetails(ctx context.Context, params orderDomain.PaginationParams) (*domain.PaginatedBillingDetailsResponse, error) {
+func (s *billingService) GetPaginatedBillingsWithDetails(ctx context.Context, params orderDomain.PaginationParams, filters map[string]string) (*domain.PaginatedBillingDetailsResponse, error) {
 	if params.PageSize < 1 {
 		params.PageSize = 10
 	}
@@ -213,29 +120,19 @@ func (s *billingService) GetPaginatedBillingsWithDetails(ctx context.Context, pa
 		params.PageSize = 100
 	}
 
-	result, err := s.repo.GetOrderBillingPaginated(ctx, params)
+	result, err := s.repo.GetOrderBillingPaginated(ctx, params, filters)
 	if err != nil {
 		return nil, fmt.Errorf("error al obtener ordenes facturadas paginadas: %w", err)
 	}
 
 	billingsMap := make(map[string]*domain.BillingDetailResponse)
 
-	for _, billingOrder := range result.Billings {
-		order, err := s.orderRepo.GetIdOrder(ctx, billingOrder.OrderId)
-		if err != nil {
-			return nil, err
-		}
+	for _, billing := range result.Billings {
 
-		billing, err := s.repo.GetBillingByID(ctx, billingOrder.BillingId)
-		if err != nil {
-			return nil, err
-		}
-
-		billOrder := domain.BillOrder{
-			OfferId:     order.OfferId,
-			ItemName:    order.ExtraData,
-			OrderAmount: order.OfferedAmount,
-		}
+		orders, _ := s.orderRepo.GetOrdersBillingByID(ctx, billing.Id)
+		// if err != nil {
+		// 	return nil, err
+		// }
 
 		if _, exists := billingsMap[billing.Id]; !exists {
 			billingsMap[billing.Id] = &domain.BillingDetailResponse{
@@ -246,12 +143,20 @@ func (s *billingService) GetPaginatedBillingsWithDetails(ctx context.Context, pa
 				PayloadType:   billing.PayloadType,
 				CreatedAt:     billing.CreatedAt,
 				ConfirmedAt:   billing.ConfirmedAt,
-				UserEmail:     order.CustomerId,
+				UserEmail:     *billing.CustomerId,
 				Orders:        []domain.BillOrder{},
 			}
 		}
 
-		billingsMap[billing.Id].Orders = append(billingsMap[billing.Id].Orders, billOrder)
+		for _, order := range orders {
+			billOrder := domain.BillOrder{
+				OfferId:     order.OfferId,
+				ItemName:    order.ExtraData,
+				OrderAmount: order.OfferedAmount,
+			}
+	
+			billingsMap[billing.Id].Orders = append(billingsMap[billing.Id].Orders, billOrder)
+		}
 	}
 
 	billingDetails := make([]domain.BillingDetailResponse, 0, len(billingsMap))
@@ -274,24 +179,14 @@ func (s *billingService) GetBillingById(ctx context.Context, id string) (*domain
 	return billing, nil
 }
 
-func (s *billingService) GetOrdersByBillingId(ctx context.Context, id string) ([]domain.BillingByOrder, error) {
-	billing, err := s.repo.GetOrdersBillingByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	return billing, nil
-}
-
 func (s *billingService) GetBillingReferenceByOrderId(ctx context.Context, orderId string) (string, error) {
-	billingsByOrder, err := s.repo.GetAllOrderBillings(ctx)
+	order, err := s.orderRepo.GetIdOrder(ctx, orderId)
 	if err != nil {
-		return "", fmt.Errorf("error obteniendo BillingByOrder: %w", err)
+		return "", fmt.Errorf("error obteniendo Order: %w", err)
 	}
 
-	for _, billingOrder := range billingsByOrder {
-		if billingOrder.OrderId == orderId {
-			return billingOrder.BillingId, nil
-		}
+	if order.BillingId != ""{
+		return order.BillingId, nil
 	}
 
 	return "", fmt.Errorf("no se encontró billing para el orderId: %s", orderId)
@@ -350,7 +245,7 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 		return fmt.Errorf("error al actualizar la facturación: %v", err)
 	}
 
-	orders, err := s.repo.GetOrdersBillingByID(ctx, billingId)
+	orders, err := s.orderRepo.GetOrdersBillingByID(ctx, billingId)
 	if err != nil {
 		fmt.Printf("no se encontraron ordenes de facturas con ID: %s\n", billingId)
 		return fmt.Errorf("no se encontraron ordenes de facturas con ID: %s", billingId)
@@ -646,7 +541,7 @@ func (s *billingService) ConfirmWompiResponse(ctx context.Context, body []byte) 
 		return fmt.Errorf("error al actualizar la facturación: %v", err)
 	}
 
-	orders, err := s.repo.GetOrdersBillingByID(ctx, billingId)
+	orders, err := s.orderRepo.GetOrdersBillingByID(ctx, billingId)
 	if err != nil {
 		fmt.Printf("no se encontraron ordenes de facturas con ID: %s\n", billingId)
 		return fmt.Errorf("no se encontraron ordenes de facturas con ID: %s", billingId)

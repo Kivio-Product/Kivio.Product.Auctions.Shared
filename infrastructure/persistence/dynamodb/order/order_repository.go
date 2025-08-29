@@ -2,17 +2,17 @@ package infrastructure
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"strings"
+	"time"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
-	"github.com/aws/aws-sdk-go/service/dynamodb/expression"
 )
 
 type OrderRepository interface {
@@ -24,7 +24,8 @@ type OrderRepository interface {
 	GetIdOrder(ctx context.Context, eofferId string) (*domain.Order, error)
 	DeleteOrder(ctx context.Context, orderId string) error
 	UpdateOrder(ctx context.Context, order *domain.Order) error
-	GetOrdersPaginated(ctx context.Context, params domain.PaginationParams) (*domain.OrderRepositoryResult, error)
+	GetOrdersBillingByID(ctx context.Context, billingID string) ([]domain.Order, error)
+	GetOrdersPaginated(ctx context.Context, params domain.PaginationParams, filters map[string]string) (*domain.OrderRepositoryResult, error)
 	CountOrders(ctx context.Context, pointOfSaleId string) (int64, error)
 	GetOrdersByPointOfSaleId(ctx context.Context, pointOfSaleId string) ([]domain.Order, error)
 }
@@ -205,90 +206,113 @@ func (r *orderRepository) UpdateOrder(ctx context.Context, order *domain.Order) 
 	return nil
 }
 
-func (r *orderRepository) GetOrdersPaginated(ctx context.Context, params domain.PaginationParams) (*domain.OrderRepositoryResult, error) {
-	var orders []domain.Order
-	var lastEvaluatedKey map[string]*dynamodb.AttributeValue
+func (r *orderRepository) GetOrdersPaginated(
+	ctx context.Context, params domain.PaginationParams, filters map[string]string) (*domain.OrderRepositoryResult, error) {
+	exprAttrNames := map[string]*string{}
+	exprAttrValues := map[string]*dynamodb.AttributeValue{}
+	var filterExpr []string
 
-	if params.NextToken != "" {
-		if err := json.Unmarshal([]byte(params.NextToken), &lastEvaluatedKey); err != nil {
-			return nil, fmt.Errorf("invalid pagination token: %w", err)
-		}
+	exprAttrValues[":pointOfSaleIdValue"] = &dynamodb.AttributeValue{S: aws.String(params.PointOfSaleId)}
+	keyCondition := "PointOfSaleId = :pointOfSaleIdValue"
+
+	if state, ok := filters["state"]; ok && state != "" {
+		exprAttrNames["#state"] = aws.String("State")
+		exprAttrValues[":stateValue"] = &dynamodb.AttributeValue{S: aws.String(state)}
+		filterExpr = append(filterExpr, "#state = :stateValue")
 	}
 
-	var filterExpression *expression.Expression
-	var builder expression.Builder
-	if params.Search != "" {
-		stateCondition := expression.Contains(expression.Name("State"), params.Search)
-		customerIdCondition := expression.Contains(expression.Name("CustomerId"), params.Search)
-		condition := expression.Or(stateCondition, customerIdCondition)
-		builder = expression.NewBuilder().WithFilter(condition)
-		expr, err := builder.Build()
-		if err != nil {
-			return nil, fmt.Errorf("error building filter expression: %w", err)
-		}
-		filterExpression = &expr
+	if name, ok := filters["customerId"]; ok && name != "" {
+		exprAttrNames["#customerId"] = aws.String("CustomerId")
+		exprAttrValues[":customerIdValue"] = &dynamodb.AttributeValue{S: aws.String(name)}
+		filterExpr = append(filterExpr, "contains(#customerId, :customerIdValue)")
 	}
 
-	indexName := "PointOfSaleId-CreatedAt-index"
+	if start, ok := filters["created_at_start"]; ok && start != "" {
+		if end, okEnd := filters["created_at_end"]; okEnd && end != "" {
+			exprAttrValues[":startDate"] = &dynamodb.AttributeValue{S: aws.String(start)}
+			exprAttrValues[":endDate"] = &dynamodb.AttributeValue{S: aws.String(end)}
+			keyCondition += " AND CreatedAt BETWEEN :startDate AND :endDate"
+		} else {
+			exprAttrValues[":startDate"] = &dynamodb.AttributeValue{S: aws.String(start)}
+			keyCondition += " AND CreatedAt >= :startDate"
+		}
+	} else if end, ok := filters["created_at_end"]; ok && end != "" {
+		exprAttrValues[":endDate"] = &dynamodb.AttributeValue{S: aws.String(end)}
+		keyCondition += " AND CreatedAt <= :endDate"
+	}
 
-	input := &dynamodb.QueryInput{
+	baseInput := &dynamodb.QueryInput{
 		TableName:              aws.String(r.orderTable),
-		IndexName:              aws.String(indexName),
-		Limit:                  aws.Int64(int64(params.PageSize)),
-		ReturnConsumedCapacity: aws.String("TOTAL"),
-		ExclusiveStartKey:      lastEvaluatedKey,
-		ScanIndexForward:       aws.Bool(false),
-		KeyConditionExpression: aws.String("PointOfSaleId = :pointOfSaleId"),
-		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-			":pointOfSaleId": {
-				S: aws.String(params.PointOfSaleId),
-			},
-		},
+		IndexName:              aws.String("PointOfSaleId-CreatedAt-index"),
+		KeyConditionExpression: aws.String(keyCondition),
 	}
 
-	if filterExpression != nil {
-		input.FilterExpression = filterExpression.Filter()
-		for k, v := range filterExpression.Names() {
-			if input.ExpressionAttributeNames == nil {
-				input.ExpressionAttributeNames = make(map[string]*string)
+	if len(filterExpr) > 0 {
+		baseInput.FilterExpression = aws.String(strings.Join(filterExpr, " AND "))
+	}
+	if len(exprAttrNames) > 0 {
+		baseInput.ExpressionAttributeNames = exprAttrNames
+	}
+	if len(exprAttrValues) > 0 {
+		baseInput.ExpressionAttributeValues = exprAttrValues
+	}
+
+	var collected []domain.Order
+	currentLastKey := params.NextToken
+	for {
+		input := *baseInput
+		input.ExclusiveStartKey = currentLastKey
+		input.Limit = aws.Int64(int64(params.PageSize) + 10)
+
+		result, err := r.client.Query(&input)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query orders for PosId %s: %w", params.PointOfSaleId, err)
+		}
+
+		if len(result.Items) > 0 {
+			var orders []domain.Order
+			err = dynamodbattribute.UnmarshalListOfMaps(result.Items, &orders)
+			if err != nil {
+				return nil, fmt.Errorf("failed to unmarshal orders: %w", err)
 			}
-			input.ExpressionAttributeNames[k] = v
+			collected = append(collected, orders...)
 		}
 
-		if input.ExpressionAttributeValues == nil {
-			input.ExpressionAttributeValues = make(map[string]*dynamodb.AttributeValue)
-		}
-		for k, v := range filterExpression.Values() {
-			input.ExpressionAttributeValues[k] = v
+		currentLastKey = result.LastEvaluatedKey
+		if len(collected) >= params.PageSize || currentLastKey == nil {
+			break
 		}
 	}
 
-	result, err := r.client.QueryWithContext(ctx, input)
+	var finalLastKey map[string]*dynamodb.AttributeValue
+	if len(collected) > params.PageSize {
+		lastReturnedItem := collected[params.PageSize-1]
+		finalLastKey = map[string]*dynamodb.AttributeValue{
+			"OrderId":       {S: aws.String(lastReturnedItem.OrderId)},
+			"PointOfSaleId": {S: aws.String(lastReturnedItem.PointOfSaleId)},
+			"CreatedAt":     {S: aws.String(lastReturnedItem.CreatedAt.Format(time.RFC3339))},
+		}
+		collected = collected[:params.PageSize]
+	} else {
+		finalLastKey = currentLastKey
+	}
+
+	countInput := *baseInput
+	countInput.Limit = nil
+	countInput.ExclusiveStartKey = nil
+	countInput.Select = aws.String("COUNT")
+
+	countResult, err := r.client.Query(&countInput)
 	if err != nil {
-		return nil, fmt.Errorf("error querying orders table: %w", err)
-	}
-
-	if len(result.Items) > 0 {
-		err = dynamodbattribute.UnmarshalListOfMaps(result.Items, &orders)
-		if err != nil {
-			return nil, fmt.Errorf("error deserializing orders: %w", err)
-		}
-	}
-
-	var nextToken string
-	if result.LastEvaluatedKey != nil {
-		tokenBytes, err := json.Marshal(result.LastEvaluatedKey)
-		if err != nil {
-			return nil, fmt.Errorf("error serializing pagination token: %w", err)
-		}
-		nextToken = string(tokenBytes)
+		return nil, fmt.Errorf("failed to count orders: %w", err)
 	}
 
 	return &domain.OrderRepositoryResult{
-		Orders:     orders,
-		NextToken:  nextToken,
-		TotalCount: 0,
-	}, nil
+			Orders:     collected,
+			NextToken:  finalLastKey,
+			TotalCount: *countResult.Count,
+		},
+		nil
 }
 
 func (r *orderRepository) CountOrders(ctx context.Context, pointOfSaleId string) (int64, error) {
@@ -375,4 +399,30 @@ func (r *orderRepository) GetOrdersByPointOfSaleId(ctx context.Context, pointOfS
 	}
 
 	return orders, nil
+}
+
+func (r *orderRepository) GetOrdersBillingByID(ctx context.Context, billingID string) ([]domain.Order, error) {
+	result, err := r.client.Scan(&dynamodb.ScanInput{
+		TableName:        aws.String(r.orderTable),
+		FilterExpression: aws.String("BillingId = :billingId"),
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":billingId": {S: aws.String(billingID)},
+		},
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan billing with ID %s: %w", billingID, err)
+	}
+
+	if len(result.Items) == 0 {
+		return nil, fmt.Errorf("no billings found for ID %s", billingID)
+	}
+
+	var billings []domain.Order
+	err = dynamodbattribute.UnmarshalListOfMaps(result.Items, &billings)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal billing list: %w", err)
+	}
+
+	return billings, nil
 }

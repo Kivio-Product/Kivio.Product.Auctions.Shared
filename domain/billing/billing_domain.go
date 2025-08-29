@@ -3,6 +3,8 @@ package domain
 import (
 	"errors"
 	"time"
+
+	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
 
 type Billing struct {
@@ -16,6 +18,7 @@ type Billing struct {
 	CustomerId    *string        `json:"customerId" dynamodbav:"customerId"`
 	Customer      *Customer      `json:"customer" dynamodbav:"customer"`
 	InvoiceConfig *InvoiceConfig `json:"invoiceConfig" dynamodbav:"invoiceConfig"`
+	PointOfSaleId string         `json:"pos_id" dynamodbav:"posId"`
 }
 
 type BillingResponse struct {
@@ -49,15 +52,15 @@ type BillOrder struct {
 }
 
 type BillingRepositoryResult struct {
-	Billings   []BillingByOrder `json:"billings"`
-	NextToken  string           `json:"nextToken,omitempty"`
-	TotalCount int64            `json:"totalCount"`
+	Billings   []Billing                           `json:"billings"`
+	NextToken  map[string]*dynamodb.AttributeValue `json:"nextToken,omitempty"`
+	TotalCount int64                               `json:"totalCount"`
 }
 
 type PaginatedBillingDetailsResponse struct {
-	Billings   []BillingDetailResponse `json:"items"`
-	NextToken  string                  `json:"nextToken"`
-	TotalCount int64                   `json:"totalCount"`
+	Billings   []BillingDetailResponse             `json:"items"`
+	NextToken  map[string]*dynamodb.AttributeValue `json:"nextToken"`
+	TotalCount int64                               `json:"totalCount"`
 }
 
 const (

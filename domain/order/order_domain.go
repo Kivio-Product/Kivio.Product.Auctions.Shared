@@ -3,6 +3,8 @@ package domain
 import (
 	"errors"
 	"time"
+
+	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
 
 type OrderItem struct {
@@ -18,6 +20,7 @@ type Order struct {
 	CreatedAt           time.Time
 	CustomerId          string
 	ExternalId          string
+	BillingId           string
 	ItemSpecificationId string
 	Items               []OrderItem `json:"items,omitempty"`
 	ExtraData           string
@@ -41,21 +44,21 @@ type OrderDetail struct {
 }
 
 type PaginationParams struct {
-	NextToken     string `json:"nextToken"`
-	PageSize      int    `json:"pageSize"`
-	Search        string `json:"search"`
-	PointOfSaleId string `json:"pointOfSaleId"`
+	NextToken     map[string]*dynamodb.AttributeValue `json:"nextToken"`
+	PageSize      int                                 `json:"pageSize"`
+	Search        string                              `json:"search"`
+	PointOfSaleId string                              `json:"pointOfSaleId"`
 }
 type OrderRepositoryResult struct {
-	Orders     []Order `json:"orders"`
-	NextToken  string  `json:"nextToken,omitempty"`
-	TotalCount int64   `json:"totalCount"`
+	Orders     []Order                             `json:"orders"`
+	NextToken  map[string]*dynamodb.AttributeValue `json:"nextToken,omitempty"`
+	TotalCount int64                               `json:"totalCount"`
 }
 
 type PaginatedOrdersResponse struct {
-	Orders     []OrderDetail `json:"items"`
-	NextToken  string        `json:"nextToken,omitempty"`
-	TotalCount int64         `json:"totalCount"`
+	Orders     []OrderDetail                       `json:"items"`
+	NextToken  map[string]*dynamodb.AttributeValue `json:"nextToken,omitempty"`
+	TotalCount int64                               `json:"totalCount"`
 }
 
 type UpdateOrderStateRequest struct {
@@ -71,6 +74,7 @@ type OrderInput struct {
 	Items               []OrderItem `json:"items,omitempty"`
 	OfferId             string
 	PointOfSaleId       string
+	BillingId           string
 	ExtraData           string
 	OfferedAmount       int64
 	State               string
