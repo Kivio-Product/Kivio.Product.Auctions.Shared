@@ -33,9 +33,10 @@ type IOfferService interface {
 	GetOffersWithSpecsAndItems(
 		ctx context.Context,
 		posId string,
+		filters map[string]string,
 		limit int,
 		lastEvaluatedKey map[string]*dynamodb.AttributeValue,
-	) ([]OfferWithItemsAndSpecs, map[string]*dynamodb.AttributeValue, error)
+	) ([]OfferWithItemsAndSpecs, map[string]*dynamodb.AttributeValue, int64, error)
 	CountOffers(ctx context.Context) (int64, error)
 }
 
@@ -185,15 +186,16 @@ func (s *OfferService) GetOffersByPosId(ctx context.Context, id string, limit st
 func (s *OfferService) GetOffersWithSpecsAndItems(
 	ctx context.Context,
 	posId string,
+	filters map[string]string,
 	limit int,
 	lastEvaluatedKey map[string]*dynamodb.AttributeValue,
-) ([]OfferWithItemsAndSpecs, map[string]*dynamodb.AttributeValue, error) {
-	offers, lastKey, err := s.repo.GetPosOffers(posId, limit, lastEvaluatedKey)
+) ([]OfferWithItemsAndSpecs, map[string]*dynamodb.AttributeValue, int64, error) {
+	offers, lastKey, total, err := s.repo.GetPosOffersFiltered(posId, filters, limit, lastEvaluatedKey)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 	if len(offers) == 0 {
-		return nil, lastKey, nil
+		return nil, lastKey, total, nil
 	}
 
 	offerIds := make([]string, len(offers))
@@ -203,7 +205,7 @@ func (s *OfferService) GetOffersWithSpecsAndItems(
 
 	itemSpecs, err := s.itemSpecRepository.GetItemSpecsByOfferIds(ctx, offerIds, posId)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 
 	itemIdSet := make(map[string]struct{})
@@ -290,7 +292,7 @@ func (s *OfferService) GetOffersWithSpecsAndItems(
 			Items: itemsWithSpecs,
 		})
 	}
-	return result, lastKey, nil
+	return result, lastKey, total, nil
 }
 
 func (s *OfferService) CountOffers(ctx context.Context) (int64, error) {

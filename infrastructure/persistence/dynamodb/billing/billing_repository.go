@@ -2,10 +2,11 @@ package infrastructure
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"strings"
+	"time"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/billing"
 	orderDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
@@ -13,24 +14,19 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
-	"github.com/aws/aws-sdk-go/service/dynamodb/expression"
-	"github.com/google/uuid"
 )
 
 type BillingRepository interface {
-	SaveBillingWithOrders(ctx context.Context, billing *domain.Billing, orderIds []string) error
+	SaveBilling(ctx context.Context, billing *domain.Billing) error
 	GetBillingByID(ctx context.Context, billingID string) (*domain.Billing, error)
-	GetOrdersBillingByID(ctx context.Context, billingID string) ([]domain.BillingByOrder, error)
 	GetAllBillings(ctx context.Context) ([]domain.Billing, error)
 	UpdateBilling(ctx context.Context, billing *domain.Billing) error
-	GetAllOrderBillings(ctx context.Context) ([]domain.BillingByOrder, error)
-	GetOrderBillingPaginated(ctx context.Context, params orderDomain.PaginationParams) (*domain.BillingRepositoryResult, error)
+	GetOrderBillingPaginated(ctx context.Context, params orderDomain.PaginationParams, filters map[string]string) (*domain.BillingRepositoryResult, error)
 }
 
 type billingRepository struct {
 	client        *dynamodb.DynamoDB
 	billingTable  string
-	relationTable string
 }
 
 func NewBillingRepository() BillingRepository {
@@ -45,62 +41,27 @@ func NewBillingRepository() BillingRepository {
 		billingTable = "Billing"
 	}
 
-	relationTable := os.Getenv("DYNAMODB_BILLING_BY_ORDER_TABLE")
-	if relationTable == "" {
-		relationTable = "BillingByOrder"
-	}
-
 	return &billingRepository{
 		client:        dynamodb.New(sess),
 		billingTable:  billingTable,
-		relationTable: relationTable,
 	}
 }
 
-func (r *billingRepository) SaveBillingWithOrders(ctx context.Context, billing *domain.Billing, orderIds []string) error {
-	itemBilling, err := dynamodbattribute.MarshalMap(billing)
+func (r *billingRepository) SaveBilling(ctx context.Context, i *domain.Billing) error {
+	item, err := dynamodbattribute.MarshalMap(i)
 	if err != nil {
-		return fmt.Errorf("failed to marshal billing: %w", err)
+		return fmt.Errorf("failed to map order")
 	}
 
-	var transactItems []*dynamodb.TransactWriteItem
-
-	transactItems = append(transactItems, &dynamodb.TransactWriteItem{
-		Put: &dynamodb.Put{
-			TableName: aws.String(r.billingTable),
-			Item:      itemBilling,
-		},
-	})
-
-	for _, orderId := range orderIds {
-		relation := domain.BillingByOrder{
-			BillingId:  billing.Id,
-			OrderId:    orderId,
-			Id:         uuid.New().String(),
-			State:      billing.State,
-			CustomerId: *billing.CustomerId,
-		}
-
-		itemRelation, err := dynamodbattribute.MarshalMap(relation)
-		if err != nil {
-			return fmt.Errorf("failed to marshal billing-by-order: %w", err)
-		}
-
-		transactItems = append(transactItems, &dynamodb.TransactWriteItem{
-			Put: &dynamodb.Put{
-				TableName: aws.String(r.relationTable),
-				Item:      itemRelation,
-			},
-		})
+	input := &dynamodb.PutItemInput{
+		TableName: aws.String(r.billingTable),
+		Item:      item,
 	}
 
-	input := &dynamodb.TransactWriteItemsInput{
-		TransactItems: transactItems,
-	}
+	_, err = r.client.PutItemWithContext(ctx, input)
 
-	_, err = r.client.TransactWriteItemsWithContext(ctx, input)
 	if err != nil {
-		return fmt.Errorf("failed to execute transaction: %w", err)
+		return fmt.Errorf("failed to put item in DynamoDB")
 	}
 
 	return nil
@@ -128,32 +89,6 @@ func (r *billingRepository) GetBillingByID(ctx context.Context, billingID string
 	return &billing, nil
 }
 
-func (r *billingRepository) GetOrdersBillingByID(ctx context.Context, billingID string) ([]domain.BillingByOrder, error) {
-	result, err := r.client.Scan(&dynamodb.ScanInput{
-		TableName:        aws.String(r.relationTable),
-		FilterExpression: aws.String("billingId = :billingId"),
-		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-			":billingId": {S: aws.String(billingID)},
-		},
-	})
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to scan billing with ID %s: %w", billingID, err)
-	}
-
-	if len(result.Items) == 0 {
-		return nil, fmt.Errorf("no billings found for ID %s", billingID)
-	}
-
-	var billings []domain.BillingByOrder
-	err = dynamodbattribute.UnmarshalListOfMaps(result.Items, &billings)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal billing list: %w", err)
-	}
-
-	return billings, nil
-}
-
 func (r *billingRepository) GetAllBillings(ctx context.Context) ([]domain.Billing, error) {
 	out, err := r.client.Scan(&dynamodb.ScanInput{
 		TableName: aws.String(r.billingTable),
@@ -167,24 +102,6 @@ func (r *billingRepository) GetAllBillings(ctx context.Context) ([]domain.Billin
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal billings: %w", err)
 	}
-	return billings, nil
-}
-
-func (r *billingRepository) GetAllOrderBillings(ctx context.Context) ([]domain.BillingByOrder, error) {
-	out, err := r.client.Scan(&dynamodb.ScanInput{
-		TableName: aws.String(r.relationTable),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to scan billing table: %w", err)
-	}
-
-	var billings []domain.BillingByOrder
-	err = dynamodbattribute.UnmarshalListOfMaps(out.Items, &billings)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal billings: %w", err)
-	}
-
 	return billings, nil
 }
 
@@ -202,195 +119,113 @@ func (r *billingRepository) UpdateBilling(ctx context.Context, billing *domain.B
 		return fmt.Errorf("failed to update billing: %w", err)
 	}
 
-	err = r.updateBillingStateInOrders(ctx, billing.Id, billing.State)
-	if err != nil {
-		return fmt.Errorf("failed to update billing state in orders: %w", err)
-	}
-
 	return nil
 }
 
-func (r *billingRepository) GetOrderBillingPaginated(ctx context.Context, params orderDomain.PaginationParams) (*domain.BillingRepositoryResult, error) {
-	var allOrderBillings []domain.BillingByOrder
-	var lastEvaluatedKey map[string]*dynamodb.AttributeValue
-	var totalScannedCount int64
+func (r *billingRepository) GetOrderBillingPaginated(ctx context.Context, params orderDomain.PaginationParams, filters map[string]string) (*domain.BillingRepositoryResult, error) {
+	exprAttrNames := map[string]*string{}
+	exprAttrValues := map[string]*dynamodb.AttributeValue{}
+	var filterExpr []string
 
-	if params.NextToken != "" {
-		if err := json.Unmarshal([]byte(params.NextToken), &lastEvaluatedKey); err != nil {
-			return nil, fmt.Errorf("token de paginación inválido: %w", err)
-		}
+	exprAttrValues[":posIdValue"] = &dynamodb.AttributeValue{S: aws.String(params.PointOfSaleId)}
+	keyCondition := "posId = :posIdValue"
+
+	if state, ok := filters["state"]; ok && state != "" {
+		exprAttrNames["#state"] = aws.String("state")
+		exprAttrValues[":stateValue"] = &dynamodb.AttributeValue{S: aws.String(state)}
+		filterExpr = append(filterExpr, "#state = :stateValue")
 	}
 
-	var filterExpression *expression.Expression
-	var builder expression.Builder
-	if params.Search != "" {
-		stateCondition := expression.Contains(expression.Name("state"), params.Search)
-		customerIdCondition := expression.Contains(expression.Name("customerId"), params.Search)
-		condition := expression.Or(stateCondition, customerIdCondition)
-		builder = expression.NewBuilder().WithFilter(condition)
-		expr, err := builder.Build()
-		if err != nil {
-			return nil, fmt.Errorf("error al construir expresión de filtro: %w", err)
-		}
-		filterExpression = &expr
+	if name, ok := filters["name"]; ok && name != "" {
+		exprAttrNames["#customerId"] = aws.String("customerId")
+		exprAttrValues[":customerIdValue"] = &dynamodb.AttributeValue{S: aws.String(name)}
+		filterExpr = append(filterExpr, "contains(#customerId, :customerIdValue)")
 	}
 
-	for len(allOrderBillings) < params.PageSize {
-		input := &dynamodb.ScanInput{
-			TableName:              aws.String(r.relationTable),
-			Limit:                  aws.Int64(int64(params.PageSize)),
-			ReturnConsumedCapacity: aws.String("TOTAL"),
-			ExclusiveStartKey:      lastEvaluatedKey,
+	if start, ok := filters["created_at_start"]; ok && start != "" {
+		if end, okEnd := filters["created_at_end"]; okEnd && end != "" {
+			exprAttrValues[":startDate"] = &dynamodb.AttributeValue{S: aws.String(start)}
+			exprAttrValues[":endDate"] = &dynamodb.AttributeValue{S: aws.String(end)}
+			keyCondition += " AND createdAt BETWEEN :startDate AND :endDate"
+		} else {
+			exprAttrValues[":startDate"] = &dynamodb.AttributeValue{S: aws.String(start)}
+			keyCondition += " AND createdAt >= :startDate"
 		}
+	} else if end, ok := filters["created_at_end"]; ok && end != "" {
+		exprAttrValues[":endDate"] = &dynamodb.AttributeValue{S: aws.String(end)}
+		keyCondition += " AND createdAt <= :endDate"
+	}
 
-		if filterExpression != nil {
-			input.FilterExpression = filterExpression.Filter()
-			input.ExpressionAttributeNames = filterExpression.Names()
-			input.ExpressionAttributeValues = filterExpression.Values()
-		}
+	baseInput := &dynamodb.QueryInput{
+		TableName:              aws.String(r.billingTable),
+		IndexName:              aws.String("posId-createdAt-index"),
+		KeyConditionExpression: aws.String(keyCondition),
+	}
 
-		result, err := r.client.ScanWithContext(ctx, input)
+	if len(filterExpr) > 0 {
+		baseInput.FilterExpression = aws.String(strings.Join(filterExpr, " AND "))
+	}
+	if len(exprAttrNames) > 0 {
+		baseInput.ExpressionAttributeNames = exprAttrNames
+	}
+	if len(exprAttrValues) > 0 {
+		baseInput.ExpressionAttributeValues = exprAttrValues
+	}
+
+	var collected []domain.Billing
+	currentLastKey := params.NextToken
+	for {
+		input := *baseInput
+		input.ExclusiveStartKey = currentLastKey
+		input.Limit = aws.Int64(int64(params.PageSize) + 10)
+
+		result, err := r.client.Query(&input)
 		if err != nil {
-			return nil, fmt.Errorf("error al escanear tabla de órdenes: %w", err)
+			return nil, fmt.Errorf("failed to query billings for PosId %s: %w", params.PointOfSaleId, err)
 		}
 
-		var batchOrders []domain.BillingByOrder
 		if len(result.Items) > 0 {
-			err = dynamodbattribute.UnmarshalListOfMaps(result.Items, &batchOrders)
+			var billings []domain.Billing
+			err = dynamodbattribute.UnmarshalListOfMaps(result.Items, &billings)
 			if err != nil {
-				return nil, fmt.Errorf("error al deserializar órdenes del batch: %w", err)
+				return nil, fmt.Errorf("failed to unmarshal billings: %w", err)
 			}
+			collected = append(collected, billings...)
 		}
 
-		allOrderBillings = append(allOrderBillings, batchOrders...)
-
-		lastEvaluatedKey = result.LastEvaluatedKey
-
-		if result.LastEvaluatedKey == nil {
-			log.Printf("DynamoDB Scan finished. Scanned %d items.", totalScannedCount+*result.ScannedCount)
-			break
-		}
-
-		totalScannedCount += *result.ScannedCount
-
-		if len(allOrderBillings) >= params.PageSize {
+		currentLastKey = result.LastEvaluatedKey
+		if len(collected) >= params.PageSize || currentLastKey == nil {
 			break
 		}
 	}
-	var currentPageOrders []domain.BillingByOrder
-	var nextToken string
 
-	if len(allOrderBillings) > params.PageSize {
-		currentPageOrders = allOrderBillings[:params.PageSize]
-		if lastEvaluatedKey != nil {
-			tokenBytes, err := json.Marshal(lastEvaluatedKey)
-			if err != nil {
-				return nil, fmt.Errorf("error al serializar token de paginación: %w", err)
-			}
-			nextToken = string(tokenBytes)
+	var finalLastKey map[string]*dynamodb.AttributeValue
+	if len(collected) > params.PageSize {
+		lastReturnedItem := collected[params.PageSize-1]
+		finalLastKey = map[string]*dynamodb.AttributeValue{
+			"id":        {S: aws.String(lastReturnedItem.Id)},
+			"posId":     {S: aws.String(lastReturnedItem.PointOfSaleId)},
+			"createdAt": {S: aws.String(lastReturnedItem.CreatedAt.Format(time.RFC3339))},
 		}
-
+		collected = collected[:params.PageSize]
 	} else {
-		currentPageOrders = allOrderBillings
-		if lastEvaluatedKey != nil {
-			tokenBytes, err := json.Marshal(lastEvaluatedKey)
-			if err != nil {
-				return nil, fmt.Errorf("error al serializar token de paginación: %w", err)
-			}
-			nextToken = string(tokenBytes)
-		} else {
-			nextToken = ""
-		}
+		finalLastKey = currentLastKey
 	}
 
-	var totalFilteredCount int64
-	if params.Search != "" {
-		countInput := &dynamodb.ScanInput{
-			TableName: aws.String(r.relationTable),
-			Select:    aws.String("COUNT"),
-		}
-		if filterExpression != nil {
-			countInput.FilterExpression = filterExpression.Filter()
-			countInput.ExpressionAttributeNames = filterExpression.Names()
-			countInput.ExpressionAttributeValues = filterExpression.Values()
-		}
-		log.Println("Performing separate Scan with COUNT for total filtered count (can be slow/expensive)")
-		countResult, err := r.client.ScanWithContext(ctx, countInput)
-		if err != nil {
-			log.Printf("Warning: Error getting total filtered count: %v", err)
-			totalFilteredCount = 0
-		} else {
-			totalFilteredCount = *countResult.Count
-			log.Printf("Total filtered count found: %d", totalFilteredCount)
-		}
-	} else {
-		countInput := &dynamodb.ScanInput{
-			TableName: aws.String(r.relationTable),
-			Select:    aws.String("COUNT"),
-		}
-		countResult, err := r.client.ScanWithContext(ctx, countInput)
-		if err != nil {
-			return nil, fmt.Errorf("error al obtener conteo total sin filtro: %w", err)
-		}
-		totalFilteredCount = *countResult.Count
-	}
+	countInput := *baseInput
+	countInput.Limit = nil
+	countInput.ExclusiveStartKey = nil
+	countInput.Select = aws.String("COUNT")
 
-	log.Printf("DynamoDB collected %d filtered items, returning page with %d items. Next page likely: %v", len(allOrderBillings), len(currentPageOrders), nextToken != "")
+	countResult, err := r.client.Query(&countInput)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count billings: %w", err)
+	}
 
 	return &domain.BillingRepositoryResult{
-		Billings:   currentPageOrders,
-		NextToken:  nextToken,
-		TotalCount: totalFilteredCount,
-	}, nil
-}
-
-func (r *billingRepository) updateBillingStateInOrders(ctx context.Context, billingID string, newState string) error {
-	input := &dynamodb.QueryInput{
-		TableName:              aws.String(r.relationTable),
-		IndexName:              aws.String("billingId-index"),
-		KeyConditionExpression: aws.String("billingId = :billingId"),
-		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-			":billingId": {
-				S: aws.String(billingID),
-			},
+			Billings:   collected,
+			NextToken:  finalLastKey,
+			TotalCount: *countResult.Count,
 		},
-	}
-
-	result, err := r.client.Query(input)
-	if err != nil {
-		return fmt.Errorf("failed to query BillingByOrder by billingId: %w", err)
-	}
-
-	for _, item := range result.Items {
-		var bbo domain.BillingByOrder
-		err := dynamodbattribute.UnmarshalMap(item, &bbo)
-		if err != nil {
-			return fmt.Errorf("failed to unmarshal BillingByOrder: %w", err)
-		}
-
-		updateInput := &dynamodb.UpdateItemInput{
-			TableName: aws.String(r.relationTable),
-			Key: map[string]*dynamodb.AttributeValue{
-				"id": {
-					S: aws.String(bbo.Id),
-				},
-			},
-			UpdateExpression: aws.String("SET #s = :newState"),
-			ExpressionAttributeNames: map[string]*string{
-				"#s": aws.String("state"),
-			},
-			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-				":newState": {
-					S: aws.String(newState),
-				},
-			},
-		}
-
-		_, err = r.client.UpdateItemWithContext(ctx, updateInput)
-		if err != nil {
-			return fmt.Errorf("failed to update BillingByOrder state: %w", err)
-		}
-	}
-
-	return nil
+		nil
 }

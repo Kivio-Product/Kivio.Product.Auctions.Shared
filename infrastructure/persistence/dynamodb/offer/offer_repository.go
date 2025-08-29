@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
+	"time"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/offer"
 	"github.com/aws/aws-sdk-go/aws"
@@ -21,6 +23,7 @@ type OfferRepository struct {
 type IOfferRepository interface {
 	SaveOffer(ctx context.Context, offer *domain.Offer) error
 	GetAllOffers() ([]domain.Offer, error)
+	GetPosOffersFiltered(posId string, filters map[string]string, limit int, lastKey map[string]*dynamodb.AttributeValue) ([]domain.Offer, map[string]*dynamodb.AttributeValue, int64, error)
 	GetPosOffers(posId string, limit int, lastKey map[string]*dynamodb.AttributeValue) ([]domain.Offer, map[string]*dynamodb.AttributeValue, error)
 	GetOfferById(ctx context.Context, offerId string) (*domain.Offer, error)
 	DeleteOffer(ctx context.Context, offerId string) error
@@ -132,6 +135,121 @@ func (r *OfferRepository) GetPosOffers(posId string, limit int, lastKey map[stri
 	}
 
 	return offers, result.LastEvaluatedKey, nil
+}
+
+func (r *OfferRepository) GetPosOffersFiltered(
+	posId string,
+	filters map[string]string,
+	limit int,
+	lastKey map[string]*dynamodb.AttributeValue,
+) ([]domain.Offer, map[string]*dynamodb.AttributeValue, int64, error) {
+
+	exprAttrNames := map[string]*string{}
+	exprAttrValues := map[string]*dynamodb.AttributeValue{}
+	var filterExpr []string
+
+	exprAttrValues[":posIdValue"] = &dynamodb.AttributeValue{S: aws.String(posId)}
+	keyCondition := "PosId = :posIdValue"
+
+	if state, ok := filters["state"]; ok && state != "" {
+		exprAttrNames["#state"] = aws.String("State")
+		exprAttrValues[":stateValue"] = &dynamodb.AttributeValue{S: aws.String(state)}
+		filterExpr = append(filterExpr, "#state = :stateValue")
+	}
+
+	if typ, ok := filters["type"]; ok && typ != "" {
+		exprAttrNames["#type"] = aws.String("Type")
+		exprAttrValues[":typeValue"] = &dynamodb.AttributeValue{S: aws.String(typ)}
+		filterExpr = append(filterExpr, "#type = :typeValue")
+	}
+
+	if name, ok := filters["name"]; ok && name != "" {
+		exprAttrNames["#name"] = aws.String("Name")
+		exprAttrValues[":nameValue"] = &dynamodb.AttributeValue{S: aws.String(name)}
+		filterExpr = append(filterExpr, "contains(#name, :nameValue)")
+	}
+
+	if start, ok := filters["created_at_start"]; ok && start != "" {
+		if end, okEnd := filters["created_at_end"]; okEnd && end != "" {
+			exprAttrValues[":startDate"] = &dynamodb.AttributeValue{S: aws.String(start)}
+			exprAttrValues[":endDate"] = &dynamodb.AttributeValue{S: aws.String(end)}
+			keyCondition += " AND CreatedAt BETWEEN :startDate AND :endDate"
+		} else {
+			exprAttrValues[":startDate"] = &dynamodb.AttributeValue{S: aws.String(start)}
+			keyCondition += " AND CreatedAt >= :startDate"
+		}
+	} else if end, ok := filters["created_at_end"]; ok && end != "" {
+		exprAttrValues[":endDate"] = &dynamodb.AttributeValue{S: aws.String(end)}
+		keyCondition += " AND CreatedAt <= :endDate"
+	}
+
+	baseInput := &dynamodb.QueryInput{
+		TableName:              aws.String(r.offerTable),
+		IndexName:              aws.String("PosId-CreatedAt-index"),
+		KeyConditionExpression: aws.String(keyCondition),
+	}
+
+	if len(filterExpr) > 0 {
+		baseInput.FilterExpression = aws.String(strings.Join(filterExpr, " AND "))
+	}
+	if len(exprAttrNames) > 0 {
+		baseInput.ExpressionAttributeNames = exprAttrNames
+	}
+	if len(exprAttrValues) > 0 {
+		baseInput.ExpressionAttributeValues = exprAttrValues
+	}
+
+	var collected []domain.Offer
+	currentLastKey := lastKey
+	for {
+		input := *baseInput
+		input.ExclusiveStartKey = currentLastKey
+		input.Limit = aws.Int64(int64(limit) + 10)
+
+		result, err := r.client.Query( &input)
+		if err != nil {
+			return nil, nil, 0, fmt.Errorf("failed to query offers for PosId %s: %w", posId, err)
+		}
+
+		if len(result.Items) > 0 {
+			var offers []domain.Offer
+			err = dynamodbattribute.UnmarshalListOfMaps(result.Items, &offers)
+			if err != nil {
+				return nil, nil, 0, fmt.Errorf("failed to unmarshal offers: %w", err)
+			}
+			collected = append(collected, offers...)
+		}
+
+		currentLastKey = result.LastEvaluatedKey
+		if len(collected) >= limit || currentLastKey == nil {
+			break
+		}
+	}
+
+	var finalLastKey map[string]*dynamodb.AttributeValue
+	if len(collected) > limit {
+		lastReturnedItem := collected[limit-1]
+		finalLastKey = map[string]*dynamodb.AttributeValue{
+			"OfferId":   {S: aws.String(lastReturnedItem.OfferId)},
+			"PosId":     {S: aws.String(lastReturnedItem.PosId)},
+			"CreatedAt": {S: aws.String(lastReturnedItem.CreatedAt.Format(time.RFC3339))},
+		}
+		collected = collected[:limit]
+	} else {
+		finalLastKey = currentLastKey
+	}
+
+	countInput := *baseInput
+	countInput.Limit = nil
+	countInput.ExclusiveStartKey = nil
+	countInput.Select = aws.String("COUNT")
+
+	countResult, err := r.client.Query(&countInput)
+	if err != nil {
+		return nil, nil, 0, fmt.Errorf("failed to count offers: %w", err)
+	}
+
+	return collected, finalLastKey, *countResult.Count, nil
 }
 
 func (r *OfferRepository) GetOfferById(ctx context.Context, offerId string) (*domain.Offer, error) {

@@ -21,7 +21,7 @@ type ItemService interface {
 	GetItemBySpecId(ctx context.Context, specId string) (*domain.Item, error)
 	UpdateItem(ctx context.Context, id, name, description, externalId, pointOfSaleId, url string) error
 	DeleteItemById(ctx context.Context, id string) error
-	GetItemsByPosId(ctx context.Context, id string) ([]domain.Item, error)
+	GetItemsByPosId(ctx context.Context, id string, filters map[string]string) ([]domain.Item, error)
 	GetItemsByUserId(ctx context.Context, id string) ([]domain.Item, error)
 }
 
@@ -127,8 +127,8 @@ func (s *itemService) GetItemBySpecId(ctx context.Context, id string) (*domain.I
 	return item, nil
 }
 
-func (s *itemService) GetItemsByPosId(ctx context.Context, id string) ([]domain.Item, error) {
-	items, err := s.repo.GetItemsByPosId(id)
+func (s *itemService) GetItemsByPosId(ctx context.Context, id string, filters map[string]string) ([]domain.Item, error) {
+	items, err := s.repo.GetItemsByPosId(id, filters)
 	if err != nil {
 		return nil, err
 	}
