@@ -175,12 +175,20 @@ func (r *OfferRepository) GetPosOffersFiltered(
 			exprAttrValues[":endDate"] = &dynamodb.AttributeValue{S: aws.String(end)}
 			keyCondition += " AND CreatedAt BETWEEN :startDate AND :endDate"
 		} else {
-			exprAttrValues[":startDate"] = &dynamodb.AttributeValue{S: aws.String(start)}
-			keyCondition += " AND CreatedAt >= :startDate"
+			startOfDay := start[:10] + "T00:00:00Z"
+			endOfDay := start[:10] + "T23:59:59Z"
+
+			exprAttrValues[":startDate"] = &dynamodb.AttributeValue{S: aws.String(startOfDay)}
+			exprAttrValues[":endDate"] = &dynamodb.AttributeValue{S: aws.String(endOfDay)}
+			keyCondition += " AND CreatedAt BETWEEN :startDate AND :endDate"
 		}
 	} else if end, ok := filters["created_at_end"]; ok && end != "" {
-		exprAttrValues[":endDate"] = &dynamodb.AttributeValue{S: aws.String(end)}
-		keyCondition += " AND CreatedAt <= :endDate"
+		startOfDay := end[:10] + "T00:00:00Z"
+		endOfDay := end[:10] + "T23:59:59Z"
+
+		exprAttrValues[":startDate"] = &dynamodb.AttributeValue{S: aws.String(startOfDay)}
+		exprAttrValues[":endDate"] = &dynamodb.AttributeValue{S: aws.String(endOfDay)}
+		keyCondition += " AND CreatedAt BETWEEN :startDate AND :endDate"
 	}
 
 	baseInput := &dynamodb.QueryInput{
@@ -206,7 +214,7 @@ func (r *OfferRepository) GetPosOffersFiltered(
 		input.ExclusiveStartKey = currentLastKey
 		input.Limit = aws.Int64(int64(limit) + 10)
 
-		result, err := r.client.Query( &input)
+		result, err := r.client.Query(&input)
 		if err != nil {
 			return nil, nil, 0, fmt.Errorf("failed to query offers for PosId %s: %w", posId, err)
 		}
