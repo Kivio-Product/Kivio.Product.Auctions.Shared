@@ -25,8 +25,8 @@ type BillingRepository interface {
 }
 
 type billingRepository struct {
-	client        *dynamodb.DynamoDB
-	billingTable  string
+	client       *dynamodb.DynamoDB
+	billingTable string
 }
 
 func NewBillingRepository() BillingRepository {
@@ -42,8 +42,8 @@ func NewBillingRepository() BillingRepository {
 	}
 
 	return &billingRepository{
-		client:        dynamodb.New(sess),
-		billingTable:  billingTable,
+		client:       dynamodb.New(sess),
+		billingTable: billingTable,
 	}
 }
 
@@ -148,12 +148,20 @@ func (r *billingRepository) GetOrderBillingPaginated(ctx context.Context, params
 			exprAttrValues[":endDate"] = &dynamodb.AttributeValue{S: aws.String(end)}
 			keyCondition += " AND createdAt BETWEEN :startDate AND :endDate"
 		} else {
-			exprAttrValues[":startDate"] = &dynamodb.AttributeValue{S: aws.String(start)}
-			keyCondition += " AND createdAt >= :startDate"
+			startOfDay := start[:10] + "T00:00:00Z"
+			endOfDay := start[:10] + "T23:59:59Z"
+
+			exprAttrValues[":startDate"] = &dynamodb.AttributeValue{S: aws.String(startOfDay)}
+			exprAttrValues[":endDate"] = &dynamodb.AttributeValue{S: aws.String(endOfDay)}
+			keyCondition += " AND createdAt BETWEEN :startDate AND :endDate"
 		}
 	} else if end, ok := filters["created_at_end"]; ok && end != "" {
-		exprAttrValues[":endDate"] = &dynamodb.AttributeValue{S: aws.String(end)}
-		keyCondition += " AND createdAt <= :endDate"
+		startOfDay := end[:10] + "T00:00:00Z"
+		endOfDay := end[:10] + "T23:59:59Z"
+
+		exprAttrValues[":startDate"] = &dynamodb.AttributeValue{S: aws.String(startOfDay)}
+		exprAttrValues[":endDate"] = &dynamodb.AttributeValue{S: aws.String(endOfDay)}
+		keyCondition += " AND createdAt BETWEEN :startDate AND :endDate"
 	}
 
 	baseInput := &dynamodb.QueryInput{

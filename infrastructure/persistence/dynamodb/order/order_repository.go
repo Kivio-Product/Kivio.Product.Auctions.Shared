@@ -233,12 +233,20 @@ func (r *orderRepository) GetOrdersPaginated(
 			exprAttrValues[":endDate"] = &dynamodb.AttributeValue{S: aws.String(end)}
 			keyCondition += " AND CreatedAt BETWEEN :startDate AND :endDate"
 		} else {
-			exprAttrValues[":startDate"] = &dynamodb.AttributeValue{S: aws.String(start)}
-			keyCondition += " AND CreatedAt >= :startDate"
+			startOfDay := start[:10] + "T00:00:00Z"
+			endOfDay := start[:10] + "T23:59:59Z"
+
+			exprAttrValues[":startDate"] = &dynamodb.AttributeValue{S: aws.String(startOfDay)}
+			exprAttrValues[":endDate"] = &dynamodb.AttributeValue{S: aws.String(endOfDay)}
+			keyCondition += " AND CreatedAt BETWEEN :startDate AND :endDate"
 		}
 	} else if end, ok := filters["created_at_end"]; ok && end != "" {
-		exprAttrValues[":endDate"] = &dynamodb.AttributeValue{S: aws.String(end)}
-		keyCondition += " AND CreatedAt <= :endDate"
+		startOfDay := end[:10] + "T00:00:00Z"
+		endOfDay := end[:10] + "T23:59:59Z"
+
+		exprAttrValues[":startDate"] = &dynamodb.AttributeValue{S: aws.String(startOfDay)}
+		exprAttrValues[":endDate"] = &dynamodb.AttributeValue{S: aws.String(endOfDay)}
+		keyCondition += " AND CreatedAt BETWEEN :startDate AND :endDate"
 	}
 
 	baseInput := &dynamodb.QueryInput{
