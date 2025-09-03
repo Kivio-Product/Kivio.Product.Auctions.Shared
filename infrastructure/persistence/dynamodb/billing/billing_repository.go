@@ -168,6 +168,7 @@ func (r *billingRepository) GetOrderBillingPaginated(ctx context.Context, params
 		TableName:              aws.String(r.billingTable),
 		IndexName:              aws.String("posId-createdAt-index"),
 		KeyConditionExpression: aws.String(keyCondition),
+		ScanIndexForward:       aws.Bool(false),
 	}
 
 	if len(filterExpr) > 0 {

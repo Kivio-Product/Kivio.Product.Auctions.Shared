@@ -195,6 +195,7 @@ func (r *OfferRepository) GetPosOffersFiltered(
 		TableName:              aws.String(r.offerTable),
 		IndexName:              aws.String("PosId-CreatedAt-index"),
 		KeyConditionExpression: aws.String(keyCondition),
+		ScanIndexForward:       aws.Bool(false),
 	}
 
 	if len(filterExpr) > 0 {

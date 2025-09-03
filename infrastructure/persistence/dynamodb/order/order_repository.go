@@ -253,6 +253,7 @@ func (r *orderRepository) GetOrdersPaginated(
 		TableName:              aws.String(r.orderTable),
 		IndexName:              aws.String("PointOfSaleId-CreatedAt-index"),
 		KeyConditionExpression: aws.String(keyCondition),
+		ScanIndexForward:       aws.Bool(false),
 	}
 
 	if len(filterExpr) > 0 {
