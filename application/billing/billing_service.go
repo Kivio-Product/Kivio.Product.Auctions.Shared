@@ -319,9 +319,8 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 			if item != nil {
 				concatenatedItemDescriptions = append(concatenatedItemDescriptions, item.Description)
 			}
-			if firstOrderAmount == 0 {
-				firstOrderAmount = order.OfferedAmount
-			}
+			
+			firstOrderAmount += int64(order.OfferedAmount)
 			if customerEmail == "" {
 				customerEmail = order.CustomerId
 			}

@@ -19,6 +19,7 @@ import (
 	offerDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/offer"
 	processingDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/offer_processing"
 	orderDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
+	billingInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/billing"
 )
 
 type IOfferProcessingService interface {
@@ -36,6 +37,7 @@ type OfferProcessingService struct {
 	paymentService   paymentService.PaymentService
 	invoiceService   invoiceService.InvoiceService
 	billingService   billingService.BillingService
+	billingRepo      billingInfrastructure.BillingRepository
 }
 
 func NewOfferProcessingService(
@@ -49,6 +51,7 @@ func NewOfferProcessingService(
 	paymentService paymentService.PaymentService,
 	invoiceService invoiceService.InvoiceService,
 	billingService billingService.BillingService,
+	billingRepo billingInfrastructure.BillingRepository,
 ) IOfferProcessingService {
 	return &OfferProcessingService{
 		offerService:     offerService,
@@ -61,6 +64,7 @@ func NewOfferProcessingService(
 		paymentService:   paymentService,
 		invoiceService:   invoiceService,
 		billingService:   billingService,
+		billingRepo:      billingRepo,
 	}
 }
 
@@ -117,16 +121,22 @@ func (s *OfferProcessingService) ProcessOffer(ctx context.Context, offerId strin
 
 	successfulPaymentCustomers := s.processPaymentsByCustomer(ctx, allWinners)
 
-	winnersWithSuccessfulPayment := s.filterWinnersBySuccessfulPayment(allWinners, successfulPaymentCustomers)
+	winnersWithSuccessfulPayment, winnersWithUnsuccessfulPayment := s.filterWinnersBySuccessfulPayment(allWinners, successfulPaymentCustomers)
 	err = s.sendEmailsGroupedByCustomer(ctx, winnersWithSuccessfulPayment, "Approved", offer.PosId)
 	if err != nil {
 		fmt.Printf("Error sending emails to winners for offer %s: %v\n", offerId, err)
 	}
 
+	s.updateBillingState(ctx, winnersWithSuccessfulPayment, "Approved")
+
+	allLosers = append(allLosers, winnersWithUnsuccessfulPayment...)
+	
 	err = s.sendEmailsGroupedByCustomer(ctx, allLosers, "Rejected", offer.PosId)
 	if err != nil {
 		fmt.Printf("Error sending emails for offer %s: %v\n", offerId, err)
 	}
+
+    s.updateBillingState(ctx, allLosers, "Rejected")
 
 	err = s.closeOffer(ctx, offer)
 	if err != nil {
@@ -295,6 +305,28 @@ func (s *OfferProcessingService) updateExternalItemStock(ctx context.Context, po
 	return s.ecommerceService.UpdateItemStock(ctx, creds.ApiURL, creds.ApiKey, itemId, newStock)
 }
 
+func (s *OfferProcessingService) updateBillingState(ctx context.Context, orders []*orderDomain.Order, status string) {
+	groupedByBilling := make(map[string][]*orderDomain.Order)
+	for _, order := range orders {
+		groupedByBilling[order.BillingId] = append(groupedByBilling[order.BillingId], order)
+	}
+
+	for billingId, _ := range groupedByBilling {
+		billing, err:= s.billingService.GetBillingById(ctx, billingId)
+		if err != nil {
+			fmt.Printf("Error getting billing %s: %v\n", billingId, err)
+			continue
+		}
+		if billing.State != "Approved"{
+			billing.State = status
+			err := s.billingRepo.UpdateBilling(ctx, billing)
+			if err != nil {
+				fmt.Printf("Error updating billing %s to status %s: %v\n", billingId, status, err)
+			}
+		}
+	}
+}
+
 func (s *OfferProcessingService) sendEmailsGroupedByCustomer(ctx context.Context, orders []*orderDomain.Order, status, posId string) error {
 	groupedByCustomer := make(map[string][]*orderDomain.Order)
 	for _, order := range orders {
@@ -380,20 +412,24 @@ func (s *OfferProcessingService) processPaymentsByCustomer(ctx context.Context, 
 	return successfulCustomers
 }
 
-func (s *OfferProcessingService) filterWinnersBySuccessfulPayment(allWinners []*orderDomain.Order, successfulCustomers []string) []*orderDomain.Order {
+func (s *OfferProcessingService) filterWinnersBySuccessfulPayment(allWinners []*orderDomain.Order, successfulCustomers []string) ([]*orderDomain.Order, []*orderDomain.Order) {
 	successfulCustomersMap := make(map[string]bool)
 	for _, customerId := range successfulCustomers {
 		successfulCustomersMap[customerId] = true
 	}
 
 	var winnersWithSuccessfulPayment []*orderDomain.Order
+	var winnersWithUnsuccessfulPayment []*orderDomain.Order
+
 	for _, winner := range allWinners {
 		if successfulCustomersMap[winner.CustomerId] {
 			winnersWithSuccessfulPayment = append(winnersWithSuccessfulPayment, winner)
+		} else{
+			winnersWithUnsuccessfulPayment = append(winnersWithUnsuccessfulPayment, winner)
 		}
 	}
 
-	return winnersWithSuccessfulPayment
+	return winnersWithSuccessfulPayment, winnersWithUnsuccessfulPayment
 }
 
 func (s *OfferProcessingService) createInvoiceForSuccessfulPayment(ctx context.Context, orders []*orderDomain.Order, customerId string) {
