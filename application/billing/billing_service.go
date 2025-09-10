@@ -154,7 +154,7 @@ func (s *billingService) GetPaginatedBillingsWithDetails(ctx context.Context, pa
 				ItemName:    order.ExtraData,
 				OrderAmount: order.OfferedAmount,
 			}
-	
+
 			billingsMap[billing.Id].Orders = append(billingsMap[billing.Id].Orders, billOrder)
 		}
 	}
@@ -185,7 +185,7 @@ func (s *billingService) GetBillingReferenceByOrderId(ctx context.Context, order
 		return "", fmt.Errorf("error obteniendo Order: %w", err)
 	}
 
-	if order.BillingId != ""{
+	if order.BillingId != "" {
 		return order.BillingId, nil
 	}
 
@@ -293,6 +293,7 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 				continue
 			}
 			concatenatedItemNames = append(concatenatedItemNames, order.ExtraData)
+			firstOrderAmount += int64(order.OfferedAmount)
 
 			var item *itemDomain.Item
 			if itemSpec.IsExternal {
@@ -319,8 +320,6 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 			if item != nil {
 				concatenatedItemDescriptions = append(concatenatedItemDescriptions, item.Description)
 			}
-			
-			firstOrderAmount += int64(order.OfferedAmount)
 			if customerEmail == "" {
 				customerEmail = order.CustomerId
 			}
