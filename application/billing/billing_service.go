@@ -664,35 +664,27 @@ func validateWompiEventSignature(webhook *WompiWebhook) bool {
 		return false
 	}
 
-	var signatureString string
 	tx := webhook.Data.Transaction
 
-	for _, property := range webhook.Signature.Properties {
-		switch property {
-		case "id":
-			signatureString += tx.ID
-		case "amount_in_cents":
-			signatureString += strconv.FormatInt(tx.AmountInCents, 10)
-		case "reference":
-			signatureString += tx.Reference
-		case "currency":
-			signatureString += tx.Currency
-		case "status":
-			signatureString += tx.Status
-		default:
-		}
-	}
+	fmt.Printf("=== DEBUG WOMPI SIGNATURE VALIDATION ===\n")
+	fmt.Printf("Transaction ID: '%s'\n", tx.ID)
+	fmt.Printf("Transaction Status: '%s'\n", tx.Status)
+	fmt.Printf("Transaction Amount: '%d'\n", tx.AmountInCents)
+	fmt.Printf("Timestamp: '%d'\n", webhook.Timestamp)
+	fmt.Printf("Event Secret: '%s'\n", eventSecret)
 
-	signatureString += strconv.FormatInt(webhook.Timestamp, 10) + eventSecret
+	signatureString := tx.ID + tx.Status + strconv.FormatInt(tx.AmountInCents, 10) + strconv.FormatInt(webhook.Timestamp, 10) + eventSecret
 
-	fmt.Printf("String para validación de firma: %s\n", strings.Replace(signatureString, eventSecret, "[EVENT_SECRET]", -1))
+	fmt.Printf("Signature String Completo: '%s'\n", signatureString)
+	fmt.Printf("Signature String (ocultando secret): '%s'\n", strings.Replace(signatureString, eventSecret, "[EVENT_SECRET]", -1))
 
 	hash := sha256.Sum256([]byte(signatureString))
 	expected := hex.EncodeToString(hash[:])
 
-	fmt.Printf("Firma esperada: %s\n", expected)
-	fmt.Printf("Firma recibida: %s\n", webhook.Signature.Checksum)
+	fmt.Printf("Firma esperada (SHA256): %s\n", expected)
+	fmt.Printf("Firma recibida (checksum): %s\n", webhook.Signature.Checksum)
 	fmt.Printf("¿Las firmas coinciden? %t\n", strings.EqualFold(expected, webhook.Signature.Checksum))
+	fmt.Printf("========================================\n")
 
 	return strings.EqualFold(expected, webhook.Signature.Checksum)
 }
