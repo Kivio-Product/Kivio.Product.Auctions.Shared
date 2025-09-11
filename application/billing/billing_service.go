@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"crypto/md5"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -503,6 +504,14 @@ func (s *billingService) ConfirmWompiResponse(ctx context.Context, body []byte) 
 		return fmt.Errorf("error al parsear el body de Wompi: %w", err)
 	}
 
+	isValid := validateWompiEventSignature(&webhook)
+	if !isValid {
+		fmt.Printf("Error: firma inválida para evento Wompi con ID: %s\n", webhook.Data.Transaction.ID)
+		return errors.New("firma del evento inválida")
+	}
+
+	fmt.Println("Firma del evento validada correctamente")
+
 	tx := webhook.Data.Transaction
 	billingId := tx.Reference
 
@@ -646,6 +655,46 @@ func validatePayUSignature(secretKey, merchantId, referenceSale string, valueStr
 	fmt.Printf("¿Las firmas coinciden? %t\n", strings.EqualFold(expected, incomingSignature))
 
 	return strings.EqualFold(expected, incomingSignature)
+}
+
+func validateWompiEventSignature(webhook *WompiWebhook) bool {
+	eventSecret := os.Getenv("WOMPI_EVENT_SECRET")
+	if eventSecret == "" {
+		fmt.Println("Error: WOMPI_EVENT_SECRET no está configurado")
+		return false
+	}
+
+	var signatureString string
+	tx := webhook.Data.Transaction
+
+	for _, property := range webhook.Signature.Properties {
+		switch property {
+		case "id":
+			signatureString += tx.ID
+		case "amount_in_cents":
+			signatureString += strconv.FormatInt(tx.AmountInCents, 10)
+		case "reference":
+			signatureString += tx.Reference
+		case "currency":
+			signatureString += tx.Currency
+		case "status":
+			signatureString += tx.Status
+		default:
+		}
+	}
+
+	signatureString += strconv.FormatInt(webhook.Timestamp, 10) + eventSecret
+
+	fmt.Printf("String para validación de firma: %s\n", strings.Replace(signatureString, eventSecret, "[EVENT_SECRET]", -1))
+
+	hash := sha256.Sum256([]byte(signatureString))
+	expected := hex.EncodeToString(hash[:])
+
+	fmt.Printf("Firma esperada: %s\n", expected)
+	fmt.Printf("Firma recibida: %s\n", webhook.Signature.Checksum)
+	fmt.Printf("¿Las firmas coinciden? %t\n", strings.EqualFold(expected, webhook.Signature.Checksum))
+
+	return strings.EqualFold(expected, webhook.Signature.Checksum)
 }
 
 func getInvoiceConfigFromEnv() *domain.InvoiceConfig {
