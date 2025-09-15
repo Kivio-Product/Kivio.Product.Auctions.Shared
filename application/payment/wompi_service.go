@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"time"
 
+	applicationLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/logging"
+	domainLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/logging"
 	paymentDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/payment"
 	wompiapi "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/api/wompi"
+	infrastructureLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/logging"
 )
 
 type WompiService interface {
@@ -21,10 +24,15 @@ type WompiService interface {
 
 type wompiService struct {
 	client *wompiapi.WompiClient
+	logger applicationLogging.ServiceLogger
 }
 
 func NewWompiService(client *wompiapi.WompiClient) WompiService {
-	return &wompiService{client: client}
+	loggerRepo := infrastructureLogging.GetLoggerRepository()
+	return &wompiService{
+		client: client,
+		logger: applicationLogging.NewServiceLogger(loggerRepo, "WompiService"),
+	}
 }
 
 func (s *wompiService) GenerateIntegritySignature(
@@ -53,7 +61,41 @@ func (s *wompiService) GenerateIntegritySignature(
 }
 
 func (s *wompiService) CreateTransaction(ctx context.Context, req *paymentDomain.WompiTransactionRequest) (*paymentDomain.WompiTransactionResponse, error) {
-	return s.client.CreateTransaction(req)
+	start := time.Now()
+
+	logFields := domainLogging.Fields{
+		"amount_cents":      req.AmountInCents,
+		"currency":          req.Currency,
+		"reference":         req.Reference,
+		"payment_source_id": req.PaymentSourceId,
+		"customer_email":    req.CustomerEmail,
+	}
+
+	s.logger.LogServiceStart(ctx, "WompiService", "CreateTransaction", logFields)
+	s.logger.LogExternalCall(ctx, "Wompi", "CreateTransaction", 0, true, logFields)
+
+	resp, err := s.client.CreateTransaction(req)
+	duration := time.Since(start)
+
+	if err != nil {
+		s.logger.LogServiceError(ctx, "WompiService", "CreateTransaction", err, duration, logFields)
+		s.logger.LogExternalCall(ctx, "Wompi", "CreateTransaction", duration, false, domainLogging.Fields{
+			"error":     err.Error(),
+			"reference": req.Reference,
+		})
+		return nil, err
+	}
+
+	successFields := logFields
+	if resp != nil {
+		successFields["transaction_id"] = resp.Data.ID
+		successFields["transaction_status"] = resp.Data.Status
+	}
+
+	s.logger.LogServiceSuccess(ctx, "WompiService", "CreateTransaction", duration, successFields)
+	s.logger.LogExternalCall(ctx, "Wompi", "CreateTransaction", duration, true, successFields)
+
+	return resp, nil
 }
 
 func (s *wompiService) GetAcceptanceToken(ctx context.Context) (string, error) {

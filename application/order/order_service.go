@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 	itemInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item"
@@ -14,8 +15,11 @@ import (
 
 	billing "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/billing"
 	emailservices "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
+	applicationLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/logging"
 	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
 	payment "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/payment"
+	domainLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/logging"
+	infrastructureLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/logging"
 	"github.com/jung-kurt/gofpdf"
 	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/language"
@@ -47,13 +51,36 @@ type orderService struct {
 	offerService   offerService.IOfferService
 	wompiService   payment.WompiService
 	billingService billing.BillingService
+	logger         applicationLogging.ServiceLogger
 }
 
 func NewOrderService(repo orderInfrastructure.OrderRepository, orderFactory domain.OrderFactory, itemSpecRepo itemSpecInfrastructure.ItemSpecificationRepository, itemRepo itemInfrastructure.ItemRepository, emailService emailservices.EmailServiceInterface, offerService offerService.IOfferService, wompiService payment.WompiService, billingService billing.BillingService) OrderService {
-	return &orderService{repo: repo, orderFactory: orderFactory, itemSpecRepo: itemSpecRepo, itemRepo: itemRepo, emailService: emailService, offerService: offerService, wompiService: wompiService, billingService: billingService}
+	loggerRepo := infrastructureLogging.GetLoggerRepository()
+	return &orderService{
+		repo: repo, 
+		orderFactory: orderFactory, 
+		itemSpecRepo: itemSpecRepo, 
+		itemRepo: itemRepo, 
+		emailService: emailService, 
+		offerService: offerService, 
+		wompiService: wompiService, 
+		billingService: billingService,
+		logger: applicationLogging.NewServiceLogger(loggerRepo, "OrderService"),
+	}
 }
 
 func (s *orderService) CreateOrder(ctx context.Context, input domain.OrderInput) (*domain.Order, error) {
+	start := time.Now()
+	
+	logFields := domainLogging.Fields{
+		"customer_id":           input.CustomerId,
+		"offer_id":              input.OfferId,
+		"point_of_sale_id":      input.PointOfSaleId,
+		"offered_amount":        input.OfferedAmount,
+		"item_specification_id": input.ItemSpecificationId,
+	}
+	
+	s.logger.LogServiceStart(ctx, "OrderService", "CreateOrder", logFields)
 
 	order, err := s.orderFactory.CreateOrder(
 		input.CustomerId,
@@ -67,6 +94,8 @@ func (s *orderService) CreateOrder(ctx context.Context, input domain.OrderInput)
 		1, // Default quantity to 1 for single item orders
 	)
 	if err != nil {
+		duration := time.Since(start)
+		s.logger.LogServiceError(ctx, "OrderService", "CreateOrder", err, duration, logFields)
 		return &domain.Order{}, err
 	}
 
@@ -75,13 +104,23 @@ func (s *orderService) CreateOrder(ctx context.Context, input domain.OrderInput)
 	} else {
 		order.State = "Pending"
 	}
+	
+	logFields["order_id"] = order.OrderId
+	logFields["order_state"] = order.State
+	logFields["wompi_id_payment"] = input.WompiIdPayment
 
 	order.WompiIdPayment = input.WompiIdPayment
 	err = s.repo.SaveOrder(ctx, order)
 
 	if err != nil {
+		duration := time.Since(start)
+		s.logger.LogServiceError(ctx, "OrderService", "CreateOrder", err, duration, logFields)
 		return &domain.Order{}, err
 	}
+	
+	duration := time.Since(start)
+	s.logger.LogServiceSuccess(ctx, "OrderService", "CreateOrder", duration, logFields)
+	s.logger.LogBusinessEvent(ctx, "order_created", logFields)
 
 	return order, nil
 }
