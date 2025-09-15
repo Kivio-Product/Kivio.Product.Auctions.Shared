@@ -3,11 +3,15 @@ package invoice
 import (
 	"context"
 	"fmt"
+	"time"
 
+	applicationLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/logging"
 	billingDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/billing"
 	invoiceDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/invoice"
+	"github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/logging"
 	orderDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 	siigoClient "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/api/siigo"
+	infrastructureLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/logging"
 )
 
 type InvoiceService interface {
@@ -17,18 +21,50 @@ type InvoiceService interface {
 type invoiceService struct {
 	siigoClient    siigoClient.SiigoClient
 	invoiceFactory invoiceDomain.InvoiceFactory
+	serviceLogger  *applicationLogging.ServiceLogger
+	eventLogger    *logging.DomainEventLogger
 }
 
 func NewInvoiceService(siigoClient siigoClient.SiigoClient, invoiceFactory invoiceDomain.InvoiceFactory) InvoiceService {
+	loggerRepo := infrastructureLogging.GetLoggerRepository()
+	serviceLogger := applicationLogging.NewServiceLogger(loggerRepo, "InvoiceService")
+	eventLogger := logging.NewDomainEventLogger(loggerRepo.GetLogger())
+
 	return &invoiceService{
 		siigoClient:    siigoClient,
 		invoiceFactory: invoiceFactory,
+		serviceLogger:  serviceLogger,
+		eventLogger:    eventLogger,
 	}
 }
 
 func (s *invoiceService) CreateInvoiceForOrders(ctx context.Context, billingID string, orders []*orderDomain.Order, customer *billingDomain.Customer, invoiceConfig *billingDomain.InvoiceConfig, posName string) (*invoiceDomain.SiigoInvoiceResponse, error) {
+	start := time.Now()
+
+	orderIds := make([]string, len(orders))
+	var totalAmountSum float64
+	for i, order := range orders {
+		orderIds[i] = order.OrderId
+		totalAmountSum += float64(order.OfferedAmount)
+	}
+
+	s.serviceLogger.LogServiceStart(ctx, "CreateInvoiceForOrders", map[string]interface{}{
+		"billing_id":     billingID,
+		"order_count":    len(orders),
+		"order_ids":      orderIds,
+		"customer_id":    customer.Identification,
+		"customer_name":  customer.Name,
+		"pos_name":       posName,
+		"total_amount":   totalAmountSum,
+	})
+
 	if len(orders) == 0 {
-		return nil, fmt.Errorf("no orders provided for invoice creation")
+		err := fmt.Errorf("no orders provided for invoice creation")
+		s.serviceLogger.LogServiceError(ctx, "CreateInvoiceForOrders", err, map[string]interface{}{
+			"billing_id": billingID,
+			"error":      "no_orders_provided",
+		})
+		return nil, err
 	}
 
 	firstOrder := orders[0]
@@ -115,13 +151,53 @@ func (s *invoiceService) CreateInvoiceForOrders(ctx context.Context, billingID s
 
 	siigoInvoice, err := s.invoiceFactory.CreateSiigoInvoice(invoiceRequest)
 	if err != nil {
+		s.serviceLogger.LogServiceError(ctx, "CreateInvoiceForOrders", err, map[string]interface{}{
+			"billing_id":   billingID,
+			"customer_id":  customer.Identification,
+			"order_count":  len(orders),
+			"error":        "failed_to_create_siigo_invoice",
+		})
 		return nil, fmt.Errorf("error creating Siigo invoice: %w", err)
 	}
 
+	s.serviceLogger.LogExternalAPICall(ctx, "Siigo", "/invoices", 0, false, map[string]interface{}{
+		"operation":    "create_invoice",
+		"billing_id":   billingID,
+		"customer_id":  customer.Identification,
+		"total_amount": totalAmount,
+		"order_count":  len(orders),
+	})
+
 	invoiceResponse, err := s.siigoClient.CreateInvoice(ctx, siigoInvoice)
 	if err != nil {
+		s.serviceLogger.LogServiceError(ctx, "CreateInvoiceForOrders", err, map[string]interface{}{
+			"billing_id":   billingID,
+			"customer_id":  customer.Identification,
+			"total_amount": totalAmount,
+			"error":        "failed_to_send_invoice_to_siigo",
+		})
 		return nil, fmt.Errorf("error sending invoice to Siigo: %w", err)
 	}
+
+	s.serviceLogger.LogWorkflow(ctx, "InvoiceGeneration", "InvoiceCreated", map[string]interface{}{
+		"invoice_id":     invoiceResponse.ID,
+		"invoice_number": invoiceResponse.Number,
+		"billing_id":     billingID,
+		"customer_id":    customer.Identification,
+		"total_amount":   invoiceResponse.Total,
+		"order_count":    len(orders),
+		"pos_id":         posID,
+	})
+
+	s.serviceLogger.LogServiceEnd(ctx, "CreateInvoiceForOrders", time.Since(start), map[string]interface{}{
+		"billing_id":     billingID,
+		"invoice_id":     invoiceResponse.ID,
+		"invoice_number": invoiceResponse.Number,
+		"customer_id":    customer.Identification,
+		"total_amount":   invoiceResponse.Total,
+		"order_count":    len(orders),
+		"success":        true,
+	})
 
 	fmt.Printf("Factura creada exitosamente en Siigo: ID=%s, Number=%d, Total=%.2f\n",
 		invoiceResponse.ID, invoiceResponse.Number, invoiceResponse.Total)

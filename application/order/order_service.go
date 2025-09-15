@@ -4,11 +4,15 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
+	applicationLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/logging"
+	"github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/logging"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 	itemInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item"
 	itemSpecInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item_specification"
 	orderInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/order"
+	infrastructureLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/logging"
 
 	"bytes"
 
@@ -47,13 +51,39 @@ type orderService struct {
 	offerService   offerService.IOfferService
 	wompiService   payment.WompiService
 	billingService billing.BillingService
+	serviceLogger  *applicationLogging.ServiceLogger
+	eventLogger    *logging.DomainEventLogger
 }
 
 func NewOrderService(repo orderInfrastructure.OrderRepository, orderFactory domain.OrderFactory, itemSpecRepo itemSpecInfrastructure.ItemSpecificationRepository, itemRepo itemInfrastructure.ItemRepository, emailService emailservices.EmailServiceInterface, offerService offerService.IOfferService, wompiService payment.WompiService, billingService billing.BillingService) OrderService {
-	return &orderService{repo: repo, orderFactory: orderFactory, itemSpecRepo: itemSpecRepo, itemRepo: itemRepo, emailService: emailService, offerService: offerService, wompiService: wompiService, billingService: billingService}
+	loggerRepo := infrastructureLogging.GetLoggerRepository()
+	serviceLogger := applicationLogging.NewServiceLogger(loggerRepo, "OrderService")
+	eventLogger := logging.NewDomainEventLogger(loggerRepo.GetLogger())
+
+	return &orderService{
+		repo:          repo,
+		orderFactory:  orderFactory,
+		itemSpecRepo:  itemSpecRepo,
+		itemRepo:      itemRepo,
+		emailService:  emailService,
+		offerService:  offerService,
+		wompiService:  wompiService,
+		billingService: billingService,
+		serviceLogger: serviceLogger,
+		eventLogger:   eventLogger,
+	}
 }
 
 func (s *orderService) CreateOrder(ctx context.Context, input domain.OrderInput) (*domain.Order, error) {
+	start := time.Now()
+	s.serviceLogger.LogServiceStart(ctx, "CreateOrder", map[string]interface{}{
+		"customer_id":           input.CustomerId,
+		"offer_id":              input.OfferId,
+		"item_specification_id": input.ItemSpecificationId,
+		"pos_id":                input.PointOfSaleId,
+		"offered_amount":        input.OfferedAmount,
+		"has_wompi_payment":     input.WompiIdPayment != "",
+	})
 
 	order, err := s.orderFactory.CreateOrder(
 		input.CustomerId,
@@ -67,6 +97,11 @@ func (s *orderService) CreateOrder(ctx context.Context, input domain.OrderInput)
 		1, // Default quantity to 1 for single item orders
 	)
 	if err != nil {
+		s.serviceLogger.LogServiceError(ctx, "CreateOrder", err, map[string]interface{}{
+			"customer_id": input.CustomerId,
+			"offer_id":    input.OfferId,
+			"error":       "failed_to_create_order",
+		})
 		return &domain.Order{}, err
 	}
 
@@ -80,8 +115,23 @@ func (s *orderService) CreateOrder(ctx context.Context, input domain.OrderInput)
 	err = s.repo.SaveOrder(ctx, order)
 
 	if err != nil {
+		s.serviceLogger.LogServiceError(ctx, "CreateOrder", err, map[string]interface{}{
+			"order_id":    order.OrderId,
+			"customer_id": input.CustomerId,
+			"error":       "failed_to_save_order",
+		})
 		return &domain.Order{}, err
 	}
+
+	s.eventLogger.LogOrderCreated(ctx, order.OrderId, order.CustomerId, float64(order.OfferedAmount))
+	s.serviceLogger.LogServiceEnd(ctx, "CreateOrder", time.Since(start), map[string]interface{}{
+		"order_id":      order.OrderId,
+		"customer_id":   input.CustomerId,
+		"offer_id":      input.OfferId,
+		"initial_state": order.State,
+		"amount":        order.OfferedAmount,
+		"success":       true,
+	})
 
 	return order, nil
 }
@@ -204,12 +254,51 @@ func (s *orderService) UpdateOrder(ctx context.Context, input domain.OrderInput)
 }
 
 func (s *orderService) UpdateOrderState(ctx context.Context, orderId string, state string) error {
+	start := time.Now()
+	s.serviceLogger.LogServiceStart(ctx, "UpdateOrderState", map[string]interface{}{
+		"order_id":  orderId,
+		"new_state": state,
+	})
+
 	order, err := s.repo.GetIdOrder(ctx, orderId)
 	if err != nil {
+		s.serviceLogger.LogServiceError(ctx, "UpdateOrderState", err, map[string]interface{}{
+			"order_id": orderId,
+			"error":    "failed_to_get_order",
+		})
 		return err
 	}
+
+	oldState := order.State
 	order.State = state
-	return s.repo.SaveOrder(ctx, order)
+
+	err = s.repo.SaveOrder(ctx, order)
+	if err != nil {
+		s.serviceLogger.LogServiceError(ctx, "UpdateOrderState", err, map[string]interface{}{
+			"order_id":  orderId,
+			"old_state": oldState,
+			"new_state": state,
+			"error":     "failed_to_save_order",
+		})
+		return err
+	}
+
+	s.serviceLogger.LogWorkflow(ctx, "OrderStateUpdate", state, map[string]interface{}{
+		"order_id":    orderId,
+		"old_state":   oldState,
+		"new_state":   state,
+		"customer_id": order.CustomerId,
+		"amount":      order.OfferedAmount,
+	})
+
+	s.serviceLogger.LogServiceEnd(ctx, "UpdateOrderState", time.Since(start), map[string]interface{}{
+		"order_id":  orderId,
+		"old_state": oldState,
+		"new_state": state,
+		"success":   true,
+	})
+
+	return nil
 }
 
 func (s *orderService) GetAllOrdersWithDetails(ctx context.Context) ([]domain.OrderDetail, error) {

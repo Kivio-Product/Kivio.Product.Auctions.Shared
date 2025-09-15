@@ -9,13 +9,16 @@ import (
 	"sync"
 	"time"
 
+	applicationLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/logging"
 	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
 	itemSpecService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/item_specification"
 	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
+	"github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/logging"
 	itemSpecificationDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item_specification"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/rule"
 	ruleSpecDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/rule_specification"
 	offerClient "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/api/offer"
+	infrastructureLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/logging"
 	offerInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/offer"
 	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/rule"
 )
@@ -33,6 +36,8 @@ type ruleVerificationService struct {
 	itemSpecSvc      itemSpecService.ItemSpecificationService
 	ecommerceSvc     ecommerceService.EcommerceService
 	ecommerceCredSvc ecommerceService.EcommerceCredentialsService
+	serviceLogger    *applicationLogging.ServiceLogger
+	eventLogger      *logging.DomainEventLogger
 }
 
 func NewRuleVerificationService(
@@ -44,6 +49,10 @@ func NewRuleVerificationService(
 	ecommerceSvc ecommerceService.EcommerceService,
 	ecommerceCredSvc ecommerceService.EcommerceCredentialsService,
 ) RuleVerificationService {
+	loggerRepo := infrastructureLogging.GetLoggerRepository()
+	serviceLogger := applicationLogging.NewServiceLogger(loggerRepo, "RuleVerificationService")
+	eventLogger := logging.NewDomainEventLogger(loggerRepo.GetLogger())
+
 	return &ruleVerificationService{
 		ruleRepo:         ruleRepo,
 		offerRepo:        offerRepo,
@@ -52,6 +61,8 @@ func NewRuleVerificationService(
 		itemSpecSvc:      itemSpecSvc,
 		ecommerceSvc:     ecommerceSvc,
 		ecommerceCredSvc: ecommerceCredSvc,
+		serviceLogger:    serviceLogger,
+		eventLogger:      eventLogger,
 	}
 }
 
@@ -131,10 +142,25 @@ func (s *ruleVerificationService) sendTokenAndUpdateState(ctx context.Context, o
 }
 
 func (s *ruleVerificationService) ProcessRules(ctx context.Context, offerId string) (bool, error) {
+	start := time.Now()
+	s.serviceLogger.LogServiceStart(ctx, "ProcessRules", map[string]interface{}{
+		"offer_id": offerId,
+	})
+
 	rules, err := s.ruleRepo.GetOfferRules(offerId)
 	if err != nil {
+		s.serviceLogger.LogServiceError(ctx, "ProcessRules", err, map[string]interface{}{
+			"offer_id": offerId,
+			"error":    "failed_to_get_rules",
+		})
 		return false, fmt.Errorf("fallo al obtener reglas para la oferta %s: %w", offerId, err)
 	}
+
+	s.serviceLogger.LogBusinessRule(ctx, "RuleEvaluation", true, map[string]interface{}{
+		"offer_id":    offerId,
+		"rules_count": len(rules),
+		"rule_ids":    getRuleIds(rules),
+	})
 
 	var (
 		wg            sync.WaitGroup
@@ -174,18 +200,39 @@ func (s *ruleVerificationService) ProcessRules(ctx context.Context, offerId stri
 	}
 
 	wg.Wait()
+
+	s.serviceLogger.LogServiceEnd(ctx, "ProcessRules", time.Since(start), map[string]interface{}{
+		"offer_id":        offerId,
+		"rules_count":     len(rules),
+		"has_active_rule": hasActiveRule,
+		"success":         true,
+	})
+
 	return hasActiveRule, nil
 }
 
 func (s *ruleVerificationService) processRule(ctx context.Context, rule *domain.Rule, hasActiveRule *bool, ecommerceItems map[string]interface{}) error {
 	var mu sync.Mutex
+	oldState := rule.State
+
 	specifications, err := s.ruleRepo.GetRulesSpecification(rule.RuleId)
 	if err != nil {
+		s.serviceLogger.LogServiceError(ctx, "ProcessRule", err, map[string]interface{}{
+			"rule_id":  rule.RuleId,
+			"offer_id": rule.OfferId,
+			"error":    "failed_to_get_rule_specifications",
+		})
 		return fmt.Errorf("fallo al obtener especificaciones para la regla %s: %w", rule.RuleId, err)
 	}
 
 	itemSpecs, err := s.itemSpecSvc.GetItemSpecByOfferId(ctx, rule.OfferId, rule.PosId)
 	if err != nil {
+		s.serviceLogger.LogServiceError(ctx, "ProcessRule", err, map[string]interface{}{
+			"rule_id":  rule.RuleId,
+			"offer_id": rule.OfferId,
+			"pos_id":   rule.PosId,
+			"error":    "failed_to_get_item_specifications",
+		})
 		return fmt.Errorf("fallo al obtener especificaciones de artículo para la oferta %s y POS %s: %w", rule.OfferId, rule.PosId, err)
 	}
 
@@ -193,8 +240,28 @@ func (s *ruleVerificationService) processRule(ctx context.Context, rule *domain.
 	rule.State = getRuleState(isActive)
 
 	if err := s.ruleRepo.SaveRule(ctx, rule); err != nil {
+		s.serviceLogger.LogServiceError(ctx, "ProcessRule", err, map[string]interface{}{
+			"rule_id":  rule.RuleId,
+			"offer_id": rule.OfferId,
+			"error":    "failed_to_save_rule",
+		})
 		return fmt.Errorf("fallo al guardar el estado para la regla %s: %w", rule.RuleId, err)
 	}
+
+	if oldState != rule.State {
+		s.eventLogger.LogRuleStateChange(ctx, rule.RuleId, oldState, rule.State)
+	}
+
+	s.serviceLogger.LogBusinessRule(ctx, "RuleEvaluated", isActive, map[string]interface{}{
+		"rule_id":            rule.RuleId,
+		"offer_id":           rule.OfferId,
+		"pos_id":             rule.PosId,
+		"old_state":          oldState,
+		"new_state":          rule.State,
+		"is_active":          isActive,
+		"specifications_count": len(specifications),
+		"item_specs_count":   len(itemSpecs),
+	})
 
 	if isActive {
 		mu.Lock()
@@ -536,4 +603,12 @@ func getRuleState(isActive bool) string {
 		return "Active"
 	}
 	return "Inactive"
+}
+
+func getRuleIds(rules []domain.Rule) []string {
+	ids := make([]string, len(rules))
+	for i, rule := range rules {
+		ids[i] = rule.RuleId
+	}
+	return ids
 }

@@ -10,6 +10,8 @@ import (
 
 	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
 	emailService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
+	applicationLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/logging"
+	"github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/logging"
 	itemDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
 	itemSpecDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item_specification"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/offer"
@@ -18,6 +20,7 @@ import (
 	itemSpecRepository "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item_specification"
 	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/offer"
 	pointOfSaleRespository "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/point_of_sale"
+	infrastructureLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/logging"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
 
@@ -50,6 +53,8 @@ type OfferService struct {
 	ecommerceCredSvc       ecommerceService.EcommerceCredentialsService
 	scheduler              scheduler.SchedulerService
 	pointOfSaleRespository pointOfSaleRespository.IPosRepository
+	serviceLogger          *applicationLogging.ServiceLogger
+	eventLogger            *logging.DomainEventLogger
 }
 
 type OfferWithDetails struct {
@@ -69,6 +74,10 @@ type OfferWithItemsAndSpecs struct {
 }
 
 func NewofferService(repo infrastructure.IOfferRepository, offerFactory domain.OfferFactory, emailSender emailService.EmailServiceInterface, itemRepository itemRepository.ItemRepository, itemSpecRepository itemSpecRepository.ItemSpecificationRepository, ecommerceService ecommerceService.EcommerceService, ecommerceCredSvc ecommerceService.EcommerceCredentialsService, scheduler scheduler.SchedulerService, pointOfSaleRespository pointOfSaleRespository.IPosRepository) IOfferService {
+	loggerRepo := infrastructureLogging.GetLoggerRepository()
+	serviceLogger := applicationLogging.NewServiceLogger(loggerRepo, "OfferService")
+	eventLogger := logging.NewDomainEventLogger(loggerRepo.GetLogger())
+
 	return &OfferService{
 		repo:                   repo,
 		offerFactory:           offerFactory,
@@ -79,32 +88,103 @@ func NewofferService(repo infrastructure.IOfferRepository, offerFactory domain.O
 		ecommerceCredSvc:       ecommerceCredSvc,
 		scheduler:              scheduler,
 		pointOfSaleRespository: pointOfSaleRespository,
+		serviceLogger:          serviceLogger,
+		eventLogger:            eventLogger,
 	}
 }
 
 func (s *OfferService) SendOfferEmail(ctx context.Context, auctionURL string, offerID string) error {
+	start := time.Now()
+	s.serviceLogger.LogServiceStart(ctx, "SendOfferEmail", map[string]interface{}{
+		"offer_id":    offerID,
+		"auction_url": auctionURL,
+	})
+
 	offer, err := s.GetOfferById(ctx, offerID)
 	if err != nil {
+		s.serviceLogger.LogServiceError(ctx, "SendOfferEmail", err, map[string]interface{}{
+			"offer_id": offerID,
+			"error":    "failed_to_get_offer",
+		})
 		return err
 	}
 
 	pos, err := s.pointOfSaleRespository.GetPosById(ctx, offer.PosId)
 	if err != nil {
+		s.serviceLogger.LogServiceError(ctx, "SendOfferEmail", err, map[string]interface{}{
+			"offer_id": offerID,
+			"pos_id":   offer.PosId,
+			"error":    "failed_to_get_pos",
+		})
 		return err
 	}
 
-	return s.emailSender.NotifyOffer(ctx, auctionURL, offer.Name, offer.PosId, pos.Name)
+	err = s.emailSender.NotifyOffer(ctx, auctionURL, offer.Name, offer.PosId, pos.Name)
+	if err != nil {
+		s.serviceLogger.LogServiceError(ctx, "SendOfferEmail", err, map[string]interface{}{
+			"offer_id":   offerID,
+			"pos_id":     offer.PosId,
+			"offer_name": offer.Name,
+			"error":      "failed_to_send_email",
+		})
+		return err
+	}
+
+	s.serviceLogger.LogServiceEnd(ctx, "SendOfferEmail", time.Since(start), map[string]interface{}{
+		"offer_id":   offerID,
+		"pos_id":     offer.PosId,
+		"offer_name": offer.Name,
+		"success":    true,
+	})
+
+	return nil
 }
 
 func (s *OfferService) GenerateOffer(ctx context.Context, name, description, posId, typer string, auctionTime int64) (*domain.Offer, error) {
+	start := time.Now()
+	s.serviceLogger.LogServiceStart(ctx, "GenerateOffer", map[string]interface{}{
+		"offer_name":    name,
+		"pos_id":        posId,
+		"offer_type":    typer,
+		"auction_time":  auctionTime,
+	})
+
 	offers, err := s.offerFactory.CreateOffer(name, description, posId, typer, auctionTime)
 	if err != nil {
+		s.serviceLogger.LogServiceError(ctx, "GenerateOffer", err, map[string]interface{}{
+			"offer_name": name,
+			"pos_id":     posId,
+			"error":      "failed_to_create_offer",
+		})
 		return &domain.Offer{}, err
 	}
+
 	err = offers.UpdateState("Created")
-	if err := s.repo.SaveOffer(ctx, offers); err != nil {
+	if err != nil {
+		s.serviceLogger.LogServiceError(ctx, "GenerateOffer", err, map[string]interface{}{
+			"offer_id": offers.OfferId,
+			"error":    "failed_to_update_state",
+		})
 		return &domain.Offer{}, err
 	}
+
+	if err := s.repo.SaveOffer(ctx, offers); err != nil {
+		s.serviceLogger.LogServiceError(ctx, "GenerateOffer", err, map[string]interface{}{
+			"offer_id": offers.OfferId,
+			"error":    "failed_to_save_offer",
+		})
+		return &domain.Offer{}, err
+	}
+
+	s.eventLogger.LogOfferStateChange(ctx, offers.OfferId, "", "Created")
+	s.serviceLogger.LogServiceEnd(ctx, "GenerateOffer", time.Since(start), map[string]interface{}{
+		"offer_id":     offers.OfferId,
+		"offer_name":   name,
+		"pos_id":       posId,
+		"initial_state": "Created",
+		"success":      true,
+	})
+
 	return offers, nil
 }
 
@@ -118,11 +198,33 @@ func (s *OfferService) UpdateOffer(ctx context.Context, offerId, description, na
 }
 
 func (s *OfferService) UpdateOfferState(ctx context.Context, offerId, state string) error {
+	start := time.Now()
+	s.serviceLogger.LogServiceStart(ctx, "UpdateOfferState", map[string]interface{}{
+		"offer_id":  offerId,
+		"new_state": state,
+	})
+
 	offer, err := s.repo.GetOfferById(ctx, offerId)
-	err = offer.UpdateState(state)
 	if err != nil {
+		s.serviceLogger.LogServiceError(ctx, "UpdateOfferState", err, map[string]interface{}{
+			"offer_id": offerId,
+			"error":    "failed_to_get_offer",
+		})
 		return err
 	}
+
+	oldState := offer.State
+	err = offer.UpdateState(state)
+	if err != nil {
+		s.serviceLogger.LogServiceError(ctx, "UpdateOfferState", err, map[string]interface{}{
+			"offer_id":  offerId,
+			"old_state": oldState,
+			"new_state": state,
+			"error":     "failed_to_update_state",
+		})
+		return err
+	}
+
 	if state == domain.StateActive {
 		offer.SetOfferTime(time.Now())
 		if offer.OfferTime != nil && offer.Type == "Regular auction" {
@@ -132,11 +234,45 @@ func (s *OfferService) UpdateOfferState(ctx context.Context, offerId, state stri
 			lambdaArn := os.Getenv("ORDER_STATE_LAMBDA_ARN")
 			err := s.scheduler.ScheduleLambda(*offer.OfferTime, timeToSum, lambdaArn, ruleName, payload)
 			if err != nil {
+				s.serviceLogger.LogServiceError(ctx, "UpdateOfferState", err, map[string]interface{}{
+					"offer_id":     offerId,
+					"rule_name":    ruleName,
+					"lambda_arn":   lambdaArn,
+					"auction_time": offer.AuctionTime,
+					"error":        "failed_to_schedule_lambda",
+				})
 				fmt.Printf("Error programando schedule para oferta %s: %v\n", offer.OfferId, err)
+			} else {
+				s.serviceLogger.LogWorkflow(ctx, "OfferActivation", "ScheduledLambda", map[string]interface{}{
+					"offer_id":     offerId,
+					"rule_name":    ruleName,
+					"auction_time": offer.AuctionTime,
+					"time_to_sum":  timeToSum.String(),
+				})
 			}
 		}
 	}
-	return s.repo.SaveOffer(ctx, offer)
+
+	err = s.repo.SaveOffer(ctx, offer)
+	if err != nil {
+		s.serviceLogger.LogServiceError(ctx, "UpdateOfferState", err, map[string]interface{}{
+			"offer_id":  offerId,
+			"old_state": oldState,
+			"new_state": state,
+			"error":     "failed_to_save_offer",
+		})
+		return err
+	}
+
+	s.eventLogger.LogOfferStateChange(ctx, offerId, oldState, state)
+	s.serviceLogger.LogServiceEnd(ctx, "UpdateOfferState", time.Since(start), map[string]interface{}{
+		"offer_id":  offerId,
+		"old_state": oldState,
+		"new_state": state,
+		"success":   true,
+	})
+
+	return nil
 }
 
 func (s *OfferService) GetOffers(ctx context.Context) ([]domain.Offer, error) {
