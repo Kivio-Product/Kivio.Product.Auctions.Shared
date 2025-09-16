@@ -5,7 +5,7 @@ import (
 )
 
 type EmailServiceInterface interface {
-	NotifyOffer(ctx context.Context, auctionURL string, offerName string, posId string, posName string) error
+	NotifyOffer(ctx context.Context, auctionURL, unsubscribeUrl string, offerName string, posId string, posName string) error
 	NotifyOrder(ctx context.Context, state string, customerEmail string, totalOfferedAmount int64, concatenatedItemNames string, posName string) error
 	NotifyOrderStatus(ctx context.Context, customerId string, status string, itemNames string, offeredAmount int64, posId string) error
 	NotifyAdminApprovedOrders(ctx context.Context, adminEmail string, templateData map[string]string) error
@@ -30,8 +30,8 @@ func NewEmailService(
 	}
 }
 
-func (s *EmailService) NotifyOffer(ctx context.Context, auctionURL string, offerName string, posId string, posName string) error {
-	return s.notifyOffer.Execute(ctx, auctionURL, offerName, posId, posName)
+func (s *EmailService) NotifyOffer(ctx context.Context, auctionURL, unsubscribeUrl string, offerName string, posId string, posName string) error {
+	return s.notifyOffer.Execute(ctx, auctionURL, unsubscribeUrl, offerName, posId, posName)
 }
 
 func (s *EmailService) NotifyOrder(ctx context.Context, state string, customerEmail string, totalOfferedAmount int64, concatenatedItemNames string, posName string) error {

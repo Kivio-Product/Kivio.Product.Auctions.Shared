@@ -32,7 +32,7 @@ type IOfferService interface {
 	GetOfferById(ctx context.Context, id string) (*domain.Offer, error)
 	DeleteOfferById(ctx context.Context, id string) error
 	GetOffersByPosId(ctx context.Context, id string, limit string, lastEvaluatedKey map[string]*dynamodb.AttributeValue) ([]domain.Offer, map[string]*dynamodb.AttributeValue, error)
-	SendOfferEmail(ctx context.Context, auctionURL string, offerID string) error
+	SendOfferEmail(ctx context.Context, auctionURL, unsubscribeUrl string, offerID string) error
 	GetOffersWithSpecsAndItems(
 		ctx context.Context,
 		posId string,
@@ -93,7 +93,7 @@ func NewofferService(repo infrastructure.IOfferRepository, offerFactory domain.O
 	}
 }
 
-func (s *OfferService) SendOfferEmail(ctx context.Context, auctionURL string, offerID string) error {
+func (s *OfferService) SendOfferEmail(ctx context.Context, auctionURL, unsubscribeUrl string, offerID string) error {
 	start := time.Now()
 	s.serviceLogger.LogServiceStart(ctx, "SendOfferEmail", map[string]interface{}{
 		"offer_id":    offerID,
@@ -119,7 +119,7 @@ func (s *OfferService) SendOfferEmail(ctx context.Context, auctionURL string, of
 		return err
 	}
 
-	err = s.emailSender.NotifyOffer(ctx, auctionURL, offer.Name, offer.PosId, pos.Name)
+	err = s.emailSender.NotifyOffer(ctx, auctionURL, unsubscribeUrl, offer.Name, offer.PosId, pos.Name)
 	if err != nil {
 		s.serviceLogger.LogServiceError(ctx, "SendOfferEmail", err, map[string]interface{}{
 			"offer_id":   offerID,
