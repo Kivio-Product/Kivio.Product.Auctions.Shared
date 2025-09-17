@@ -28,7 +28,7 @@ func NewSNSNotificationService(
 }
 
 type SESBounceNotification struct {
-	NotificationType string `json:"notificationType"`
+	EventType string `json:"eventType"`
 	Bounce           struct {
 		BounceType        string `json:"bounceType"`
 		BouncedRecipients []struct {
@@ -61,7 +61,7 @@ func (s snsNotificationService) HandleNotification(ctx context.Context, typer, m
 			return "", fmt.Errorf("not SES Bounce, ignoring")
 		}
 
-		if bounce.NotificationType == "Bounce" {
+		if bounce.EventType == "Bounce" {
 			var processed []string
 
 			for _, recipient := range bounce.Bounce.BouncedRecipients {
