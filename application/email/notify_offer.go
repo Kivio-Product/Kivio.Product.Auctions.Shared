@@ -42,6 +42,11 @@ func (uc *NotifyOfferUseCase) Execute(ctx context.Context, auctionURL, unsubscri
 	retrieveS3Emails := os.Getenv("SHOULD_RETRIEVE_S3_EMAILS")
 	emailSet := make(map[string]struct{})
 
+	blackListEmails, err := uc.emailBlackListService.GetBlackListEmails()
+	if err != nil {
+		log.Printf("error al obtener emails desde dynamo: %v", err)
+	}
+
 	if retrieveS3Emails == "true" {
 		s3Key := os.Getenv("S3_EMAILS_FILE")
 		if s3Key == "" {
@@ -54,7 +59,9 @@ func (uc *NotifyOfferUseCase) Execute(ctx context.Context, auctionURL, unsubscri
 		for _, line := range strings.Split(content, "\n") {
 			email := strings.TrimSpace(line)
 			if email != "" {
-				emailSet[email] = struct{}{}
+				if _, exists := blackListEmails[email]; !exists {
+					emailSet[email] = struct{}{}
+				}
 			}
 		}
 	} else {
@@ -62,13 +69,8 @@ func (uc *NotifyOfferUseCase) Execute(ctx context.Context, auctionURL, unsubscri
 		if err == nil {
 			customers, err := uc.ecommerceService.GetCustomers(credentials.Context, credentials.ApiURL, credentials.ApiKey)
 			if err == nil {
-				blackListEmails, err := uc.emailBlackListService.GetBlackListEmails()
-				if err != nil {
-					log.Printf("error al obtener emails desde dynamo: %v", err)
-				}
 				for _, customer := range customers {
 					email := strings.TrimSpace(customer.Email)
-					fmt.Print("EMAIL", email)
 					if email != "" {
 						if _, exists := blackListEmails[email]; !exists {
 							emailSet[email] = struct{}{}
