@@ -121,22 +121,7 @@ func (s *OfferProcessingService) ProcessOffer(ctx context.Context, offerId strin
 
 	successfulPaymentCustomers := s.processPaymentsByCustomer(ctx, allWinners)
 
-	winnersWithSuccessfulPayment, winnersWithUnsuccessfulPayment := s.filterWinnersBySuccessfulPayment(allWinners, successfulPaymentCustomers)
-	err = s.sendEmailsGroupedByCustomer(ctx, winnersWithSuccessfulPayment, "Approved", offer.PosId)
-	if err != nil {
-		fmt.Printf("Error sending emails to winners for offer %s: %v\n", offerId, err)
-	}
-
-	s.updateBillingState(ctx, winnersWithSuccessfulPayment, "Approved")
-
-	allLosers = append(allLosers, winnersWithUnsuccessfulPayment...)
-	
-	err = s.sendEmailsGroupedByCustomer(ctx, allLosers, "Rejected", offer.PosId)
-	if err != nil {
-		fmt.Printf("Error sending emails for offer %s: %v\n", offerId, err)
-	}
-
-    s.updateBillingState(ctx, allLosers, "Rejected")
+	fmt.Println("SuccessfulPaymentCustomers", successfulPaymentCustomers)
 
 	err = s.closeOffer(ctx, offer)
 	if err != nil {
