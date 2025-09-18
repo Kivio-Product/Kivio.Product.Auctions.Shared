@@ -326,11 +326,21 @@ func (s *OfferService) GetOffersWithSpecsAndItems(
 	limit int,
 	lastEvaluatedKey map[string]*dynamodb.AttributeValue,
 ) ([]OfferWithItemsAndSpecs, map[string]*dynamodb.AttributeValue, int64, error) {
+	fmt.Printf("=== GetOffersWithSpecsAndItems DEBUG START ===\n")
+	fmt.Printf("Input params - posId: %s, filters: %+v, limit: %d\n", posId, filters, limit)
+
 	offers, lastKey, total, err := s.repo.GetPosOffersFiltered(posId, filters, limit, lastEvaluatedKey)
 	if err != nil {
+		fmt.Printf("ERROR getting offers: %v\n", err)
 		return nil, nil, 0, err
 	}
+	fmt.Printf("Retrieved %d offers, total: %d\n", len(offers), total)
+	for i, offer := range offers {
+		fmt.Printf("Offer %d: ID=%s, Name=%s, State=%s\n", i, offer.OfferId, offer.Name, offer.State)
+	}
+
 	if len(offers) == 0 {
+		fmt.Printf("No offers found, returning early\n")
 		return nil, lastKey, total, nil
 	}
 
@@ -338,96 +348,168 @@ func (s *OfferService) GetOffersWithSpecsAndItems(
 	for i, offer := range offers {
 		offerIds[i] = offer.OfferId
 	}
+	fmt.Printf("Offer IDs to get specs for: %+v\n", offerIds)
 
 	itemSpecs, err := s.itemSpecRepository.GetItemSpecsByOfferIds(ctx, offerIds, posId)
 	if err != nil {
+		fmt.Printf("ERROR getting item specs: %v\n", err)
 		return nil, nil, 0, err
+	}
+	fmt.Printf("Retrieved %d item specs\n", len(itemSpecs))
+	for i, spec := range itemSpecs {
+		fmt.Printf("ItemSpec %d: OfferId=%s, ItemId=%s, IsExternal=%t\n", i, spec.OfferId, spec.ItemId, spec.IsExternal)
 	}
 
 	itemIdSet := make(map[string]struct{})
 	externalSpecs := []itemSpecDomain.ItemSpecification{}
+	fmt.Printf("\n--- Separating internal vs external items ---\n")
 	for _, spec := range itemSpecs {
 		if spec.IsExternal {
+			fmt.Printf("EXTERNAL spec found: ItemId=%s, OfferId=%s\n", spec.ItemId, spec.OfferId)
 			externalSpecs = append(externalSpecs, spec)
 		} else {
+			fmt.Printf("INTERNAL spec found: ItemId=%s, OfferId=%s\n", spec.ItemId, spec.OfferId)
 			itemIdSet[spec.ItemId] = struct{}{}
 		}
 	}
+	fmt.Printf("Total external specs: %d, Total internal item IDs: %d\n", len(externalSpecs), len(itemIdSet))
 
 	itemIds := make([]string, 0, len(itemIdSet))
 
 	for id := range itemIdSet {
 		itemIds = append(itemIds, id)
 	}
+	fmt.Printf("\n--- Getting internal items ---\n")
+	fmt.Printf("Internal item IDs to fetch: %+v\n", itemIds)
 
 	itemsMap := make(map[string]itemDomain.Item)
 	if len(itemIds) > 0 {
-		items, _ := s.itemRepository.BatchGetItemsByIds(ctx, itemIds)
+		items, err := s.itemRepository.BatchGetItemsByIds(ctx, itemIds)
+		if err != nil {
+			fmt.Printf("ERROR getting internal items: %v\n", err)
+		} else {
+			fmt.Printf("Successfully retrieved %d internal items\n", len(items))
+		}
 		for _, item := range items {
+			fmt.Printf("Internal item: ID=%s, Name=%s\n", item.ItemId, item.Name)
 			itemsMap[item.ItemId] = item
 		}
+	} else {
+		fmt.Printf("No internal items to fetch\n")
 	}
 
 	externalItemsMap := make(map[string]itemDomain.Item)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
+
+	fmt.Printf("\n--- Getting external items ---\n")
+	fmt.Printf("Getting credentials for posId: %s\n", posId)
 	creds, err := s.ecommerceCredSvc.GetCredentials(ctx, posId)
+	if err != nil {
+		fmt.Printf("ERROR getting credentials for posId %s: %v\n", posId, err)
+	} else {
+		fmt.Printf("Successfully got credentials - ApiURL: %s, ApiKey exists: %t\n", creds.ApiURL, creds.ApiKey != "")
+	}
+
+	fmt.Printf("Processing %d external specs\n", len(externalSpecs))
 	for _, spec := range externalSpecs {
+		fmt.Printf("Starting goroutine for external item: %s\n", spec.ItemId)
 		wg.Add(1)
 		go func(spec itemSpecDomain.ItemSpecification) {
 			defer wg.Done()
+			fmt.Printf("[GOROUTINE] Processing external item: %s\n", spec.ItemId)
 
 			if err != nil {
+				fmt.Printf("[GOROUTINE] Skipping item %s due to credentials error: %v\n", spec.ItemId, err)
 				return
 			}
+
+			fmt.Printf("[GOROUTINE] Calling ecommerce service for item: %s\n", spec.ItemId)
 			item, err := s.ecommerceService.GetItemByID(ctx, spec.ItemId, creds.ApiURL, creds.ApiKey)
-			if err != nil || item == nil {
+			if err != nil {
+				fmt.Printf("[GOROUTINE] ERROR getting external item %s: %v\n", spec.ItemId, err)
 				return
 			}
+			if item == nil {
+				fmt.Printf("[GOROUTINE] External item %s returned nil\n", spec.ItemId)
+				return
+			}
+
+			fmt.Printf("[GOROUTINE] Successfully got external item: ID=%s, Name=%s\n", item.ItemId, item.Name)
 			mu.Lock()
 			externalItemsMap[spec.ItemId] = *item
+			fmt.Printf("[GOROUTINE] Added external item %s to map\n", spec.ItemId)
 			mu.Unlock()
 		}(spec)
 	}
+	fmt.Printf("Waiting for all external item goroutines to complete...\n")
 	wg.Wait()
+	fmt.Printf("All external item goroutines completed. External items retrieved: %d\n", len(externalItemsMap))
 
+	fmt.Printf("\n--- Organizing specs by offer and item ---\n")
 	specsByOfferAndItem := make(map[string]map[string][]itemSpecDomain.ItemSpecification)
 	for _, spec := range itemSpecs {
 		if _, ok := specsByOfferAndItem[spec.OfferId]; !ok {
 			specsByOfferAndItem[spec.OfferId] = make(map[string][]itemSpecDomain.ItemSpecification)
 		}
 		specsByOfferAndItem[spec.OfferId][spec.ItemId] = append(specsByOfferAndItem[spec.OfferId][spec.ItemId], spec)
+		fmt.Printf("Organized spec: OfferId=%s, ItemId=%s, IsExternal=%t\n", spec.OfferId, spec.ItemId, spec.IsExternal)
 	}
+	fmt.Printf("Total offers with specs: %d\n", len(specsByOfferAndItem))
 
+	fmt.Printf("\n--- Building final result ---\n")
 	var result []OfferWithItemsAndSpecs
 	for _, offer := range offers {
+		fmt.Printf("\nProcessing offer: %s (%s)\n", offer.OfferId, offer.Name)
 		itemSpecsMap := specsByOfferAndItem[offer.OfferId]
+		fmt.Printf("Found %d item groups for this offer\n", len(itemSpecsMap))
+
 		var itemsWithSpecs []ItemWithSpecs
 		for itemId, specs := range itemSpecsMap {
+			fmt.Printf("  Processing item: %s with %d specs\n", itemId, len(specs))
 			var item itemDomain.Item
 			if len(specs) > 0 && specs[0].IsExternal {
+				fmt.Printf("    Looking for EXTERNAL item %s in externalItemsMap\n", itemId)
 				itm, ok := externalItemsMap[itemId]
 				if !ok {
+					fmt.Printf("    EXTERNAL item %s NOT FOUND in externalItemsMap - SKIPPING\n", itemId)
 					continue
 				}
+				fmt.Printf("    EXTERNAL item %s FOUND: %s\n", itemId, itm.Name)
 				item = itm
 			} else {
+				fmt.Printf("    Looking for INTERNAL item %s in itemsMap\n", itemId)
 				itm, ok := itemsMap[itemId]
 				if !ok {
+					fmt.Printf("    INTERNAL item %s NOT FOUND in itemsMap - SKIPPING\n", itemId)
 					continue
 				}
+				fmt.Printf("    INTERNAL item %s FOUND: %s\n", itemId, itm.Name)
 				item = itm
 			}
 			itemsWithSpecs = append(itemsWithSpecs, ItemWithSpecs{
 				Item:      item,
 				ItemSpecs: specs,
 			})
+			fmt.Printf("    Added item %s to result\n", itemId)
 		}
+		fmt.Printf("  Offer %s will have %d items in final result\n", offer.OfferId, len(itemsWithSpecs))
 		result = append(result, OfferWithItemsAndSpecs{
 			Offer: offer,
 			Items: itemsWithSpecs,
 		})
 	}
+
+	fmt.Printf("\n=== FINAL RESULT SUMMARY ===\n")
+	fmt.Printf("Total offers in result: %d\n", len(result))
+	for i, offerResult := range result {
+		fmt.Printf("Result %d: Offer %s has %d items\n", i, offerResult.Offer.OfferId, len(offerResult.Items))
+		for j, itemWithSpecs := range offerResult.Items {
+			fmt.Printf("  Item %d: %s (%s) with %d specs\n", j, itemWithSpecs.Item.ItemId, itemWithSpecs.Item.Name, len(itemWithSpecs.ItemSpecs))
+		}
+	}
+	fmt.Printf("=== GetOffersWithSpecsAndItems DEBUG END ===\n")
+
 	return result, lastKey, total, nil
 }
 
