@@ -331,11 +331,15 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 			}
 			switch state {
 			case "Approved":
+				fmt.Printf("[DEBUG] Orden aprobada, estado: %s\n", state)
 				order.State = "Approved"
 				itemSpec.Availability--
+				fmt.Printf("[DEBUG] itemSpec.IsExternal: %v, item != nil: %v\n", itemSpec.IsExternal, item != nil)
 				if itemSpec.IsExternal && item != nil {
+					fmt.Printf("[DEBUG] Obteniendo credenciales para PointOfSaleId: %s\n", order.PointOfSaleId)
 					credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, order.PointOfSaleId)
 					if err == nil {
+						fmt.Printf("[DEBUG] Credenciales obtenidas exitosamente, creando customer y orden en ecommerce\n")
 						creds := &struct {
 							ApiURL string
 							ApiKey string
@@ -344,11 +348,18 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 							ApiKey: credentials.ApiKey,
 						}
 
+						fmt.Printf("[DEBUG] Llamando createEcommerceCustomerAndOrder...\n")
 						err = s.createEcommerceCustomerAndOrder(ctx, credentials.ApiURL, credentials.ApiKey, billing, validOrders, item, creds)
 						if err != nil {
 							fmt.Printf("Error creando customer y orden en ecommerce: %v\n", err)
+						} else {
+							fmt.Printf("[DEBUG] createEcommerceCustomerAndOrder ejecutado exitosamente\n")
 						}
+					} else {
+						fmt.Printf("[DEBUG] Error obteniendo credenciales: %v\n", err)
 					}
+				} else {
+					fmt.Printf("[DEBUG] Condición no cumplida - itemSpec.IsExternal: %v, item != nil: %v\n", itemSpec.IsExternal, item != nil)
 				}
 			case "Rejected", "Error":
 				order.State = "Rejected"
@@ -590,16 +601,23 @@ func (s *billingService) ConfirmWompiResponse(ctx context.Context, body []byte) 
 
 		switch state {
 		case "Approved":
+			fmt.Printf("[DEBUG 2] Orden aprobada, estado: %s\n", state)
 			order.State = "Approved"
 
+			fmt.Printf("[DEBUG 2] Obteniendo itemSpec para ItemSpecificationId: %s\n", order.ItemSpecificationId)
 			itemSpec, err := s.itemSpecRepo.GetById(ctx, order.ItemSpecificationId)
 			if err == nil && itemSpec.IsExternal {
+				fmt.Printf("[DEBUG 2] itemSpec obtenido, IsExternal: %v\n", itemSpec.IsExternal)
 				var item *itemDomain.Item
+				fmt.Printf("[DEBUG 2] Obteniendo credenciales para PointOfSaleId: %s\n", itemSpec.PointOfSaleId)
 				credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, itemSpec.PointOfSaleId)
 				if err == nil {
+					fmt.Printf("[DEBUG 2] Credenciales obtenidas, obteniendo item con ID: %s\n", itemSpec.ItemId)
 					itemId := strings.TrimPrefix(itemSpec.ItemId, "kivio-ecommerce∼")
+					fmt.Printf("[DEBUG 2] ItemId procesado: %s\n", itemId)
 					item, err = s.ecommerceSvc.GetItemByID(ctx, credentials.ApiURL, credentials.ApiKey, itemId)
 					if err == nil && item != nil {
+						fmt.Printf("[DEBUG 2] Item obtenido exitosamente, llamando createEcommerceCustomerAndOrder...\n")
 						creds := &struct {
 							ApiURL string
 							ApiKey string
@@ -611,9 +629,17 @@ func (s *billingService) ConfirmWompiResponse(ctx context.Context, body []byte) 
 						err = s.createEcommerceCustomerAndOrder(ctx, credentials.ApiURL, credentials.ApiKey, billing, validOrders, item, creds)
 						if err != nil {
 							fmt.Printf("Error creando customer y orden en ecommerce: %v\n", err)
+						} else {
+							fmt.Printf("[DEBUG 2] createEcommerceCustomerAndOrder ejecutado exitosamente\n")
 						}
+					} else {
+						fmt.Printf("[DEBUG 2] Error obteniendo item o item es nil - Error: %v, Item: %v\n", err, item)
 					}
+				} else {
+					fmt.Printf("[DEBUG 2] Error obteniendo credenciales: %v\n", err)
 				}
+			} else {
+				fmt.Printf("[DEBUG 2] itemSpec no encontrado o no es externo - Error: %v, IsExternal: %v\n", err, itemSpec != nil && itemSpec.IsExternal)
 			}
 
 		case "Rejected", "Error":
