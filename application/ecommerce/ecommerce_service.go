@@ -19,6 +19,7 @@ type EcommerceService interface {
 	UpdateItemStock(ctx context.Context, apiUrl, apiKey, itemId string, newStock int) error
 	GetAllItemsRaw(ctx context.Context, apiUrl, apiKey string) ([]byte, error)
 	CreateEcommerceCustomer(ctx context.Context, apiUrl, apiKey string, customer *ecommerceBridge.EcommerceCustomer) (*ecommerceBridge.EcommerceCustomerResponse, error)
+	CreateEcommerceBillingAddress(ctx context.Context, apiUrl, apiKey string, customerID int, address *ecommerceBridge.EcommerceAddress) (*ecommerceBridge.EcommerceBillingAddressResponse, error)
 	CreateEcommerceOrder(ctx context.Context, apiUrl, apiKey string, order *ecommerceBridge.EcommerceOrder) (*ecommerceBridge.EcommerceOrderResponse, error)
 }
 

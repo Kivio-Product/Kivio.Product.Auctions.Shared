@@ -10,6 +10,7 @@ import (
 type CustomerService interface {
 	GetOrCreateCustomer(ctx context.Context, email string) (*domain.Customer, error)
 	UpdateExternalCustomerID(ctx context.Context, email, externalCustomerID string) error
+	UpdateBillingAddress(ctx context.Context, email, billingAddressID string) error
 }
 
 type customerService struct {
@@ -59,6 +60,26 @@ func (s *customerService) UpdateExternalCustomerID(ctx context.Context, email, e
 	err = s.repo.Update(ctx, customer)
 	if err != nil {
 		return fmt.Errorf("error updating customer external ID: %v", err)
+	}
+
+	return nil
+}
+
+func (s *customerService) UpdateBillingAddress(ctx context.Context, email, billingAddressID string) error {
+	customer, err := s.repo.GetByEmail(ctx, email)
+	if err != nil {
+		return fmt.Errorf("error getting customer: %v", err)
+	}
+
+	if customer == nil {
+		return fmt.Errorf("customer not found")
+	}
+
+	customer.BillingAddressID = billingAddressID
+
+	err = s.repo.Update(ctx, customer)
+	if err != nil {
+		return fmt.Errorf("error updating customer billing address: %v", err)
 	}
 
 	return nil

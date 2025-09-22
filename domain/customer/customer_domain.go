@@ -9,6 +9,7 @@ type Customer struct {
 	ID                 string    `json:"id" dynamodbav:"id"`
 	Email              string    `json:"email" dynamodbav:"email"`
 	ExternalCustomerID string    `json:"externalCustomerId" dynamodbav:"externalCustomerId"`
+	BillingAddressID   string    `json:"billingAddressId" dynamodbav:"billingAddressId"`
 	CreatedAt          time.Time `json:"createdAt" dynamodbav:"createdAt"`
 	UpdatedAt          time.Time `json:"updatedAt" dynamodbav:"updatedAt"`
 }

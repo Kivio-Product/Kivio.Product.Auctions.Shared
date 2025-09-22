@@ -762,13 +762,12 @@ func (s *billingService) createEcommerceCustomerFromBilling(billing *domain.Bill
 	now := time.Now()
 
 	customer := &ecommerceInfra.EcommerceCustomer{
-		Email:               billing.Customer.Email,
-		FirstName:           "",
-		LastName:            "",
-		Active:              true,
-		Deleted:             false,
-		CreatedOnUTC:        now,
-		RegisteredInStoreID: 1,
+		Username:     "",
+		Email:        billing.Customer.Email,
+		FirstName:    "",
+		LastName:     "",
+		Active:       true,
+		CreatedOnUTC: now,
 	}
 
 	if len(billing.Customer.Name) > 0 {
@@ -778,9 +777,24 @@ func (s *billingService) createEcommerceCustomerFromBilling(billing *domain.Bill
 		}
 	}
 
+	return customer
+}
+
+func (s *billingService) createEcommerceBillingAddressFromBilling(billing *domain.Billing) *ecommerceInfra.EcommerceAddress {
+	now := time.Now()
+
+	firstName := ""
+	lastName := ""
+	if len(billing.Customer.Name) > 0 {
+		firstName = billing.Customer.Name[0]
+		if len(billing.Customer.Name) > 1 {
+			lastName = strings.Join(billing.Customer.Name[1:], " ")
+		}
+	}
+
 	address := &ecommerceInfra.EcommerceAddress{
-		FirstName:     customer.FirstName,
-		LastName:      customer.LastName,
+		FirstName:     firstName,
+		LastName:      lastName,
 		Email:         billing.Customer.Email,
 		City:          billing.Customer.Address.City.CityName,
 		Address1:      billing.Customer.Address.Address,
@@ -794,11 +808,7 @@ func (s *billingService) createEcommerceCustomerFromBilling(billing *domain.Bill
 		address.PhoneNumber = billing.Customer.Phones[0].Indicative + billing.Customer.Phones[0].Number
 	}
 
-	customer.BillingAddress = address
-	customer.ShippingAddress = address
-	customer.Addresses = []ecommerceInfra.EcommerceAddress{*address}
-
-	return customer
+	return address
 }
 
 func (s *billingService) createEcommerceOrderFromOrders(orders []*orderDomain.Order, customerID int, item *itemDomain.Item) *ecommerceInfra.EcommerceOrder {
@@ -863,6 +873,7 @@ func (s *billingService) createEcommerceCustomerAndOrder(ctx context.Context, cr
 	}
 
 	var customerResponse *ecommerceInfra.EcommerceCustomerResponse
+	var billingAddressResponse *ecommerceInfra.EcommerceBillingAddressResponse
 
 	if customer.ExternalCustomerID == "" {
 		ecommerceCustomer := s.createEcommerceCustomerFromBilling(billing)
@@ -890,6 +901,28 @@ func (s *billingService) createEcommerceCustomerAndOrder(ctx context.Context, cr
 			}(),
 		}
 		fmt.Printf("Using existing customer with ID: %d\n", customerResponse.ID)
+	}
+
+	if customer.BillingAddressID == "" {
+		ecommerceBillingAddress := s.createEcommerceBillingAddressFromBilling(billing)
+
+		fmt.Printf("Creando billing address en ecommerce para customer ID: %d\n", customerResponse.ID)
+
+		billingAddressResponse, err = s.ecommerceSvc.CreateEcommerceBillingAddress(ctx, credentialsApiURL, credentialsApiKey, customerResponse.ID, ecommerceBillingAddress)
+		if err != nil {
+			fmt.Printf("Error creando billing address en ecommerce: %v\n", err)
+			return fmt.Errorf("error creando billing address en ecommerce: %v", err)
+		}
+
+		fmt.Printf("Billing address creado exitosamente con ID: %d\n", billingAddressResponse.ID)
+
+		err = s.customerService.UpdateBillingAddress(ctx, customer.Email, fmt.Sprintf("%d", billingAddressResponse.ID))
+		if err != nil {
+			fmt.Printf("Error updating customer with billing address ID: %v\n", err)
+			return fmt.Errorf("error updating customer with billing address ID: %v", err)
+		}
+	} else {
+		fmt.Printf("Using existing billing address with ID: %s\n", customer.BillingAddressID)
 	}
 
 	ecommerceOrder := s.createEcommerceOrderFromOrders(orders, customerResponse.ID, item)
