@@ -306,7 +306,7 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 				}
 
 				itemId := strings.TrimPrefix(itemSpec.ItemId, "kivio-ecommerce∼")
-				item, err = s.ecommerceSvc.GetItemByID(ctx, credentials.ApiURL, credentials.ApiKey, itemId)
+				item, err = s.ecommerceSvc.GetItemByID(ctx, itemId, credentials.ApiURL, credentials.ApiKey)
 				if err != nil {
 					fmt.Printf("error getting item from ecommerce: %v\n", err)
 					continue
@@ -615,7 +615,7 @@ func (s *billingService) ConfirmWompiResponse(ctx context.Context, body []byte) 
 					fmt.Printf("[DEBUG 2] Credenciales obtenidas, obteniendo item con ID: %s\n", itemSpec.ItemId)
 					itemId := strings.TrimPrefix(itemSpec.ItemId, "kivio-ecommerce∼")
 					fmt.Printf("[DEBUG 2] ItemId procesado: %s\n", itemId)
-					item, err = s.ecommerceSvc.GetItemByID(ctx, credentials.ApiURL, credentials.ApiKey, itemId)
+					item, err = s.ecommerceSvc.GetItemByID(ctx, itemId, credentials.ApiURL, credentials.ApiKey)
 					if err == nil && item != nil {
 						fmt.Printf("[DEBUG 2] Item obtenido exitosamente, llamando createEcommerceCustomerAndOrder...\n")
 						creds := &struct {

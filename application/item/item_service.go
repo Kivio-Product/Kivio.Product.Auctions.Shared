@@ -2,8 +2,8 @@ package services
 
 import (
 	"context"
-	"strings"
 	"fmt"
+	"strings"
 
 	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
 	itemSpecService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/item_specification"
@@ -113,7 +113,7 @@ func (s *itemService) GetItemBySpecId(ctx context.Context, id string) (*domain.I
 		}
 
 		itemId := strings.TrimPrefix(itemSpec.ItemId, "kivio-ecommerce∼")
-		item, err = s.ecommerceSvc.GetItemByID(ctx, credentials.ApiURL, credentials.ApiKey, itemId)
+		item, err = s.ecommerceSvc.GetItemByID(ctx, itemId, credentials.ApiURL, credentials.ApiKey)
 		if err != nil {
 			return nil, err
 		}
