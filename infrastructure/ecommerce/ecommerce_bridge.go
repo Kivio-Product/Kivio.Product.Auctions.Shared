@@ -66,8 +66,17 @@ type EcommerceCustomer struct {
 	ID                     int                `json:"id"`
 }
 
+type EcommerceCustomerBasic struct {
+	Username     string    `json:"username"`
+	Email        string    `json:"email"`
+	FirstName    string    `json:"first_name"`
+	LastName     string    `json:"last_name"`
+	Active       bool      `json:"active"`
+	CreatedOnUTC time.Time `json:"created_on_utc"`
+}
+
 type EcommerceCustomerRequest struct {
-	Customers []EcommerceCustomer `json:"customers"`
+	Customer EcommerceCustomerBasic `json:"customer"`
 }
 
 type EcommerceCustomerResponse struct {
@@ -256,8 +265,17 @@ func (b *EcommerceBridge) GetAllItemsRaw(ctx context.Context, apiUrl, apiKey str
 func (b *EcommerceBridge) CreateEcommerceCustomer(ctx context.Context, apiUrl, apiKey string, customer *EcommerceCustomer) (*EcommerceCustomerResponse, error) {
 	fmt.Printf("[ECOMMERCE] Creating customer - Email: %s, URL: %s\n", customer.Email, apiUrl)
 
+	basicCustomer := EcommerceCustomerBasic{
+		Username:     customer.Username,
+		Email:        customer.Email,
+		FirstName:    customer.FirstName,
+		LastName:     customer.LastName,
+		Active:       customer.Active,
+		CreatedOnUTC: customer.CreatedOnUTC,
+	}
+
 	customerRequest := EcommerceCustomerRequest{
-		Customers: []EcommerceCustomer{*customer},
+		Customer: basicCustomer,
 	}
 
 	customerData, err := json.Marshal(customerRequest)
@@ -273,9 +291,7 @@ func (b *EcommerceBridge) CreateEcommerceCustomer(ctx context.Context, apiUrl, a
 	}
 
 	type CustomerCreationResponse struct {
-		Customers []struct {
-			ID int `json:"id"`
-		} `json:"customers"`
+		ID int `json:"id"`
 	}
 
 	var response CustomerCreationResponse
@@ -284,14 +300,14 @@ func (b *EcommerceBridge) CreateEcommerceCustomer(ctx context.Context, apiUrl, a
 		return nil, fmt.Errorf("failed to unmarshal customer response: %w", err)
 	}
 
-	if len(response.Customers) == 0 {
-		fmt.Printf("[ECOMMERCE] ERROR: No customer created in response\n")
-		return nil, fmt.Errorf("no customer created in response")
+	if response.ID == 0 {
+		fmt.Printf("[ECOMMERCE] ERROR: No customer ID in response\n")
+		return nil, fmt.Errorf("no customer ID in response")
 	}
 
-	fmt.Printf("[ECOMMERCE] SUCCESS: Customer created with ID: %d\n", response.Customers[0].ID)
+	fmt.Printf("[ECOMMERCE] SUCCESS: Customer created with ID: %d\n", response.ID)
 	return &EcommerceCustomerResponse{
-		ID:      response.Customers[0].ID,
+		ID:      response.ID,
 		Success: true,
 		Message: "Customer created successfully",
 	}, nil
