@@ -31,6 +31,19 @@ func (uc *NotifyOrderUseCase) Execute(state string, customerEmail string, concat
 	return uc.notifier.SendTemplatedEmail(customerEmail, templateName, templateData)
 }
 
+func (uc *NotifyOrderUseCase) ExecuteRegularNotification(orderStatusUrl string, customerEmail string, totalOfferedAmount int64, concatenatedItemNames string, posName string) error {
+	templateName := "SubastaPendiente" + posName
+	p := message.NewPrinter(language.Spanish)
+	formattedAmount := p.Sprintf("%d", totalOfferedAmount)
+	templateData := map[string]string{
+		"ITEM_NAME":        concatenatedItemNames,
+		"AMOUNT":           formattedAmount,
+		"ORDER_STATUS_URL": orderStatusUrl,
+	}
+
+	return uc.notifier.SendTemplatedEmail(customerEmail, templateName, templateData)
+}
+
 type NotifyAdminApprovedOrdersUseCase struct {
 	notifier domain.Notifier
 }

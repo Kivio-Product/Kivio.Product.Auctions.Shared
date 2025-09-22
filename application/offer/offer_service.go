@@ -11,16 +11,16 @@ import (
 	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
 	emailService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
 	applicationLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/logging"
-	"github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/logging"
 	itemDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
 	itemSpecDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item_specification"
+	"github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/logging"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/offer"
 	scheduler "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/scheduler"
+	infrastructureLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/logging"
 	itemRepository "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item"
 	itemSpecRepository "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item_specification"
 	infrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/offer"
 	pointOfSaleRespository "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/point_of_sale"
-	infrastructureLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/logging"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
 
@@ -33,6 +33,7 @@ type IOfferService interface {
 	DeleteOfferById(ctx context.Context, id string) error
 	GetOffersByPosId(ctx context.Context, id string, limit string, lastEvaluatedKey map[string]*dynamodb.AttributeValue) ([]domain.Offer, map[string]*dynamodb.AttributeValue, error)
 	SendOfferEmail(ctx context.Context, auctionURL, unsubscribeUrl string, offerID string) error
+	SendOrderNotification(ctx context.Context, customerId, billingId, concatenatedItemNames, posId string, amount int64) error
 	GetOffersWithSpecsAndItems(
 		ctx context.Context,
 		posId string,
@@ -140,13 +141,49 @@ func (s *OfferService) SendOfferEmail(ctx context.Context, auctionURL, unsubscri
 	return nil
 }
 
+func (s *OfferService) SendOrderNotification(ctx context.Context, customerId, billingId, concatenatedItemNames, posId string, amount int64) error {
+	start := time.Now()
+
+	pos, err := s.pointOfSaleRespository.GetPosById(ctx, posId)
+	if err != nil {
+		s.serviceLogger.LogServiceError(ctx, "SendOrderNotification", err, map[string]interface{}{
+			"pos_id": posId,
+			"error":  "failed_to_get_pos",
+		})
+		return err
+	}
+
+	enviroment := os.Getenv("AUCTIONS_ENV")
+	orderStatusUrl := fmt.Sprintf("%s/order-status?id=%s", enviroment, billingId)
+	fmt.Println(orderStatusUrl)
+	err = s.emailSender.NotifyOrderRegular(ctx, orderStatusUrl, customerId, amount, concatenatedItemNames, pos.Name)
+	if err != nil {
+		s.serviceLogger.LogServiceError(ctx, "SendOrderNotification", err, map[string]interface{}{
+			"billing_id":  billingId,
+			"pos_id":      posId,
+			"customer_id": customerId,
+			"error":       "failed_to_send_email",
+		})
+		return err
+	}
+
+	s.serviceLogger.LogServiceEnd(ctx, "SendOrderNotification", time.Since(start), map[string]interface{}{
+		"billing_id":  billingId,
+		"pos_id":      posId,
+		"customer_id": customerId,
+		"success":     true,
+	})
+
+	return nil
+}
+
 func (s *OfferService) GenerateOffer(ctx context.Context, name, description, posId, typer string, auctionTime int64) (*domain.Offer, error) {
 	start := time.Now()
 	s.serviceLogger.LogServiceStart(ctx, "GenerateOffer", map[string]interface{}{
-		"offer_name":    name,
-		"pos_id":        posId,
-		"offer_type":    typer,
-		"auction_time":  auctionTime,
+		"offer_name":   name,
+		"pos_id":       posId,
+		"offer_type":   typer,
+		"auction_time": auctionTime,
 	})
 
 	offers, err := s.offerFactory.CreateOffer(name, description, posId, typer, auctionTime)
@@ -178,11 +215,11 @@ func (s *OfferService) GenerateOffer(ctx context.Context, name, description, pos
 
 	s.eventLogger.LogOfferStateChange(ctx, offers.OfferId, "", "Created")
 	s.serviceLogger.LogServiceEnd(ctx, "GenerateOffer", time.Since(start), map[string]interface{}{
-		"offer_id":     offers.OfferId,
-		"offer_name":   name,
-		"pos_id":       posId,
+		"offer_id":      offers.OfferId,
+		"offer_name":    name,
+		"pos_id":        posId,
 		"initial_state": "Created",
-		"success":      true,
+		"success":       true,
 	})
 
 	return offers, nil
