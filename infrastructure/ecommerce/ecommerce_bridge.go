@@ -291,7 +291,9 @@ func (b *EcommerceBridge) CreateEcommerceCustomer(ctx context.Context, apiUrl, a
 	}
 
 	type CustomerCreationResponse struct {
-		ID int `json:"id"`
+		Customers []struct {
+			ID int `json:"id"`
+		} `json:"customers"`
 	}
 
 	var response CustomerCreationResponse
@@ -300,14 +302,19 @@ func (b *EcommerceBridge) CreateEcommerceCustomer(ctx context.Context, apiUrl, a
 		return nil, fmt.Errorf("failed to unmarshal customer response: %w", err)
 	}
 
-	if response.ID == 0 {
+	if len(response.Customers) == 0 {
+		fmt.Printf("[ECOMMERCE] ERROR: No customers in response\n")
+		return nil, fmt.Errorf("no customers in response")
+	}
+
+	if response.Customers[0].ID == 0 {
 		fmt.Printf("[ECOMMERCE] ERROR: No customer ID in response\n")
 		return nil, fmt.Errorf("no customer ID in response")
 	}
 
-	fmt.Printf("[ECOMMERCE] SUCCESS: Customer created with ID: %d\n", response.ID)
+	fmt.Printf("[ECOMMERCE] SUCCESS: Customer created with ID: %d\n", response.Customers[0].ID)
 	return &EcommerceCustomerResponse{
-		ID:      response.ID,
+		ID:      response.Customers[0].ID,
 		Success: true,
 		Message: "Customer created successfully",
 	}, nil
