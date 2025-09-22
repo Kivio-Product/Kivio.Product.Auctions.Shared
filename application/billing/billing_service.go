@@ -20,6 +20,7 @@ import (
 	paymentDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/payment"
 
 	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
+	ecommerceInfra "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/ecommerce"
 	emailService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
 	invoiceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/invoice"
 	pointOfSaleService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/point_of_sale"
@@ -335,22 +336,17 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 				if itemSpec.IsExternal && item != nil {
 					credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, order.PointOfSaleId)
 					if err == nil {
-						itemId := strings.TrimPrefix(itemSpec.ItemId, "kivio-ecommerce∼")
-						itemRaw, err := s.ecommerceSvc.GetItemByIDRaw(ctx, itemId, credentials.ApiURL, credentials.ApiKey)
-						if err == nil && itemRaw != nil {
-							type externalProductResponse struct {
-								Products []struct {
-									StockQuantity int64 `json:"stock_quantity"`
-								} `json:"products"`
-							}
-							var extResp externalProductResponse
-							if err := json.Unmarshal(itemRaw, &extResp); err == nil && len(extResp.Products) > 0 {
-								stock := extResp.Products[0].StockQuantity
-								if stock > 0 {
-									fmt.Printf("Actualizando stock del item %s: %d -> %d\n", itemId, stock, stock-1)
-									_ = s.ecommerceSvc.UpdateItemStock(ctx, credentials.ApiURL, credentials.ApiKey, itemId, int(stock-1))
-								}
-							}
+						creds := &struct {
+							ApiURL string
+							ApiKey string
+						}{
+							ApiURL: credentials.ApiURL,
+							ApiKey: credentials.ApiKey,
+						}
+
+						err = s.createEcommerceCustomerAndOrder(ctx, billing, validOrders, item, creds)
+						if err != nil {
+							fmt.Printf("Error creando customer y orden en ecommerce: %v\n", err)
 						}
 					}
 				}
@@ -593,6 +589,31 @@ func (s *billingService) ConfirmWompiResponse(ctx context.Context, body []byte) 
 		switch state {
 		case "Approved":
 			order.State = "Approved"
+
+			itemSpec, err := s.itemSpecRepo.GetById(ctx, order.ItemSpecificationId)
+			if err == nil && itemSpec.IsExternal {
+				var item *itemDomain.Item
+				credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, itemSpec.PointOfSaleId)
+				if err == nil {
+					itemId := strings.TrimPrefix(itemSpec.ItemId, "kivio-ecommerce∼")
+					item, err = s.ecommerceSvc.GetItemByID(ctx, credentials.ApiURL, credentials.ApiKey, itemId)
+					if err == nil && item != nil {
+						creds := &struct {
+							ApiURL string
+							ApiKey string
+						}{
+							ApiURL: credentials.ApiURL,
+							ApiKey: credentials.ApiKey,
+						}
+
+						err = s.createEcommerceCustomerAndOrder(ctx, billing, validOrders, item, creds)
+						if err != nil {
+							fmt.Printf("Error creando customer y orden en ecommerce: %v\n", err)
+						}
+					}
+				}
+			}
+
 		case "Rejected", "Error":
 			order.State = "Rejected"
 		default:
@@ -706,4 +727,139 @@ func getInvoiceConfigFromEnv() *domain.InvoiceConfig {
 		PaymentID:  paymentID,
 		TaxID:      taxID,
 	}
+}
+
+func (s *billingService) createEcommerceCustomerFromBilling(billing *domain.Billing) *ecommerceInfra.EcommerceCustomer {
+	now := time.Now()
+
+	customer := &ecommerceInfra.EcommerceCustomer{
+		Email:               billing.Customer.Email,
+		FirstName:           "",
+		LastName:            "",
+		Active:              true,
+		Deleted:             false,
+		CreatedOnUTC:        now,
+		RegisteredInStoreID: 1,
+	}
+
+	if len(billing.Customer.Name) > 0 {
+		customer.FirstName = billing.Customer.Name[0]
+		if len(billing.Customer.Name) > 1 {
+			customer.LastName = strings.Join(billing.Customer.Name[1:], " ")
+		}
+	}
+
+	address := &ecommerceInfra.EcommerceAddress{
+		FirstName:     customer.FirstName,
+		LastName:      customer.LastName,
+		Email:         billing.Customer.Email,
+		City:          billing.Customer.Address.City.CityName,
+		Address1:      billing.Customer.Address.Address,
+		ZipPostalCode: billing.Customer.Address.PostalCode,
+		Country:       billing.Customer.Address.City.CountryName,
+		Province:      billing.Customer.Address.City.StateName,
+		CreatedOnUTC:  now,
+	}
+
+	if len(billing.Customer.Phones) > 0 {
+		address.PhoneNumber = billing.Customer.Phones[0].Indicative + billing.Customer.Phones[0].Number
+	}
+
+	customer.BillingAddress = address
+	customer.ShippingAddress = address
+	customer.Addresses = []ecommerceInfra.EcommerceAddress{*address}
+
+	return customer
+}
+
+func (s *billingService) createEcommerceOrderFromOrders(orders []*orderDomain.Order, customerID int, item *itemDomain.Item) *ecommerceInfra.EcommerceOrder {
+	now := time.Now()
+	totalAmount := float64(0)
+
+	var orderItems []ecommerceInfra.EcommerceOrderItem
+	for _, order := range orders {
+		itemAmount := float64(order.OfferedAmount) / 100.0 // Convertir de centavos a unidades monetarias
+		totalAmount += itemAmount
+
+		orderItem := ecommerceInfra.EcommerceOrderItem{
+			Quantity:         1,
+			UnitPriceInclTax: itemAmount,
+			UnitPriceExclTax: itemAmount,
+			PriceInclTax:     itemAmount,
+			PriceExclTax:     itemAmount,
+		}
+		orderItems = append(orderItems, orderItem)
+	}
+
+	customerEmail := ""
+	if len(orders) > 0 {
+		customerEmail = orders[0].CustomerId
+	}
+
+	address := &ecommerceInfra.EcommerceAddress{
+		FirstName:    "Cliente",
+		LastName:     "Kivio",
+		Email:        customerEmail,
+		City:         "Bogotá",
+		Address1:     "Dirección del cliente",
+		Country:      "Colombia",
+		CreatedOnUTC: now,
+	}
+
+	order := &ecommerceInfra.EcommerceOrder{
+		StoreID:                   1,
+		PaymentMethodSystemName:   "Payments.Manual",
+		CustomerCurrencyCode:      "COP",
+		CurrencyRate:              1.0,
+		OrderSubtotalInclTax:      totalAmount,
+		OrderSubtotalExclTax:      totalAmount,
+		OrderTotal:                totalAmount,
+		CreatedOnUTC:              now,
+		CustomerID:                customerID,
+		BillingAddress:            address,
+		ShippingAddress:           address,
+		OrderItems:                orderItems,
+	}
+
+	return order
+}
+
+func (s *billingService) createEcommerceCustomerAndOrder(ctx context.Context, billing *domain.Billing, orders []*orderDomain.Order, item *itemDomain.Item, credentials interface{}) error {
+	creds, ok := credentials.(*struct {
+		ApiURL string
+		ApiKey string
+	})
+	if !ok {
+		return fmt.Errorf("invalid credentials type")
+	}
+
+	ecommerceCustomer := s.createEcommerceCustomerFromBilling(billing)
+
+	customerRequest := &ecommerceInfra.EcommerceCustomerRequest{
+		Customers: []ecommerceInfra.EcommerceCustomer{*ecommerceCustomer},
+	}
+
+	fmt.Printf("Creando customer en ecommerce: %+v\n", customerRequest.Customers[0])
+
+	customerResponse, err := s.ecommerceSvc.CreateEcommerceCustomer(ctx, creds.ApiURL, creds.ApiKey, ecommerceCustomer)
+	if err != nil {
+		fmt.Printf("Error creando customer en ecommerce: %v\n", err)
+		return fmt.Errorf("error creando customer en ecommerce: %v", err)
+	}
+
+	fmt.Printf("Customer creado exitosamente con ID: %d\n", customerResponse.ID)
+
+	ecommerceOrder := s.createEcommerceOrderFromOrders(orders, customerResponse.ID, item)
+
+	fmt.Printf("Creando orden en ecommerce: %+v\n", ecommerceOrder)
+
+	orderResponse, err := s.ecommerceSvc.CreateEcommerceOrder(ctx, creds.ApiURL, creds.ApiKey, ecommerceOrder)
+	if err != nil {
+		fmt.Printf("Error creando orden en ecommerce: %v\n", err)
+		return fmt.Errorf("error creando orden en ecommerce: %v", err)
+	}
+
+	fmt.Printf("Orden creada exitosamente con ID: %d\n", orderResponse.ID)
+
+	return nil
 }
