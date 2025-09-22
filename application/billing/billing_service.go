@@ -586,6 +586,8 @@ func (s *billingService) ConfirmWompiResponse(ctx context.Context, body []byte) 
 			customerEmail = validOrders[0].CustomerId
 		}
 
+		fmt.Printf("[DEBUG]: wompi state", state)
+
 		switch state {
 		case "Approved":
 			order.State = "Approved"
