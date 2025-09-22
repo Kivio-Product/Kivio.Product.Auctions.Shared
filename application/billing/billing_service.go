@@ -825,6 +825,7 @@ func (s *billingService) createEcommerceOrderFromOrders(orders []*orderDomain.Or
 }
 
 func (s *billingService) createEcommerceCustomerAndOrder(ctx context.Context, credentialsApiURL string, credentialsApiKey string, billing *domain.Billing, orders []*orderDomain.Order, item *itemDomain.Item, credentials interface{}) error {
+	fmt.Printf("[BILLING] Starting ecommerce customer & order creation - Email: %s, Orders: %d\n", billing.Customer.Email, len(orders))
 
 	ecommerceCustomer := s.createEcommerceCustomerFromBilling(billing)
 

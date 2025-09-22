@@ -275,17 +275,21 @@ func (b *EcommerceBridge) GetAllItemsRaw(ctx context.Context, apiUrl, apiKey str
 }
 
 func (b *EcommerceBridge) CreateEcommerceCustomer(ctx context.Context, apiUrl, apiKey string, customer *EcommerceCustomer) (*EcommerceCustomerResponse, error) {
+	fmt.Printf("[ECOMMERCE] Creating customer - Email: %s, URL: %s\n", customer.Email, apiUrl)
+
 	customerRequest := EcommerceCustomerRequest{
 		Customers: []EcommerceCustomer{*customer},
 	}
 
 	customerData, err := json.Marshal(customerRequest)
 	if err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to marshal customer data: %v\n", err)
 		return nil, fmt.Errorf("failed to marshal customer data: %w", err)
 	}
 
 	respBody, err := b.client.CreateEcommerceCustomer(ctx, apiUrl, apiKey, customerData)
 	if err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to create customer API call: %v\n", err)
 		return nil, fmt.Errorf("failed to create customer: %w", err)
 	}
 
@@ -297,13 +301,16 @@ func (b *EcommerceBridge) CreateEcommerceCustomer(ctx context.Context, apiUrl, a
 
 	var response CustomerCreationResponse
 	if err := json.Unmarshal(respBody, &response); err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to unmarshal customer response: %v\n", err)
 		return nil, fmt.Errorf("failed to unmarshal customer response: %w", err)
 	}
 
 	if len(response.Customers) == 0 {
+		fmt.Printf("[ECOMMERCE] ERROR: No customer created in response\n")
 		return nil, fmt.Errorf("no customer created in response")
 	}
 
+	fmt.Printf("[ECOMMERCE] SUCCESS: Customer created with ID: %d\n", response.Customers[0].ID)
 	return &EcommerceCustomerResponse{
 		ID:      response.Customers[0].ID,
 		Success: true,
@@ -312,17 +319,21 @@ func (b *EcommerceBridge) CreateEcommerceCustomer(ctx context.Context, apiUrl, a
 }
 
 func (b *EcommerceBridge) CreateEcommerceOrder(ctx context.Context, apiUrl, apiKey string, order *EcommerceOrder) (*EcommerceOrderResponse, error) {
+	fmt.Printf("[ECOMMERCE] Creating order - CustomerID: %d, Total: %.2f\n", order.CustomerID, order.OrderTotal)
+
 	orderRequest := EcommerceOrderRequest{
 		Order: *order,
 	}
 
 	orderData, err := json.Marshal(orderRequest)
 	if err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to marshal order data: %v\n", err)
 		return nil, fmt.Errorf("failed to marshal order data: %w", err)
 	}
 
 	respBody, err := b.client.CreateEcommerceOrder(ctx, apiUrl, apiKey, orderData)
 	if err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to create order API call: %v\n", err)
 		return nil, fmt.Errorf("failed to create order: %w", err)
 	}
 
@@ -332,9 +343,11 @@ func (b *EcommerceBridge) CreateEcommerceOrder(ctx context.Context, apiUrl, apiK
 
 	var response OrderCreationResponse
 	if err := json.Unmarshal(respBody, &response); err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to unmarshal order response: %v\n", err)
 		return nil, fmt.Errorf("failed to unmarshal order response: %w", err)
 	}
 
+	fmt.Printf("[ECOMMERCE] SUCCESS: Order created with ID: %d\n", response.ID)
 	return &EcommerceOrderResponse{
 		ID:      response.ID,
 		Success: true,
