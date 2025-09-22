@@ -33,7 +33,6 @@ type IOfferService interface {
 	DeleteOfferById(ctx context.Context, id string) error
 	GetOffersByPosId(ctx context.Context, id string, limit string, lastEvaluatedKey map[string]*dynamodb.AttributeValue) ([]domain.Offer, map[string]*dynamodb.AttributeValue, error)
 	SendOfferEmail(ctx context.Context, auctionURL, unsubscribeUrl string, offerID string) error
-	SendOrderNotification(ctx context.Context, customerId, billingId, concatenatedItemNames, posId string, amount int64) error
 	GetOffersWithSpecsAndItems(
 		ctx context.Context,
 		posId string,
@@ -136,42 +135,6 @@ func (s *OfferService) SendOfferEmail(ctx context.Context, auctionURL, unsubscri
 		"pos_id":     offer.PosId,
 		"offer_name": offer.Name,
 		"success":    true,
-	})
-
-	return nil
-}
-
-func (s *OfferService) SendOrderNotification(ctx context.Context, customerId, billingId, concatenatedItemNames, posId string, amount int64) error {
-	start := time.Now()
-
-	pos, err := s.pointOfSaleRespository.GetPosById(ctx, posId)
-	if err != nil {
-		s.serviceLogger.LogServiceError(ctx, "SendOrderNotification", err, map[string]interface{}{
-			"pos_id": posId,
-			"error":  "failed_to_get_pos",
-		})
-		return err
-	}
-
-	enviroment := os.Getenv("AUCTIONS_ENV")
-	orderStatusUrl := fmt.Sprintf("%s/order-status?id=%s", enviroment, billingId)
-	fmt.Println(orderStatusUrl)
-	err = s.emailSender.NotifyOrderRegular(ctx, orderStatusUrl, customerId, amount, concatenatedItemNames, pos.Name)
-	if err != nil {
-		s.serviceLogger.LogServiceError(ctx, "SendOrderNotification", err, map[string]interface{}{
-			"billing_id":  billingId,
-			"pos_id":      posId,
-			"customer_id": customerId,
-			"error":       "failed_to_send_email",
-		})
-		return err
-	}
-
-	s.serviceLogger.LogServiceEnd(ctx, "SendOrderNotification", time.Since(start), map[string]interface{}{
-		"billing_id":  billingId,
-		"pos_id":      posId,
-		"customer_id": customerId,
-		"success":     true,
 	})
 
 	return nil

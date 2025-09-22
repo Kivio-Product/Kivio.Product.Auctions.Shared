@@ -388,7 +388,7 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 
 		if customerEmail != "" && len(concatenatedItemNames) > 0 {
 			go func() {
-				err = s.emailService.NotifyOrder(ctx, state, customerEmail, firstOrderAmount, strings.Join(concatenatedItemNames, ", "), posName)
+				err = s.emailService.NotifyOrder(ctx, state, customerEmail, firstOrderAmount, strings.Join(concatenatedItemNames, ", "), posName, "")
 				if err != nil {
 					fmt.Printf("No se puedo enviar el correo: %s\n", err)
 				}
@@ -422,7 +422,7 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 		}
 		if customerEmail != "" && len(concatenatedItemNames) > 0 {
 			go func() {
-				err = s.emailService.NotifyOrder(ctx, state, customerEmail, firstOrderAmount, strings.Join(concatenatedItemNames, ", "), posName)
+				err = s.emailService.NotifyOrder(ctx, state, customerEmail, firstOrderAmount, strings.Join(concatenatedItemNames, ", "), posName, "")
 				if err != nil {
 					fmt.Printf("No se puedo enviar el correo: %s\n", err)
 				}
@@ -633,7 +633,7 @@ func (s *billingService) ConfirmWompiResponse(ctx context.Context, body []byte) 
 
 	if customerEmail != "" && len(concatenatedItemNames) > 0 {
 		go func() {
-			err = s.emailService.NotifyOrder(ctx, state, customerEmail, firstOrderAmount, strings.Join(concatenatedItemNames, ", "), posName)
+			err = s.emailService.NotifyOrder(ctx, state, customerEmail, firstOrderAmount, strings.Join(concatenatedItemNames, ", "), posName, "")
 			if err != nil {
 				fmt.Printf("No se pudo enviar el correo: %s\n", err)
 			}
