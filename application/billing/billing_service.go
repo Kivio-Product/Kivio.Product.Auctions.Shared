@@ -20,10 +20,10 @@ import (
 	paymentDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/payment"
 
 	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
-	ecommerceInfra "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/ecommerce"
 	emailService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
 	invoiceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/invoice"
 	pointOfSaleService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/point_of_sale"
+	ecommerceInfra "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/ecommerce"
 
 	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
 	billingInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/billing"
@@ -344,7 +344,7 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 							ApiKey: credentials.ApiKey,
 						}
 
-						err = s.createEcommerceCustomerAndOrder(ctx, billing, validOrders, item, creds)
+						err = s.createEcommerceCustomerAndOrder(ctx, credentials.ApiURL, credentials.ApiKey, billing, validOrders, item, creds)
 						if err != nil {
 							fmt.Printf("Error creando customer y orden en ecommerce: %v\n", err)
 						}
@@ -606,7 +606,7 @@ func (s *billingService) ConfirmWompiResponse(ctx context.Context, body []byte) 
 							ApiKey: credentials.ApiKey,
 						}
 
-						err = s.createEcommerceCustomerAndOrder(ctx, billing, validOrders, item, creds)
+						err = s.createEcommerceCustomerAndOrder(ctx, credentials.ApiURL, credentials.ApiKey, billing, validOrders, item, creds)
 						if err != nil {
 							fmt.Printf("Error creando customer y orden en ecommerce: %v\n", err)
 						}
@@ -807,31 +807,24 @@ func (s *billingService) createEcommerceOrderFromOrders(orders []*orderDomain.Or
 	}
 
 	order := &ecommerceInfra.EcommerceOrder{
-		StoreID:                   1,
-		PaymentMethodSystemName:   "Payments.Manual",
-		CustomerCurrencyCode:      "COP",
-		CurrencyRate:              1.0,
-		OrderSubtotalInclTax:      totalAmount,
-		OrderSubtotalExclTax:      totalAmount,
-		OrderTotal:                totalAmount,
-		CreatedOnUTC:              now,
-		CustomerID:                customerID,
-		BillingAddress:            address,
-		ShippingAddress:           address,
-		OrderItems:                orderItems,
+		StoreID:                 1,
+		PaymentMethodSystemName: "Payments.Manual",
+		CustomerCurrencyCode:    "COP",
+		CurrencyRate:            1.0,
+		OrderSubtotalInclTax:    totalAmount,
+		OrderSubtotalExclTax:    totalAmount,
+		OrderTotal:              totalAmount,
+		CreatedOnUTC:            now,
+		CustomerID:              customerID,
+		BillingAddress:          address,
+		ShippingAddress:         address,
+		OrderItems:              orderItems,
 	}
 
 	return order
 }
 
-func (s *billingService) createEcommerceCustomerAndOrder(ctx context.Context, billing *domain.Billing, orders []*orderDomain.Order, item *itemDomain.Item, credentials interface{}) error {
-	creds, ok := credentials.(*struct {
-		ApiURL string
-		ApiKey string
-	})
-	if !ok {
-		return fmt.Errorf("invalid credentials type")
-	}
+func (s *billingService) createEcommerceCustomerAndOrder(ctx context.Context, credentialsApiURL string, credentialsApiKey string, billing *domain.Billing, orders []*orderDomain.Order, item *itemDomain.Item, credentials interface{}) error {
 
 	ecommerceCustomer := s.createEcommerceCustomerFromBilling(billing)
 
@@ -841,7 +834,7 @@ func (s *billingService) createEcommerceCustomerAndOrder(ctx context.Context, bi
 
 	fmt.Printf("Creando customer en ecommerce: %+v\n", customerRequest.Customers[0])
 
-	customerResponse, err := s.ecommerceSvc.CreateEcommerceCustomer(ctx, creds.ApiURL, creds.ApiKey, ecommerceCustomer)
+	customerResponse, err := s.ecommerceSvc.CreateEcommerceCustomer(ctx, credentialsApiURL, credentialsApiKey, ecommerceCustomer)
 	if err != nil {
 		fmt.Printf("Error creando customer en ecommerce: %v\n", err)
 		return fmt.Errorf("error creando customer en ecommerce: %v", err)
@@ -853,7 +846,7 @@ func (s *billingService) createEcommerceCustomerAndOrder(ctx context.Context, bi
 
 	fmt.Printf("Creando orden en ecommerce: %+v\n", ecommerceOrder)
 
-	orderResponse, err := s.ecommerceSvc.CreateEcommerceOrder(ctx, creds.ApiURL, creds.ApiKey, ecommerceOrder)
+	orderResponse, err := s.ecommerceSvc.CreateEcommerceOrder(ctx, credentialsApiURL, credentialsApiKey, ecommerceOrder)
 	if err != nil {
 		fmt.Printf("Error creando orden en ecommerce: %v\n", err)
 		return fmt.Errorf("error creando orden en ecommerce: %v", err)
