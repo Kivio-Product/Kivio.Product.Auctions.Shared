@@ -12,7 +12,7 @@ import (
 
 type SNSNotificationService interface {
 	HandleNotification(ctx context.Context, typer, message, subscriptionUrl string) (string, error)
-	AddEmailToBlackList(ctx context.Context, email string ) (*domain.EmailBlackList, error)
+	AddEmailToBlackList(ctx context.Context, email string) (*domain.EmailBlackList, error)
 }
 
 type snsNotificationService struct {
@@ -29,7 +29,7 @@ func NewSNSNotificationService(
 
 type SESBounceNotification struct {
 	EventType string `json:"eventType"`
-	Bounce           struct {
+	Bounce    struct {
 		BounceType        string `json:"bounceType"`
 		BouncedRecipients []struct {
 			EmailAddress   string `json:"emailAddress"`
@@ -39,7 +39,7 @@ type SESBounceNotification struct {
 	} `json:"bounce"`
 }
 
-func (s snsNotificationService) HandleNotification(ctx context.Context, typer, message, subscriptionUrl string) (string, error){
+func (s snsNotificationService) HandleNotification(ctx context.Context, typer, message, subscriptionUrl string) (string, error) {
 	switch typer {
 	case "SubscriptionConfirmation":
 		fmt.Println("Confirmando suscripción a SNS:", subscriptionUrl)
@@ -83,8 +83,7 @@ func (s snsNotificationService) HandleNotification(ctx context.Context, typer, m
 	return "Unhandled SNS message type", nil
 }
 
-
-func (s snsNotificationService) AddEmailToBlackList(ctx context.Context, email string ) (*domain.EmailBlackList, error) {
+func (s snsNotificationService) AddEmailToBlackList(ctx context.Context, email string) (*domain.EmailBlackList, error) {
 	emails, err := s.blackListService.CreateBlackListItem(ctx, email)
 	if err != nil {
 		return &domain.EmailBlackList{}, err

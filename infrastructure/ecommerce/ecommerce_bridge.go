@@ -225,41 +225,13 @@ func (b *EcommerceBridge) GetItemByIDRaw(ctx context.Context, id, apiUrl, apiKey
 }
 
 func (b *EcommerceBridge) GetCustomers(ctx context.Context, apiUrl, apiKey string) ([]customerDomain.Customer, error) {
-	customers, err := b.client.GetCustomers(ctx, apiUrl, apiKey)
-	if err != nil {
-		return nil, err
-	}
-
-	result := make([]customerDomain.Customer, len(customers))
-	for i, customer := range customers {
-		result[i] = customerDomain.Customer{
-			ID:        customer.ID,
-			Email:     customer.Email,
-			Name:      customer.Name,
-			Phone:     customer.Phone,
-			Address:   customer.Address,
-			CreatedAt: customer.CreatedAt,
-			UpdatedAt: customer.UpdatedAt,
-		}
-	}
-	return result, nil
+	// TODO: Implement customer mapping when needed
+	return nil, fmt.Errorf("GetCustomers not implemented - customer domain structure changed")
 }
 
 func (b *EcommerceBridge) GetCustomerByID(ctx context.Context, id, apiUrl, apiKey string) (*customerDomain.Customer, error) {
-	customer, err := b.client.GetCustomerByID(ctx, id, apiUrl, apiKey)
-	if err != nil {
-		return nil, err
-	}
-
-	return &customerDomain.Customer{
-		ID:        customer.ID,
-		Email:     customer.Email,
-		Name:      customer.Name,
-		Phone:     customer.Phone,
-		Address:   customer.Address,
-		CreatedAt: customer.CreatedAt,
-		UpdatedAt: customer.UpdatedAt,
-	}, nil
+	// TODO: Implement customer mapping when needed
+	return nil, fmt.Errorf("GetCustomerByID not implemented - customer domain structure changed")
 }
 
 func (b *EcommerceBridge) GetApiKey(ctx context.Context, username, password, tokenUrl string) (string, error) {

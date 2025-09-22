@@ -1,5 +1,5 @@
 package domain
 
 type EmailBlackList struct {
-	Email     string   
+	Email string
 }

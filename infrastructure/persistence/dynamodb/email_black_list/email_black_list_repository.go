@@ -63,7 +63,7 @@ func (r *emailBlackListRepository) Save(ctx context.Context, i *domain.EmailBlac
 
 func (r *emailBlackListRepository) GetBlackListEmails() (map[string]struct{}, error) {
 	result, err := r.client.Scan(&dynamodb.ScanInput{
-		TableName:            aws.String(r.blackListTable),
+		TableName: aws.String(r.blackListTable),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan table %s: %w", r.blackListTable, err)

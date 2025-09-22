@@ -57,7 +57,7 @@ func (s *ruleDataService) GetRuleData(ctx context.Context, pointOfSaleId string)
 		ParameterType: "fecha",
 		Operators:     []string{"=", "!=", ">", "<", ">=", "<="},
 	}
-	
+
 	categorizedRules["local"] = []sheetsDomain.RuleField{dateRule}
 
 	sheetData, err := s.sheetService.FetchSheetData(pointOfSaleId)

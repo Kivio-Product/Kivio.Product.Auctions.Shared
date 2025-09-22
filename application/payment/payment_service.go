@@ -6,8 +6,8 @@ import (
 	"os"
 	"time"
 
-	applicationLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/logging"
 	billingService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/billing"
+	applicationLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/logging"
 	"github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/logging"
 	orderDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 	paymentDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/payment"
@@ -52,10 +52,10 @@ func (s *paymentService) ProcessPaymentForCustomer(ctx context.Context, orders [
 	}
 
 	s.serviceLogger.LogServiceStart(ctx, "ProcessPaymentForCustomer", map[string]interface{}{
-		"order_count":   len(orders),
-		"order_ids":     orderIds,
-		"total_amount":  totalAmount,
-		"customer_id":   orders[0].CustomerId,
+		"order_count":  len(orders),
+		"order_ids":    orderIds,
+		"total_amount": totalAmount,
+		"customer_id":  orders[0].CustomerId,
 	})
 
 	if len(orders) == 0 {
@@ -178,13 +178,13 @@ func (s *paymentService) ProcessPaymentForCustomer(ctx context.Context, orders [
 	s.eventLogger.LogPaymentProcessed(ctx, fmt.Sprintf("%d", transactionResp.Data.ID), orders[0].OrderId, transactionResp.Data.Status, float64(totalAmountCents)/100)
 
 	s.serviceLogger.LogServiceEnd(ctx, "ProcessPaymentForCustomer", time.Since(start), map[string]interface{}{
-		"customer_id":         customerId,
-		"order_count":         len(orders),
-		"total_amount_cents":  totalAmountCents,
-		"billing_reference":   billingReference,
-		"transaction_id":      transactionResp.Data.ID,
-		"transaction_status":  transactionResp.Data.Status,
-		"success":             true,
+		"customer_id":        customerId,
+		"order_count":        len(orders),
+		"total_amount_cents": totalAmountCents,
+		"billing_reference":  billingReference,
+		"transaction_id":     transactionResp.Data.ID,
+		"transaction_status": transactionResp.Data.Status,
+		"success":            true,
 	})
 
 	return nil

@@ -9,12 +9,12 @@ import (
 	"sync"
 	"time"
 
-	applicationLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/logging"
 	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
 	itemSpecService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/item_specification"
+	applicationLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/logging"
 	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
-	"github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/logging"
 	itemSpecificationDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item_specification"
+	"github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/logging"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/rule"
 	ruleSpecDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/rule_specification"
 	offerClient "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/api/offer"
@@ -253,14 +253,14 @@ func (s *ruleVerificationService) processRule(ctx context.Context, rule *domain.
 	}
 
 	s.serviceLogger.LogBusinessRule(ctx, "RuleEvaluated", isActive, map[string]interface{}{
-		"rule_id":            rule.RuleId,
-		"offer_id":           rule.OfferId,
-		"pos_id":             rule.PosId,
-		"old_state":          oldState,
-		"new_state":          rule.State,
-		"is_active":          isActive,
+		"rule_id":              rule.RuleId,
+		"offer_id":             rule.OfferId,
+		"pos_id":               rule.PosId,
+		"old_state":            oldState,
+		"new_state":            rule.State,
+		"is_active":            isActive,
 		"specifications_count": len(specifications),
-		"item_specs_count":   len(itemSpecs),
+		"item_specs_count":     len(itemSpecs),
 	})
 
 	if isActive {
@@ -397,13 +397,13 @@ func (s *ruleVerificationService) verifySpecification(
 	case "AvailableStartDate", "AvailableEndDate":
 		var dateStr string
 		var ok bool
-	
+
 		if spec.Parameter == "AvailableStartDate" {
 			dateStr, ok = matchingItem["available_start_date_time_utc"].(string)
 		} else {
 			dateStr, ok = matchingItem["available_end_date_time_utc"].(string)
 		}
-	
+
 		if ok {
 			if !strings.HasSuffix(dateStr, "Z") {
 				dateStr += "Z"

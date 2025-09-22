@@ -1,18 +1,20 @@
 package domain
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 type Customer struct {
-	ID        int       `json:"id"`
-	Email     string    `json:"email"`
-	Name      string    `json:"name"`
-	Phone     string    `json:"phone"`
-	Address   string    `json:"address"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	ID                 string    `json:"id" dynamodbav:"id"`
+	Email              string    `json:"email" dynamodbav:"email"`
+	ExternalCustomerID string    `json:"externalCustomerId" dynamodbav:"externalCustomerId"`
+	CreatedAt          time.Time `json:"createdAt" dynamodbav:"createdAt"`
+	UpdatedAt          time.Time `json:"updatedAt" dynamodbav:"updatedAt"`
 }
 
 type CustomerRepository interface {
-	GetCustomers() ([]Customer, error)
-	GetCustomerByID(id string) (*Customer, error)
+	GetByEmail(ctx context.Context, email string) (*Customer, error)
+	Create(ctx context.Context, customer *Customer) error
+	Update(ctx context.Context, customer *Customer) error
 }

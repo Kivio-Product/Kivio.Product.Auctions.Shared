@@ -50,11 +50,11 @@ func (d *DomainEventLogger) LogOrderCreated(ctx context.Context, orderID, custom
 // LogPaymentProcessed logs payment processing events
 func (d *DomainEventLogger) LogPaymentProcessed(ctx context.Context, paymentID, orderID, status string, amount float64) {
 	d.logger.Info(ctx, "Payment processed", map[string]interface{}{
-		"event_type":  "payment_processed",
-		"payment_id":  paymentID,
-		"order_id":    orderID,
-		"status":      status,
-		"amount":      amount,
+		"event_type": "payment_processed",
+		"payment_id": paymentID,
+		"order_id":   orderID,
+		"status":     status,
+		"amount":     amount,
 	})
 }
 

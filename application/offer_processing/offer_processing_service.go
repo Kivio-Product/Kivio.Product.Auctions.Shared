@@ -297,12 +297,12 @@ func (s *OfferProcessingService) updateBillingState(ctx context.Context, orders 
 	}
 
 	for billingId, _ := range groupedByBilling {
-		billing, err:= s.billingService.GetBillingById(ctx, billingId)
+		billing, err := s.billingService.GetBillingById(ctx, billingId)
 		if err != nil {
 			fmt.Printf("Error getting billing %s: %v\n", billingId, err)
 			continue
 		}
-		if billing.State != "Approved"{
+		if billing.State != "Approved" {
 			billing.State = status
 			err := s.billingRepo.UpdateBilling(ctx, billing)
 			if err != nil {
@@ -409,7 +409,7 @@ func (s *OfferProcessingService) filterWinnersBySuccessfulPayment(allWinners []*
 	for _, winner := range allWinners {
 		if successfulCustomersMap[winner.CustomerId] {
 			winnersWithSuccessfulPayment = append(winnersWithSuccessfulPayment, winner)
-		} else{
+		} else {
 			winnersWithUnsuccessfulPayment = append(winnersWithUnsuccessfulPayment, winner)
 		}
 	}

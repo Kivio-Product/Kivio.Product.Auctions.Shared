@@ -19,6 +19,7 @@ import (
 	orderDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 	paymentDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/payment"
 
+	customerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/customer"
 	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
 	emailService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
 	invoiceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/invoice"
@@ -54,6 +55,7 @@ type billingService struct {
 	ecommerceSvc       ecommerceService.EcommerceService
 	offerService       offerService.IOfferService
 	invoiceService     invoiceService.InvoiceService
+	customerService    customerService.CustomerService
 }
 
 func NewBillingService(
@@ -68,6 +70,7 @@ func NewBillingService(
 	offerService offerService.IOfferService,
 	pointOfSaleService pointOfSaleService.IPosService,
 	invoiceService invoiceService.InvoiceService,
+	customerService customerService.CustomerService,
 ) BillingService {
 	return &billingService{
 		repo:               repo,
@@ -81,6 +84,7 @@ func NewBillingService(
 		offerService:       offerService,
 		pointOfSaleService: pointOfSaleService,
 		invoiceService:     invoiceService,
+		customerService:    customerService,
 	}
 }
 
@@ -132,9 +136,6 @@ func (s *billingService) GetPaginatedBillingsWithDetails(ctx context.Context, pa
 	for _, billing := range result.Billings {
 
 		orders, _ := s.orderRepo.GetOrdersBillingByID(ctx, billing.Id)
-		// if err != nil {
-		// 	return nil, err
-		// }
 
 		if _, exists := billingsMap[billing.Id]; !exists {
 			billingsMap[billing.Id] = &domain.BillingDetailResponse{
@@ -597,7 +598,7 @@ func (s *billingService) ConfirmWompiResponse(ctx context.Context, body []byte) 
 			customerEmail = validOrders[0].CustomerId
 		}
 
-		fmt.Printf("[DEBUG]: wompi state", state)
+		fmt.Printf("[DEBUG]: wompi state %s\n", state)
 
 		switch state {
 		case "Approved":
@@ -806,7 +807,7 @@ func (s *billingService) createEcommerceOrderFromOrders(orders []*orderDomain.Or
 
 	var orderItems []ecommerceInfra.EcommerceOrderItem
 	for _, order := range orders {
-		itemAmount := float64(order.OfferedAmount) / 100.0 // Convertir de centavos a unidades monetarias
+		itemAmount := float64(order.OfferedAmount) / 100.0
 		totalAmount += itemAmount
 
 		orderItem := ecommerceInfra.EcommerceOrderItem{
@@ -855,21 +856,41 @@ func (s *billingService) createEcommerceOrderFromOrders(orders []*orderDomain.Or
 func (s *billingService) createEcommerceCustomerAndOrder(ctx context.Context, credentialsApiURL string, credentialsApiKey string, billing *domain.Billing, orders []*orderDomain.Order, item *itemDomain.Item, credentials interface{}) error {
 	fmt.Printf("[BILLING] Starting ecommerce customer & order creation - Email: %s, Orders: %d\n", billing.Customer.Email, len(orders))
 
-	ecommerceCustomer := s.createEcommerceCustomerFromBilling(billing)
-
-	customerRequest := &ecommerceInfra.EcommerceCustomerRequest{
-		Customers: []ecommerceInfra.EcommerceCustomer{*ecommerceCustomer},
-	}
-
-	fmt.Printf("Creando customer en ecommerce: %+v\n", customerRequest.Customers[0])
-
-	customerResponse, err := s.ecommerceSvc.CreateEcommerceCustomer(ctx, credentialsApiURL, credentialsApiKey, ecommerceCustomer)
+	customer, err := s.customerService.GetOrCreateCustomer(ctx, billing.Customer.Email)
 	if err != nil {
-		fmt.Printf("Error creando customer en ecommerce: %v\n", err)
-		return fmt.Errorf("error creando customer en ecommerce: %v", err)
+		fmt.Printf("Error getting or creating customer: %v\n", err)
+		return fmt.Errorf("error getting or creating customer: %v", err)
 	}
 
-	fmt.Printf("Customer creado exitosamente con ID: %d\n", customerResponse.ID)
+	var customerResponse *ecommerceInfra.EcommerceCustomerResponse
+
+	if customer.ExternalCustomerID == "" {
+		ecommerceCustomer := s.createEcommerceCustomerFromBilling(billing)
+
+		fmt.Printf("Creando customer en ecommerce: %+v\n", ecommerceCustomer)
+
+		customerResponse, err = s.ecommerceSvc.CreateEcommerceCustomer(ctx, credentialsApiURL, credentialsApiKey, ecommerceCustomer)
+		if err != nil {
+			fmt.Printf("Error creando customer en ecommerce: %v\n", err)
+			return fmt.Errorf("error creando customer en ecommerce: %v", err)
+		}
+
+		fmt.Printf("Customer creado exitosamente con ID: %d\n", customerResponse.ID)
+
+		err = s.customerService.UpdateExternalCustomerID(ctx, customer.Email, fmt.Sprintf("%d", customerResponse.ID))
+		if err != nil {
+			fmt.Printf("Error updating customer with external ID: %v\n", err)
+			return fmt.Errorf("error updating customer with external ID: %v", err)
+		}
+	} else {
+		customerResponse = &ecommerceInfra.EcommerceCustomerResponse{
+			ID: func() int {
+				id, _ := strconv.Atoi(customer.ExternalCustomerID)
+				return id
+			}(),
+		}
+		fmt.Printf("Using existing customer with ID: %d\n", customerResponse.ID)
+	}
 
 	ecommerceOrder := s.createEcommerceOrderFromOrders(orders, customerResponse.ID, item)
 

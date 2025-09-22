@@ -9,10 +9,10 @@ import (
 	applicationLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/logging"
 	"github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/logging"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
+	infrastructureLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/logging"
 	itemInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item"
 	itemSpecInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item_specification"
 	orderInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/order"
-	infrastructureLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/logging"
 
 	"bytes"
 
@@ -61,16 +61,16 @@ func NewOrderService(repo orderInfrastructure.OrderRepository, orderFactory doma
 	eventLogger := logging.NewDomainEventLogger(loggerRepo.GetLogger())
 
 	return &orderService{
-		repo:          repo,
-		orderFactory:  orderFactory,
-		itemSpecRepo:  itemSpecRepo,
-		itemRepo:      itemRepo,
-		emailService:  emailService,
-		offerService:  offerService,
-		wompiService:  wompiService,
+		repo:           repo,
+		orderFactory:   orderFactory,
+		itemSpecRepo:   itemSpecRepo,
+		itemRepo:       itemRepo,
+		emailService:   emailService,
+		offerService:   offerService,
+		wompiService:   wompiService,
 		billingService: billingService,
-		serviceLogger: serviceLogger,
-		eventLogger:   eventLogger,
+		serviceLogger:  serviceLogger,
+		eventLogger:    eventLogger,
 	}
 }
 
@@ -374,12 +374,11 @@ func (s *orderService) GetPaginatedOrdersWithDetails(ctx context.Context, params
 	if params.PointOfSaleId == "" {
 		return nil, fmt.Errorf("pointOfSaleId is required")
 	}
-	
+
 	ordersResult, err := s.repo.GetOrdersPaginated(ctx, params, filters)
 	if err != nil {
 		return nil, fmt.Errorf("error al obtener órdenes paginadas: %w", err)
 	}
-
 
 	var orderDetails []domain.OrderDetail
 	for _, order := range ordersResult.Orders {

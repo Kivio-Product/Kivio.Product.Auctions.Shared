@@ -13,17 +13,17 @@ type EmailBlackListService interface {
 }
 
 type emailBlackListService struct {
-	repo         infrastructure.EmailBlackListRepository
+	repo                  infrastructure.EmailBlackListRepository
 	emailBlackListFactory domain.EmailBlackListFactory
 }
 
 func NewEmailBlackListService(
 	repo infrastructure.EmailBlackListRepository,
-	emailBlackListFactory           domain.EmailBlackListFactory,
+	emailBlackListFactory domain.EmailBlackListFactory,
 
 ) EmailBlackListService {
 	return &emailBlackListService{
-		repo: repo,
+		repo:                  repo,
 		emailBlackListFactory: emailBlackListFactory,
 	}
 }

@@ -6,17 +6,17 @@ import (
 )
 
 type CustomerConfig struct {
-	CustomerID       string    `json:"customer_id"`
-	AllowMultipleItems bool    `json:"allow_multiple_items"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
-	PointOfSaleId    string    `json:"point_of_sale_id"`
+	CustomerID         string    `json:"customer_id"`
+	AllowMultipleItems bool      `json:"allow_multiple_items"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
+	PointOfSaleId      string    `json:"point_of_sale_id"`
 }
 
 type CustomerConfigInput struct {
-	CustomerID       string `json:"customer_id"`
-	AllowMultipleItems bool `json:"allow_multiple_items"`
-	PointOfSaleId    string `json:"point_of_sale_id"`
+	CustomerID         string `json:"customer_id"`
+	AllowMultipleItems bool   `json:"allow_multiple_items"`
+	PointOfSaleId      string `json:"point_of_sale_id"`
 }
 
 type CustomerConfigRepository interface {

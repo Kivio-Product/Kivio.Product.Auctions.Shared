@@ -3,9 +3,9 @@ package services
 import (
 	"context"
 
+	ecommerceClient "github.com/Kivio-Product/Kivio.Product.Auctions.EcommerceClient"
 	integrationService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/integration"
 	ecommerceBridge "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/ecommerce"
-	ecommerceClient "github.com/Kivio-Product/Kivio.Product.Auctions.EcommerceClient"
 )
 
 type EcommerceCredentials = ecommerceClient.EcommerceCredentials

@@ -49,13 +49,13 @@ func (s *invoiceService) CreateInvoiceForOrders(ctx context.Context, billingID s
 	}
 
 	s.serviceLogger.LogServiceStart(ctx, "CreateInvoiceForOrders", map[string]interface{}{
-		"billing_id":     billingID,
-		"order_count":    len(orders),
-		"order_ids":      orderIds,
-		"customer_id":    customer.Identification,
-		"customer_name":  customer.Name,
-		"pos_name":       posName,
-		"total_amount":   totalAmountSum,
+		"billing_id":    billingID,
+		"order_count":   len(orders),
+		"order_ids":     orderIds,
+		"customer_id":   customer.Identification,
+		"customer_name": customer.Name,
+		"pos_name":      posName,
+		"total_amount":  totalAmountSum,
 	})
 
 	if len(orders) == 0 {
@@ -152,10 +152,10 @@ func (s *invoiceService) CreateInvoiceForOrders(ctx context.Context, billingID s
 	siigoInvoice, err := s.invoiceFactory.CreateSiigoInvoice(invoiceRequest)
 	if err != nil {
 		s.serviceLogger.LogServiceError(ctx, "CreateInvoiceForOrders", err, map[string]interface{}{
-			"billing_id":   billingID,
-			"customer_id":  customer.Identification,
-			"order_count":  len(orders),
-			"error":        "failed_to_create_siigo_invoice",
+			"billing_id":  billingID,
+			"customer_id": customer.Identification,
+			"order_count": len(orders),
+			"error":       "failed_to_create_siigo_invoice",
 		})
 		return nil, fmt.Errorf("error creating Siigo invoice: %w", err)
 	}
