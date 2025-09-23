@@ -856,15 +856,24 @@ func (s *billingService) createEcommerceShippingAddressFromBilling(billing *doma
 		}
 	}
 
+	var addressInfo domain.CustomerAddress
+	if billing.Customer.ShippingAddress != nil {
+		addressInfo = *billing.Customer.ShippingAddress
+		fmt.Printf("Using customer shipping address: %+v\n", addressInfo)
+	} else {
+		addressInfo = billing.Customer.Address
+		fmt.Printf("Using customer billing address as fallback for shipping: %+v\n", addressInfo)
+	}
+
 	address := &ecommerceInfra.EcommerceAddress{
 		FirstName:     firstName,
 		LastName:      lastName,
 		Email:         billing.Customer.Email,
-		City:          billing.Customer.Address.City.CityName,
-		Address1:      billing.Customer.Address.Address,
-		ZipPostalCode: billing.Customer.Address.PostalCode,
-		Country:       billing.Customer.Address.City.CountryName,
-		Province:      billing.Customer.Address.City.StateName,
+		City:          addressInfo.City.CityName,
+		Address1:      addressInfo.Address,
+		ZipPostalCode: addressInfo.PostalCode,
+		Country:       addressInfo.City.CountryName,
+		Province:      addressInfo.City.StateName,
 		CreatedOnUTC:  now,
 		CountryID:     57,
 	}

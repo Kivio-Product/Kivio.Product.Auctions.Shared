@@ -84,17 +84,18 @@ func (b *Billing) Update(state string) error {
 }
 
 type Customer struct {
-	ID             string            `json:"id" dynamodbav:"id"`
-	Email          string            `json:"email" dynamodbav:"email"`
-	PersonType     string            `json:"personType" dynamodbav:"personType"`
-	IDType         string            `json:"idType" dynamodbav:"idType"`
-	Identification string            `json:"identification" dynamodbav:"identification"`
-	Name           []string          `json:"name" dynamodbav:"name"`
-	Address        CustomerAddress   `json:"address" dynamodbav:"address"`
-	Phones         []CustomerPhone   `json:"phones" dynamodbav:"phones"`
-	Contacts       []CustomerContact `json:"contacts" dynamodbav:"contacts"`
-	CreatedAt      time.Time         `json:"createdAt" dynamodbav:"createdAt"`
-	UpdatedAt      time.Time         `json:"updatedAt" dynamodbav:"updatedAt"`
+	ID              string            `json:"id" dynamodbav:"id"`
+	Email           string            `json:"email" dynamodbav:"email"`
+	PersonType      string            `json:"personType" dynamodbav:"personType"`
+	IDType          string            `json:"idType" dynamodbav:"idType"`
+	Identification  string            `json:"identification" dynamodbav:"identification"`
+	Name            []string          `json:"name" dynamodbav:"name"`
+	Address         CustomerAddress   `json:"address" dynamodbav:"address"`
+	ShippingAddress *CustomerAddress  `json:"shippingAddress,omitempty" dynamodbav:"shippingAddress,omitempty"`
+	Phones          []CustomerPhone   `json:"phones" dynamodbav:"phones"`
+	Contacts        []CustomerContact `json:"contacts" dynamodbav:"contacts"`
+	CreatedAt       time.Time         `json:"createdAt" dynamodbav:"createdAt"`
+	UpdatedAt       time.Time         `json:"updatedAt" dynamodbav:"updatedAt"`
 }
 
 type CustomerAddress struct {
