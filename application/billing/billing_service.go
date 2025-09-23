@@ -768,6 +768,7 @@ func (s *billingService) createEcommerceCustomerFromBilling(billing *domain.Bill
 		LastName:     "",
 		Active:       true,
 		CreatedOnUTC: now,
+		RoleIDs:      []int{4},
 	}
 
 	if len(billing.Customer.Name) > 0 {
