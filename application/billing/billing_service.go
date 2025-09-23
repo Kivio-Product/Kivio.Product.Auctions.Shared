@@ -785,11 +785,10 @@ func (s *billingService) createEcommerceBillingAddressFromBilling(billing *domai
 
 	firstName := ""
 	lastName := ""
+
 	if len(billing.Customer.Name) > 0 {
 		firstName = billing.Customer.Name[0]
-		if len(billing.Customer.Name) > 1 {
-			lastName = strings.Join(billing.Customer.Name[1:], " ")
-		}
+		lastName = strings.Join(billing.Customer.Name[1:], " ")
 	}
 
 	address := &ecommerceInfra.EcommerceAddress{
@@ -802,6 +801,7 @@ func (s *billingService) createEcommerceBillingAddressFromBilling(billing *domai
 		Country:       billing.Customer.Address.City.CountryName,
 		Province:      billing.Customer.Address.City.StateName,
 		CreatedOnUTC:  now,
+		CountryID:     57,
 	}
 
 	if len(billing.Customer.Phones) > 0 {
