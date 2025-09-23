@@ -771,9 +771,19 @@ func (s *billingService) createEcommerceCustomerFromBilling(billing *domain.Bill
 	}
 
 	if len(billing.Customer.Name) > 0 {
-		customer.FirstName = billing.Customer.Name[0]
 		if len(billing.Customer.Name) > 1 {
+			customer.FirstName = billing.Customer.Name[0]
 			customer.LastName = strings.Join(billing.Customer.Name[1:], " ")
+		} else {
+			fullName := billing.Customer.Name[0]
+			nameParts := strings.Fields(strings.TrimSpace(fullName))
+			if len(nameParts) > 1 {
+				customer.FirstName = nameParts[0]
+				customer.LastName = strings.Join(nameParts[1:], " ")
+			} else {
+				customer.FirstName = fullName
+				customer.LastName = ""
+			}
 		}
 	}
 
@@ -787,8 +797,20 @@ func (s *billingService) createEcommerceBillingAddressFromBilling(billing *domai
 	lastName := ""
 
 	if len(billing.Customer.Name) > 0 {
-		firstName = billing.Customer.Name[0]
-		lastName = strings.Join(billing.Customer.Name[1:], " ")
+		if len(billing.Customer.Name) > 1 {
+			firstName = billing.Customer.Name[0]
+			lastName = strings.Join(billing.Customer.Name[1:], " ")
+		} else {
+			fullName := billing.Customer.Name[0]
+			nameParts := strings.Fields(strings.TrimSpace(fullName))
+			if len(nameParts) > 1 {
+				firstName = nameParts[0]
+				lastName = strings.Join(nameParts[1:], " ")
+			} else {
+				firstName = fullName
+				lastName = ""
+			}
+		}
 	}
 
 	address := &ecommerceInfra.EcommerceAddress{
