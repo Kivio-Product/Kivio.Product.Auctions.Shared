@@ -20,6 +20,7 @@ type EcommerceService interface {
 	GetAllItemsRaw(ctx context.Context, apiUrl, apiKey string) ([]byte, error)
 	CreateEcommerceCustomer(ctx context.Context, apiUrl, apiKey string, customer *ecommerceBridge.EcommerceCustomer) (*ecommerceBridge.EcommerceCustomerResponse, error)
 	CreateEcommerceBillingAddress(ctx context.Context, apiUrl, apiKey string, customerID int, address *ecommerceBridge.EcommerceAddress) (*ecommerceBridge.EcommerceBillingAddressResponse, error)
+	CreateEcommerceShippingAddress(ctx context.Context, apiUrl, apiKey string, customerID int, address *ecommerceBridge.EcommerceAddress) (*ecommerceBridge.EcommerceShippingAddressResponse, error)
 	CreateEcommerceOrder(ctx context.Context, apiUrl, apiKey string, order *ecommerceBridge.EcommerceOrder) (*ecommerceBridge.EcommerceOrderResponse, error)
 }
 

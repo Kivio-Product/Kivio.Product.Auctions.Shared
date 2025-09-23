@@ -833,6 +833,49 @@ func (s *billingService) createEcommerceBillingAddressFromBilling(billing *domai
 	return address
 }
 
+func (s *billingService) createEcommerceShippingAddressFromBilling(billing *domain.Billing) *ecommerceInfra.EcommerceAddress {
+	now := time.Now()
+
+	firstName := ""
+	lastName := ""
+
+	if len(billing.Customer.Name) > 0 {
+		if len(billing.Customer.Name) > 1 {
+			firstName = billing.Customer.Name[0]
+			lastName = strings.Join(billing.Customer.Name[1:], " ")
+		} else {
+			fullName := billing.Customer.Name[0]
+			nameParts := strings.Fields(strings.TrimSpace(fullName))
+			if len(nameParts) > 1 {
+				firstName = nameParts[0]
+				lastName = strings.Join(nameParts[1:], " ")
+			} else {
+				firstName = fullName
+				lastName = ""
+			}
+		}
+	}
+
+	address := &ecommerceInfra.EcommerceAddress{
+		FirstName:     firstName,
+		LastName:      lastName,
+		Email:         billing.Customer.Email,
+		City:          billing.Customer.Address.City.CityName,
+		Address1:      billing.Customer.Address.Address,
+		ZipPostalCode: billing.Customer.Address.PostalCode,
+		Country:       billing.Customer.Address.City.CountryName,
+		Province:      billing.Customer.Address.City.StateName,
+		CreatedOnUTC:  now,
+		CountryID:     57,
+	}
+
+	if len(billing.Customer.Phones) > 0 {
+		address.PhoneNumber = billing.Customer.Phones[0].Indicative + billing.Customer.Phones[0].Number
+	}
+
+	return address
+}
+
 func (s *billingService) createEcommerceOrderFromOrders(orders []*orderDomain.Order, customerID int, item *itemDomain.Item) *ecommerceInfra.EcommerceOrder {
 	now := time.Now()
 	totalAmount := float64(0)
@@ -945,6 +988,28 @@ func (s *billingService) createEcommerceCustomerAndOrder(ctx context.Context, cr
 		}
 	} else {
 		fmt.Printf("Using existing billing address with ID: %s\n", customer.BillingAddressID)
+	}
+
+	if customer.ShippingAddressID == "" {
+		ecommerceShippingAddress := s.createEcommerceShippingAddressFromBilling(billing)
+
+		fmt.Printf("Creando shipping address en ecommerce para customer ID: %d\n", customerResponse.ID)
+
+		shippingAddressResponse, err := s.ecommerceSvc.CreateEcommerceShippingAddress(ctx, credentialsApiURL, credentialsApiKey, customerResponse.ID, ecommerceShippingAddress)
+		if err != nil {
+			fmt.Printf("Error creando shipping address en ecommerce: %v\n", err)
+			return fmt.Errorf("error creando shipping address en ecommerce: %v", err)
+		}
+
+		fmt.Printf("Shipping address creado exitosamente con ID: %d\n", shippingAddressResponse.ID)
+
+		err = s.customerService.UpdateShippingAddress(ctx, customer.Email, fmt.Sprintf("%d", shippingAddressResponse.ID))
+		if err != nil {
+			fmt.Printf("Error updating customer with shipping address ID: %v\n", err)
+			return fmt.Errorf("error updating customer with shipping address ID: %v", err)
+		}
+	} else {
+		fmt.Printf("Using existing shipping address with ID: %s\n", customer.ShippingAddressID)
 	}
 
 	ecommerceOrder := s.createEcommerceOrderFromOrders(orders, customerResponse.ID, item)

@@ -91,6 +91,12 @@ type EcommerceBillingAddressResponse struct {
 	Message string `json:"message"`
 }
 
+type EcommerceShippingAddressResponse struct {
+	ID      int    `json:"id"`
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
+
 type EcommerceProductAttribute struct {
 	Value string `json:"value"`
 	ID    int    `json:"id"`
@@ -191,6 +197,7 @@ type EcommerceService interface {
 	GetAllItemsRaw(ctx context.Context, apiUrl, apiKey string) ([]byte, error)
 	CreateEcommerceCustomer(ctx context.Context, apiUrl, apiKey string, customer *EcommerceCustomer) (*EcommerceCustomerResponse, error)
 	CreateEcommerceBillingAddress(ctx context.Context, apiUrl, apiKey string, customerID int, address *EcommerceAddress) (*EcommerceBillingAddressResponse, error)
+	CreateEcommerceShippingAddress(ctx context.Context, apiUrl, apiKey string, customerID int, address *EcommerceAddress) (*EcommerceShippingAddressResponse, error)
 	CreateEcommerceOrder(ctx context.Context, apiUrl, apiKey string, order *EcommerceOrder) (*EcommerceOrderResponse, error)
 }
 
@@ -350,6 +357,39 @@ func (b *EcommerceBridge) CreateEcommerceBillingAddress(ctx context.Context, api
 		ID:      response.ID,
 		Success: true,
 		Message: "Billing address created successfully",
+	}, nil
+}
+
+func (b *EcommerceBridge) CreateEcommerceShippingAddress(ctx context.Context, apiUrl, apiKey string, customerID int, address *EcommerceAddress) (*EcommerceShippingAddressResponse, error) {
+	fmt.Printf("[ECOMMERCE] Creating shipping address for customer %d\n", customerID)
+
+	addressData, err := json.Marshal(address)
+	if err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to marshal address data: %v\n", err)
+		return nil, fmt.Errorf("failed to marshal address data: %w", err)
+	}
+
+	respBody, err := b.client.CreateEcommerceShippingAddress(ctx, apiUrl, apiKey, customerID, addressData)
+	if err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to create shipping address API call: %v\n", err)
+		return nil, fmt.Errorf("failed to create shipping address: %w", err)
+	}
+
+	type ShippingAddressCreationResponse struct {
+		ID int `json:"id"`
+	}
+
+	var response ShippingAddressCreationResponse
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to unmarshal shipping address response: %v\n", err)
+		return nil, fmt.Errorf("failed to unmarshal shipping address response: %w", err)
+	}
+
+	fmt.Printf("[ECOMMERCE] SUCCESS: Shipping address created with ID: %d\n", response.ID)
+	return &EcommerceShippingAddressResponse{
+		ID:      response.ID,
+		Success: true,
+		Message: "Shipping address created successfully",
 	}, nil
 }
 

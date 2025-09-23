@@ -6,12 +6,13 @@ import (
 )
 
 type Customer struct {
-	ID                 string    `json:"id" dynamodbav:"id"`
-	Email              string    `json:"email" dynamodbav:"email"`
-	ExternalCustomerID string    `json:"externalCustomerId" dynamodbav:"externalCustomerId"`
-	BillingAddressID   string    `json:"billingAddressId" dynamodbav:"billingAddressId"`
-	CreatedAt          time.Time `json:"createdAt" dynamodbav:"createdAt"`
-	UpdatedAt          time.Time `json:"updatedAt" dynamodbav:"updatedAt"`
+	ID                  string    `json:"id" dynamodbav:"id"`
+	Email               string    `json:"email" dynamodbav:"email"`
+	ExternalCustomerID  string    `json:"externalCustomerId" dynamodbav:"externalCustomerId"`
+	BillingAddressID    string    `json:"billingAddressId" dynamodbav:"billingAddressId"`
+	ShippingAddressID   string    `json:"shippingAddressId" dynamodbav:"shippingAddressId"`
+	CreatedAt           time.Time `json:"createdAt" dynamodbav:"createdAt"`
+	UpdatedAt           time.Time `json:"updatedAt" dynamodbav:"updatedAt"`
 }
 
 type CustomerRepository interface {
