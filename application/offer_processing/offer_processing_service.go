@@ -366,6 +366,7 @@ func (s *OfferProcessingService) sendEmailNotification(ctx context.Context, noti
 		notification.ConcatenatedNames,
 		notification.OfferedAmount,
 		notification.PointOfSaleId,
+		"",
 	)
 }
 
