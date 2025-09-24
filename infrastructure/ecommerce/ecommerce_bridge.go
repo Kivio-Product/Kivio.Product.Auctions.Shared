@@ -315,6 +315,9 @@ func (b *EcommerceBridge) GetAllItemsRaw(ctx context.Context, apiUrl, apiKey str
 func (b *EcommerceBridge) CreateEcommerceCustomer(ctx context.Context, apiUrl, apiKey string, customer *EcommerceCustomer) (*EcommerceCustomerResponse, error) {
 	fmt.Printf("[ECOMMERCE] Creating customer - Email: %s, URL: %s\n", customer.Email, apiUrl)
 
+	fmt.Printf("[ECOMMERCE] Customer received: %+v\n", customer)
+	fmt.Printf("[ECOMMERCE] Customer RoleIDs: %+v\n", customer.RoleIDs)
+
 	basicCustomer := EcommerceCustomerBasic{
 		Username:     customer.Username,
 		Email:        customer.Email,
@@ -325,6 +328,9 @@ func (b *EcommerceBridge) CreateEcommerceCustomer(ctx context.Context, apiUrl, a
 		RoleIDs:      customer.RoleIDs,
 	}
 
+	fmt.Printf("[ECOMMERCE] BasicCustomer created: %+v\n", basicCustomer)
+	fmt.Printf("[ECOMMERCE] BasicCustomer RoleIDs: %+v\n", basicCustomer.RoleIDs)
+
 	customerRequest := EcommerceCustomerRequest{
 		Customer: basicCustomer,
 	}
@@ -334,6 +340,8 @@ func (b *EcommerceBridge) CreateEcommerceCustomer(ctx context.Context, apiUrl, a
 		fmt.Printf("[ECOMMERCE] ERROR: Failed to marshal customer data: %v\n", err)
 		return nil, fmt.Errorf("failed to marshal customer data: %w", err)
 	}
+
+	fmt.Printf("[ECOMMERCE] Final customer JSON to be sent: %s\n", string(customerData))
 
 	respBody, err := b.client.CreateEcommerceCustomer(ctx, apiUrl, apiKey, customerData)
 	if err != nil {

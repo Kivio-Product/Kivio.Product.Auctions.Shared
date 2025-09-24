@@ -793,6 +793,8 @@ func (s *billingService) createEcommerceCustomerFromBilling(billing *domain.Bill
 		RoleIDs:      []int{4},
 	}
 
+	fmt.Printf("[DEBUG] Customer created with RoleIDs: %+v\n", customer.RoleIDs)
+
 	if len(billing.Customer.Name) > 0 {
 		if len(billing.Customer.Name) > 1 {
 			customer.FirstName = billing.Customer.Name[0]
@@ -810,6 +812,7 @@ func (s *billingService) createEcommerceCustomerFromBilling(billing *domain.Bill
 		}
 	}
 
+	fmt.Printf("[DEBUG] Final customer before return: %+v\n", customer)
 	return customer
 }
 
