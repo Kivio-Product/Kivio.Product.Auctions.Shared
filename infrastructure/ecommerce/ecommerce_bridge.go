@@ -73,6 +73,7 @@ type EcommerceCustomerBasic struct {
 	LastName     string    `json:"last_name"`
 	Active       bool      `json:"active"`
 	CreatedOnUTC time.Time `json:"created_on_utc"`
+	RoleIDs      []int     `json:"role_ids"`
 }
 
 type EcommerceCustomerRequest struct {
@@ -98,11 +99,11 @@ type EcommerceShippingAddressResponse struct {
 }
 
 type EcommerceShoppingCartItem struct {
-	Quantity           int       `json:"quantity"`
-	CreatedOnUTC       time.Time `json:"created_on_utc"`
-	ShoppingCartType   string    `json:"shopping_cart_type"`
-	ProductID          int       `json:"product_id"`
-	CustomerID         int       `json:"customer_id"`
+	Quantity         int       `json:"quantity"`
+	CreatedOnUTC     time.Time `json:"created_on_utc"`
+	ShoppingCartType string    `json:"shopping_cart_type"`
+	ProductID        int       `json:"product_id"`
+	CustomerID       int       `json:"customer_id"`
 }
 
 type EcommerceShoppingCartItemRequest struct {
@@ -321,6 +322,7 @@ func (b *EcommerceBridge) CreateEcommerceCustomer(ctx context.Context, apiUrl, a
 		LastName:     customer.LastName,
 		Active:       customer.Active,
 		CreatedOnUTC: customer.CreatedOnUTC,
+		RoleIDs:      customer.RoleIDs,
 	}
 
 	customerRequest := EcommerceCustomerRequest{
