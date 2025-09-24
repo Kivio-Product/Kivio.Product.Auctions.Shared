@@ -97,6 +97,24 @@ type EcommerceShippingAddressResponse struct {
 	Message string `json:"message"`
 }
 
+type EcommerceShoppingCartItem struct {
+	Quantity           int       `json:"quantity"`
+	CreatedOnUTC       time.Time `json:"created_on_utc"`
+	ShoppingCartType   string    `json:"shopping_cart_type"`
+	ProductID          int       `json:"product_id"`
+	CustomerID         int       `json:"customer_id"`
+}
+
+type EcommerceShoppingCartItemRequest struct {
+	ShoppingCartItem EcommerceShoppingCartItem `json:"shopping_cart_item"`
+}
+
+type EcommerceShoppingCartItemResponse struct {
+	ID      int    `json:"id"`
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
+
 type EcommerceProductAttribute struct {
 	Value string `json:"value"`
 	ID    int    `json:"id"`
@@ -175,6 +193,28 @@ type EcommerceOrderResponse struct {
 	Message string `json:"message"`
 }
 
+type EcommerceSimpleAddress struct {
+	ID int `json:"id"`
+}
+
+type EcommerceSimpleOrder struct {
+	StoreID                 int                     `json:"store_id"`
+	PaymentMethodSystemName string                  `json:"payment_method_system_name"`
+	CustomerCurrencyCode    string                  `json:"customer_currency_code"`
+	CurrencyRate            float64                 `json:"currency_rate"`
+	OrderTax                float64                 `json:"order_tax"`
+	OrderTotal              float64                 `json:"order_total"`
+	PaidDateUTC             time.Time               `json:"paid_date_utc"`
+	CreatedOnUTC            time.Time               `json:"created_on_utc"`
+	CustomerID              int                     `json:"customer_id"`
+	BillingAddress          *EcommerceSimpleAddress `json:"billing_address"`
+	ShippingAddress         *EcommerceSimpleAddress `json:"shipping_address"`
+}
+
+type EcommerceSimpleOrderRequest struct {
+	Order EcommerceSimpleOrder `json:"order"`
+}
+
 type EcommerceBridge struct {
 	client ecommerceClient.EcommerceService
 }
@@ -198,7 +238,9 @@ type EcommerceService interface {
 	CreateEcommerceCustomer(ctx context.Context, apiUrl, apiKey string, customer *EcommerceCustomer) (*EcommerceCustomerResponse, error)
 	CreateEcommerceBillingAddress(ctx context.Context, apiUrl, apiKey string, customerID int, address *EcommerceAddress) (*EcommerceBillingAddressResponse, error)
 	CreateEcommerceShippingAddress(ctx context.Context, apiUrl, apiKey string, customerID int, address *EcommerceAddress) (*EcommerceShippingAddressResponse, error)
+	CreateEcommerceShoppingCartItem(ctx context.Context, apiUrl, apiKey string, cartItem *EcommerceShoppingCartItem) (*EcommerceShoppingCartItemResponse, error)
 	CreateEcommerceOrder(ctx context.Context, apiUrl, apiKey string, order *EcommerceOrder) (*EcommerceOrderResponse, error)
+	CreateEcommerceSimpleOrder(ctx context.Context, apiUrl, apiKey string, order *EcommerceSimpleOrder) (*EcommerceOrderResponse, error)
 }
 
 func (b *EcommerceBridge) GetItems(ctx context.Context, apiUrl, apiKey string, page, limit int) ([]itemDomain.Item, error) {
@@ -393,6 +435,43 @@ func (b *EcommerceBridge) CreateEcommerceShippingAddress(ctx context.Context, ap
 	}, nil
 }
 
+func (b *EcommerceBridge) CreateEcommerceShoppingCartItem(ctx context.Context, apiUrl, apiKey string, cartItem *EcommerceShoppingCartItem) (*EcommerceShoppingCartItemResponse, error) {
+	fmt.Printf("[ECOMMERCE] Creating shopping cart item - CustomerID: %d, ProductID: %d\n", cartItem.CustomerID, cartItem.ProductID)
+
+	cartItemRequest := EcommerceShoppingCartItemRequest{
+		ShoppingCartItem: *cartItem,
+	}
+
+	cartItemData, err := json.Marshal(cartItemRequest)
+	if err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to marshal shopping cart item data: %v\n", err)
+		return nil, fmt.Errorf("failed to marshal shopping cart item data: %w", err)
+	}
+
+	respBody, err := b.client.CreateEcommerceShoppingCartItem(ctx, apiUrl, apiKey, cartItemData)
+	if err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to create shopping cart item API call: %v\n", err)
+		return nil, fmt.Errorf("failed to create shopping cart item: %w", err)
+	}
+
+	type ShoppingCartItemCreationResponse struct {
+		ID int `json:"id"`
+	}
+
+	var response ShoppingCartItemCreationResponse
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to unmarshal shopping cart item response: %v\n", err)
+		return nil, fmt.Errorf("failed to unmarshal shopping cart item response: %w", err)
+	}
+
+	fmt.Printf("[ECOMMERCE] SUCCESS: Shopping cart item created with ID: %d\n", response.ID)
+	return &EcommerceShoppingCartItemResponse{
+		ID:      response.ID,
+		Success: true,
+		Message: "Shopping cart item created successfully",
+	}, nil
+}
+
 func (b *EcommerceBridge) CreateEcommerceOrder(ctx context.Context, apiUrl, apiKey string, order *EcommerceOrder) (*EcommerceOrderResponse, error) {
 	fmt.Printf("[ECOMMERCE] Creating order - CustomerID: %d, Total: %.2f\n", order.CustomerID, order.OrderTotal)
 
@@ -427,6 +506,43 @@ func (b *EcommerceBridge) CreateEcommerceOrder(ctx context.Context, apiUrl, apiK
 		ID:      response.ID,
 		Success: true,
 		Message: "Order created successfully",
+	}, nil
+}
+
+func (b *EcommerceBridge) CreateEcommerceSimpleOrder(ctx context.Context, apiUrl, apiKey string, order *EcommerceSimpleOrder) (*EcommerceOrderResponse, error) {
+	fmt.Printf("[ECOMMERCE] Creating simple order - CustomerID: %d, Total: %.2f\n", order.CustomerID, order.OrderTotal)
+
+	orderRequest := EcommerceSimpleOrderRequest{
+		Order: *order,
+	}
+
+	orderData, err := json.Marshal(orderRequest)
+	if err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to marshal simple order data: %v\n", err)
+		return nil, fmt.Errorf("failed to marshal simple order data: %w", err)
+	}
+
+	respBody, err := b.client.CreateEcommerceOrder(ctx, apiUrl, apiKey, orderData)
+	if err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to create simple order API call: %v\n", err)
+		return nil, fmt.Errorf("failed to create simple order: %w", err)
+	}
+
+	type SimpleOrderCreationResponse struct {
+		ID int `json:"id"`
+	}
+
+	var response SimpleOrderCreationResponse
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to unmarshal simple order response: %v\n", err)
+		return nil, fmt.Errorf("failed to unmarshal simple order response: %w", err)
+	}
+
+	fmt.Printf("[ECOMMERCE] SUCCESS: Simple order created with ID: %d\n", response.ID)
+	return &EcommerceOrderResponse{
+		ID:      response.ID,
+		Success: true,
+		Message: "Simple order created successfully",
 	}, nil
 }
 

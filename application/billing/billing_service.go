@@ -886,53 +886,51 @@ func (s *billingService) createEcommerceShippingAddressFromBilling(billing *doma
 	return address
 }
 
-func (s *billingService) createEcommerceOrderFromOrders(orders []*orderDomain.Order, customerID int, item *itemDomain.Item) *ecommerceInfra.EcommerceOrder {
+func (s *billingService) createEcommerceShoppingCartItemFromOrders(orders []*orderDomain.Order, customerID int, item *itemDomain.Item) *ecommerceInfra.EcommerceShoppingCartItem {
+	now := time.Now()
+
+	var productID int
+	if item != nil && item.ExternalId != "" {
+		if strings.HasPrefix(item.ExternalId, "kivio-ecommerce∼") {
+			externalIDStr := strings.TrimPrefix(item.ExternalId, "kivio-ecommerce∼")
+			if id, err := strconv.Atoi(externalIDStr); err == nil {
+				productID = id
+			}
+		}
+	}
+
+	cartItem := &ecommerceInfra.EcommerceShoppingCartItem{
+		Quantity:         1,
+		CreatedOnUTC:     now,
+		ShoppingCartType: "ShoppingCart",
+		ProductID:        productID,
+		CustomerID:       customerID,
+	}
+
+	return cartItem
+}
+
+func (s *billingService) createEcommerceOrderFromOrders(orders []*orderDomain.Order, customerID int, item *itemDomain.Item, billingAddressID, shippingAddressID int) *ecommerceInfra.EcommerceSimpleOrder {
 	now := time.Now()
 	totalAmount := float64(0)
 
-	var orderItems []ecommerceInfra.EcommerceOrderItem
 	for _, order := range orders {
 		itemAmount := float64(order.OfferedAmount) / 100.0
 		totalAmount += itemAmount
-
-		orderItem := ecommerceInfra.EcommerceOrderItem{
-			Quantity:         1,
-			UnitPriceInclTax: itemAmount,
-			UnitPriceExclTax: itemAmount,
-			PriceInclTax:     itemAmount,
-			PriceExclTax:     itemAmount,
-		}
-		orderItems = append(orderItems, orderItem)
 	}
 
-	customerEmail := ""
-	if len(orders) > 0 {
-		customerEmail = orders[0].CustomerId
-	}
-
-	address := &ecommerceInfra.EcommerceAddress{
-		FirstName:    "Cliente",
-		LastName:     "Kivio",
-		Email:        customerEmail,
-		City:         "Bogotá",
-		Address1:     "Dirección del cliente",
-		Country:      "Colombia",
-		CreatedOnUTC: now,
-	}
-
-	order := &ecommerceInfra.EcommerceOrder{
+	order := &ecommerceInfra.EcommerceSimpleOrder{
 		StoreID:                 1,
-		PaymentMethodSystemName: "Payments.Manual",
+		PaymentMethodSystemName: "Payments.CashOnDelivery",
 		CustomerCurrencyCode:    "COP",
-		CurrencyRate:            1.0,
-		OrderSubtotalInclTax:    totalAmount,
-		OrderSubtotalExclTax:    totalAmount,
+		CurrencyRate:            1,
+		OrderTax:                0,
 		OrderTotal:              totalAmount,
+		PaidDateUTC:             now,
 		CreatedOnUTC:            now,
 		CustomerID:              customerID,
-		BillingAddress:          address,
-		ShippingAddress:         address,
-		OrderItems:              orderItems,
+		BillingAddress:          &ecommerceInfra.EcommerceSimpleAddress{ID: billingAddressID},
+		ShippingAddress:         &ecommerceInfra.EcommerceSimpleAddress{ID: shippingAddressID},
 	}
 
 	return order
@@ -1022,11 +1020,40 @@ func (s *billingService) createEcommerceCustomerAndOrder(ctx context.Context, cr
 		fmt.Printf("Using existing shipping address with ID: %s\n", customer.ShippingAddressID)
 	}
 
-	ecommerceOrder := s.createEcommerceOrderFromOrders(orders, customerResponse.ID, item)
+	ecommerceShoppingCartItem := s.createEcommerceShoppingCartItemFromOrders(orders, customerResponse.ID, item)
+
+	fmt.Printf("Creando shopping cart item en ecommerce: %+v\n", ecommerceShoppingCartItem)
+
+	cartResponse, err := s.ecommerceSvc.CreateEcommerceShoppingCartItem(ctx, credentialsApiURL, credentialsApiKey, ecommerceShoppingCartItem)
+	if err != nil {
+		fmt.Printf("Error creando shopping cart item en ecommerce: %v\n", err)
+		return fmt.Errorf("error creando shopping cart item en ecommerce: %v", err)
+	}
+
+	fmt.Printf("Shopping cart item creado exitosamente con ID: %d\n", cartResponse.ID)
+
+	var billingAddressID, shippingAddressID int
+	if billingAddressResponse != nil {
+		billingAddressID = billingAddressResponse.ID
+	} else {
+		if id, err := strconv.Atoi(customer.BillingAddressID); err == nil {
+			billingAddressID = id
+		}
+	}
+
+	if customer.ShippingAddressID != "" {
+		if id, err := strconv.Atoi(customer.ShippingAddressID); err == nil {
+			shippingAddressID = id
+		}
+	} else {
+		shippingAddressID = billingAddressID
+	}
+
+	ecommerceOrder := s.createEcommerceOrderFromOrders(orders, customerResponse.ID, item, billingAddressID, shippingAddressID)
 
 	fmt.Printf("Creando orden en ecommerce: %+v\n", ecommerceOrder)
 
-	orderResponse, err := s.ecommerceSvc.CreateEcommerceOrder(ctx, credentialsApiURL, credentialsApiKey, ecommerceOrder)
+	orderResponse, err := s.ecommerceSvc.CreateEcommerceSimpleOrder(ctx, credentialsApiURL, credentialsApiKey, ecommerceOrder)
 	if err != nil {
 		fmt.Printf("Error creando orden en ecommerce: %v\n", err)
 		return fmt.Errorf("error creando orden en ecommerce: %v", err)
