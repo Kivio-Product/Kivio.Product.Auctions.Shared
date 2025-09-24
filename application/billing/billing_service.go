@@ -37,6 +37,7 @@ type BillingService interface {
 	CreateBilling(ctx context.Context, provider, posId, customerId string, customer *domain.Customer) (*domain.Billing, error)
 	GetAllBillings(ctx context.Context) ([]domain.Billing, error)
 	GetBillingById(ctx context.Context, id string) (*domain.Billing, error)
+	GetBillingByTransactionId(ctx context.Context, id string) (*domain.Billing, error)
 	ConfirmPayUResponse(ctx context.Context, res *paymentDomain.ConfirmationResponse, secretKey string) error
 	ConfirmWompiResponse(ctx context.Context, body []byte) error
 	GetPaginatedBillingsWithDetails(ctx context.Context, params orderDomain.PaginationParams, filters map[string]string) (*domain.PaginatedBillingDetailsResponse, error)
@@ -176,6 +177,14 @@ func (s *billingService) GetPaginatedBillingsWithDetails(ctx context.Context, pa
 
 func (s *billingService) GetBillingById(ctx context.Context, id string) (*domain.Billing, error) {
 	billing, err := s.repo.GetBillingByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return billing, nil
+}
+
+func (s *billingService) GetBillingByTransactionId(ctx context.Context, id string) (*domain.Billing, error) {
+	billing, err := s.repo.GetBillingByTransactionID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
