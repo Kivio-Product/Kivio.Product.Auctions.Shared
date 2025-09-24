@@ -19,6 +19,7 @@ import (
 type BillingRepository interface {
 	SaveBilling(ctx context.Context, billing *domain.Billing) error
 	GetBillingByID(ctx context.Context, billingID string) (*domain.Billing, error)
+	GetBillingByTransactionID(ctx context.Context, transactionID string) (*domain.Billing, error)
 	GetAllBillings(ctx context.Context) ([]domain.Billing, error)
 	UpdateBilling(ctx context.Context, billing *domain.Billing) error
 	GetOrderBillingPaginated(ctx context.Context, params orderDomain.PaginationParams, filters map[string]string) (*domain.BillingRepositoryResult, error)
@@ -86,6 +87,31 @@ func (r *billingRepository) GetBillingByID(ctx context.Context, billingID string
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal billing: %w", err)
 	}
+	return &billing, nil
+}
+
+func (r *billingRepository) GetBillingByTransactionID(ctx context.Context, transactionID string) (*domain.Billing, error) {
+	result, err := r.client.Scan(&dynamodb.ScanInput{
+		TableName:        aws.String(r.billingTable),
+		FilterExpression: aws.String("transactionId = :tid"),
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":tid": {S: aws.String(transactionID)},
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan table %s: %w", r.billingTable, err)
+	}
+
+	if len(result.Items) == 0 {
+		return nil, fmt.Errorf("no billing found with transactionId %s", transactionID)
+	}
+
+	var billing domain.Billing
+	err = dynamodbattribute.UnmarshalMap(result.Items[0], &billing)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal billing: %w", err)
+	}
+
 	return &billing, nil
 }
 
