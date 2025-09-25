@@ -617,6 +617,8 @@ func (s *billingService) ConfirmWompiResponse(ctx context.Context, body []byte) 
 			customerEmail = validOrders[0].CustomerId
 		}
 
+		firstOrderAmount += int64(order.OfferedAmount)
+
 		fmt.Printf("[DEBUG]: wompi state %s\n", state)
 
 		switch state {
@@ -677,9 +679,6 @@ func (s *billingService) ConfirmWompiResponse(ctx context.Context, body []byte) 
 		}
 
 		concatenatedItemNames = append(concatenatedItemNames, order.ExtraData)
-		if firstOrderAmount == 0 {
-			firstOrderAmount = order.OfferedAmount
-		}
 	}
 
 	if customerEmail != "" && len(concatenatedItemNames) > 0 {
