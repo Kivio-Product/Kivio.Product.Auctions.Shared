@@ -341,15 +341,11 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 			}
 			switch state {
 			case "Approved":
-				fmt.Printf("[DEBUG] Orden aprobada, estado: %s\n", state)
 				order.State = "Approved"
 				itemSpec.Availability--
-				fmt.Printf("[DEBUG] itemSpec.IsExternal: %v, item != nil: %v\n", itemSpec.IsExternal, item != nil)
 				if itemSpec.IsExternal && item != nil {
-					fmt.Printf("[DEBUG] Obteniendo credenciales para PointOfSaleId: %s\n", order.PointOfSaleId)
 					credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, order.PointOfSaleId)
 					if err == nil {
-						fmt.Printf("[DEBUG] Credenciales obtenidas exitosamente, creando customer y orden en ecommerce\n")
 						creds := &struct {
 							ApiURL string
 							ApiKey string
@@ -358,28 +354,12 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 							ApiKey: credentials.ApiKey,
 						}
 
-						// Extraer el productId del itemSpec.ItemId
 						productIDStr := ""
 						if strings.HasPrefix(itemSpec.ItemId, "kivio-ecommerce∼") {
 							productIDStr = strings.TrimPrefix(itemSpec.ItemId, "kivio-ecommerce∼")
-							fmt.Printf("[DEBUG] Extracted productIDStr: '%s'\n", productIDStr)
-						}
-
-						fmt.Printf("[DEBUG] Llamando createEcommerceCustomerAndOrder... item: %+v\n", item)
-						if item != nil {
-							fmt.Printf("[DEBUG] Item details - ItemId: '%s', ExternalId: '%s', Name: '%s'\n", item.ItemId, item.ExternalId, item.Name)
 						}
 						err = s.createEcommerceCustomerAndOrder(ctx, credentials.ApiURL, credentials.ApiKey, billing, validOrders, item, productIDStr, creds)
-						if err != nil {
-							fmt.Printf("Error creando customer y orden en ecommerce: %v\n", err)
-						} else {
-							fmt.Printf("[DEBUG] createEcommerceCustomerAndOrder ejecutado exitosamente\n")
-						}
-					} else {
-						fmt.Printf("[DEBUG] Error obteniendo credenciales: %v\n", err)
 					}
-				} else {
-					fmt.Printf("[DEBUG] Condición no cumplida - itemSpec.IsExternal: %v, item != nil: %v\n", itemSpec.IsExternal, item != nil)
 				}
 			case "Rejected", "Error":
 				order.State = "Rejected"
@@ -617,30 +597,19 @@ func (s *billingService) ConfirmWompiResponse(ctx context.Context, body []byte) 
 			customerEmail = validOrders[0].CustomerId
 		}
 
-		fmt.Printf("[DEBUG]: wompi state %s\n", state)
-
 		switch state {
 		case "Approved":
-			fmt.Printf("[DEBUG 2] Orden aprobada, estado: %s\n", state)
 			order.State = "Approved"
 
-			fmt.Printf("[DEBUG 2] Obteniendo itemSpec para ItemSpecificationId: %s\n", order.ItemSpecificationId)
 			itemSpec, err := s.itemSpecRepo.GetById(ctx, order.ItemSpecificationId)
 			if err == nil && itemSpec.IsExternal {
-				fmt.Printf("[DEBUG 2] itemSpec obtenido, IsExternal: %v\n", itemSpec.IsExternal)
 				var item *itemDomain.Item
-				fmt.Printf("[DEBUG 2] Obteniendo credenciales para PointOfSaleId: %s\n", itemSpec.PointOfSaleId)
 				credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, itemSpec.PointOfSaleId)
 				if err == nil {
-					fmt.Printf("[DEBUG 2] Credenciales obtenidas, obteniendo item con ID: %s\n", itemSpec.ItemId)
 					itemId := strings.TrimPrefix(itemSpec.ItemId, "kivio-ecommerce∼")
-					fmt.Printf("[DEBUG 2] ItemId procesado: %s\n", itemId)
 					item, err = s.ecommerceSvc.GetItemByID(ctx, itemId, credentials.ApiURL, credentials.ApiKey)
 					if err == nil && item != nil {
-						fmt.Printf("[DEBUG 2] Item obtenido exitosamente, llamando createEcommerceCustomerAndOrder... item: %+v\n", item)
-						if item != nil {
-							fmt.Printf("[DEBUG 2] Item details - ItemId: '%s', ExternalId: '%s', Name: '%s'\n", item.ItemId, item.ExternalId, item.Name)
-						}
+
 						creds := &struct {
 							ApiURL string
 							ApiKey string
@@ -650,19 +619,8 @@ func (s *billingService) ConfirmWompiResponse(ctx context.Context, body []byte) 
 						}
 
 						err = s.createEcommerceCustomerAndOrder(ctx, credentials.ApiURL, credentials.ApiKey, billing, validOrders, item, itemId, creds)
-						if err != nil {
-							fmt.Printf("Error creando customer y orden en ecommerce: %v\n", err)
-						} else {
-							fmt.Printf("[DEBUG 2] createEcommerceCustomerAndOrder ejecutado exitosamente\n")
-						}
-					} else {
-						fmt.Printf("[DEBUG 2] Error obteniendo item o item es nil - Error: %v, Item: %v\n", err, item)
 					}
-				} else {
-					fmt.Printf("[DEBUG 2] Error obteniendo credenciales: %v\n", err)
 				}
-			} else {
-				fmt.Printf("[DEBUG 2] itemSpec no encontrado o no es externo - Error: %v, IsExternal: %v\n", err, itemSpec != nil && itemSpec.IsExternal)
 			}
 
 		case "Rejected", "Error":
@@ -793,8 +751,6 @@ func (s *billingService) createEcommerceCustomerFromBilling(billing *domain.Bill
 		RoleIDs:      []int{4},
 	}
 
-	fmt.Printf("[DEBUG] Customer created with RoleIDs: %+v\n", customer.RoleIDs)
-
 	if len(billing.Customer.Name) > 0 {
 		if len(billing.Customer.Name) > 1 {
 			customer.FirstName = billing.Customer.Name[0]
@@ -812,7 +768,6 @@ func (s *billingService) createEcommerceCustomerFromBilling(billing *domain.Bill
 		}
 	}
 
-	fmt.Printf("[DEBUG] Final customer before return: %+v\n", customer)
 	return customer
 }
 
@@ -849,7 +804,7 @@ func (s *billingService) createEcommerceBillingAddressFromBilling(billing *domai
 		Country:       billing.Customer.Address.City.CountryName,
 		Province:      billing.Customer.Address.City.StateName,
 		CreatedOnUTC:  now,
-		CountryID:     57,
+		CountryID:     49,
 	}
 
 	if len(billing.Customer.Phones) > 0 {
@@ -901,7 +856,7 @@ func (s *billingService) createEcommerceShippingAddressFromBilling(billing *doma
 		Country:       addressInfo.City.CountryName,
 		Province:      addressInfo.City.StateName,
 		CreatedOnUTC:  now,
-		CountryID:     57,
+		CountryID:     49,
 	}
 
 	if len(billing.Customer.Phones) > 0 {
@@ -914,32 +869,21 @@ func (s *billingService) createEcommerceShippingAddressFromBilling(billing *doma
 func (s *billingService) createEcommerceShoppingCartItemFromOrders(orders []*orderDomain.Order, customerID int, item *itemDomain.Item, productIDStr string) *ecommerceInfra.EcommerceShoppingCartItem {
 	now := time.Now()
 
-	fmt.Printf("[DEBUG] createEcommerceShoppingCartItemFromOrders - productIDStr: '%s', item: %+v\n", productIDStr, item)
-
 	var productID int
 	if productIDStr != "" {
-		fmt.Printf("[DEBUG] ProductIDStr is not empty: '%s'\n", productIDStr)
 		if id, err := strconv.Atoi(productIDStr); err == nil {
 			productID = id
-			fmt.Printf("[DEBUG] Successfully parsed productID: %d\n", productID)
-		} else {
-			fmt.Printf("[DEBUG] Error parsing productID from string '%s': %v\n", productIDStr, err)
 		}
 	} else {
-		fmt.Printf("[DEBUG] ProductIDStr is empty, trying to extract from item\n")
 		if item != nil && item.ItemId != "" {
 			if strings.HasPrefix(item.ItemId, "kivio-ecommerce∼") {
 				extractedIDStr := strings.TrimPrefix(item.ItemId, "kivio-ecommerce∼")
-				fmt.Printf("[DEBUG] Extracted ID from ItemId: '%s'\n", extractedIDStr)
 				if id, err := strconv.Atoi(extractedIDStr); err == nil {
 					productID = id
-					fmt.Printf("[DEBUG] Successfully parsed productID from ItemId: %d\n", productID)
 				}
 			}
 		}
 	}
-
-	fmt.Printf("[DEBUG] Final productID: %d\n", productID)
 
 	cartItem := &ecommerceInfra.EcommerceShoppingCartItem{
 		Quantity:         1,
@@ -949,7 +893,6 @@ func (s *billingService) createEcommerceShoppingCartItemFromOrders(orders []*ord
 		CustomerID:       customerID,
 	}
 
-	fmt.Printf("[DEBUG] Created shopping cart item: %+v\n", cartItem)
 	return cartItem
 }
 
@@ -980,17 +923,9 @@ func (s *billingService) createEcommerceOrderFromOrders(orders []*orderDomain.Or
 }
 
 func (s *billingService) createEcommerceCustomerAndOrder(ctx context.Context, credentialsApiURL string, credentialsApiKey string, billing *domain.Billing, orders []*orderDomain.Order, item *itemDomain.Item, productIDStr string, credentials interface{}) error {
-	fmt.Printf("[BILLING] Starting ecommerce customer & order creation - Email: %s, Orders: %d, ProductIDStr: %s\n", billing.Customer.Email, len(orders), productIDStr)
-	fmt.Printf("[DEBUG] Item received in createEcommerceCustomerAndOrder: %+v\n", item)
-	if item != nil {
-		fmt.Printf("[DEBUG] Item received - ItemId: '%s', ExternalId: '%s', Name: '%s'\n", item.ItemId, item.ExternalId, item.Name)
-	} else {
-		fmt.Printf("[DEBUG] Item is nil in createEcommerceCustomerAndOrder\n")
-	}
 
 	customer, err := s.customerService.GetOrCreateCustomer(ctx, billing.Customer.Email)
 	if err != nil {
-		fmt.Printf("Error getting or creating customer: %v\n", err)
 		return fmt.Errorf("error getting or creating customer: %v", err)
 	}
 
@@ -1000,19 +935,13 @@ func (s *billingService) createEcommerceCustomerAndOrder(ctx context.Context, cr
 	if customer.ExternalCustomerID == "" {
 		ecommerceCustomer := s.createEcommerceCustomerFromBilling(billing)
 
-		fmt.Printf("Creando customer en ecommerce: %+v\n", ecommerceCustomer)
-
 		customerResponse, err = s.ecommerceSvc.CreateEcommerceCustomer(ctx, credentialsApiURL, credentialsApiKey, ecommerceCustomer)
 		if err != nil {
-			fmt.Printf("Error creando customer en ecommerce: %v\n", err)
 			return fmt.Errorf("error creando customer en ecommerce: %v", err)
 		}
 
-		fmt.Printf("Customer creado exitosamente con ID: %d\n", customerResponse.ID)
-
 		err = s.customerService.UpdateExternalCustomerID(ctx, customer.Email, fmt.Sprintf("%d", customerResponse.ID))
 		if err != nil {
-			fmt.Printf("Error updating customer with external ID: %v\n", err)
 			return fmt.Errorf("error updating customer with external ID: %v", err)
 		}
 	} else {
@@ -1022,62 +951,40 @@ func (s *billingService) createEcommerceCustomerAndOrder(ctx context.Context, cr
 				return id
 			}(),
 		}
-		fmt.Printf("Using existing customer with ID: %d\n", customerResponse.ID)
 	}
 
 	if customer.BillingAddressID == "" {
 		ecommerceBillingAddress := s.createEcommerceBillingAddressFromBilling(billing)
 
-		fmt.Printf("Creando billing address en ecommerce para customer ID: %d\n", customerResponse.ID)
-
 		billingAddressResponse, err = s.ecommerceSvc.CreateEcommerceBillingAddress(ctx, credentialsApiURL, credentialsApiKey, customerResponse.ID, ecommerceBillingAddress)
 		if err != nil {
-			fmt.Printf("Error creando billing address en ecommerce: %v\n", err)
 			return fmt.Errorf("error creando billing address en ecommerce: %v", err)
 		}
 
-		fmt.Printf("Billing address creado exitosamente con ID: %d\n", billingAddressResponse.ID)
-
 		err = s.customerService.UpdateBillingAddress(ctx, customer.Email, fmt.Sprintf("%d", billingAddressResponse.ID))
 		if err != nil {
-			fmt.Printf("Error updating customer with billing address ID: %v\n", err)
 			return fmt.Errorf("error updating customer with billing address ID: %v", err)
 		}
-	} else {
-		fmt.Printf("Using existing billing address with ID: %s\n", customer.BillingAddressID)
 	}
 
 	if customer.ShippingAddressID == "" {
 		ecommerceShippingAddress := s.createEcommerceShippingAddressFromBilling(billing)
 
-		fmt.Printf("Creando shipping address en ecommerce para customer ID: %d\n", customerResponse.ID)
-
 		shippingAddressResponse, err := s.ecommerceSvc.CreateEcommerceShippingAddress(ctx, credentialsApiURL, credentialsApiKey, customerResponse.ID, ecommerceShippingAddress)
 		if err != nil {
-			fmt.Printf("Error creando shipping address en ecommerce: %v\n", err)
 			return fmt.Errorf("error creando shipping address en ecommerce: %v", err)
 		}
 
-		fmt.Printf("Shipping address creado exitosamente con ID: %d\n", shippingAddressResponse.ID)
-
 		err = s.customerService.UpdateShippingAddress(ctx, customer.Email, fmt.Sprintf("%d", shippingAddressResponse.ID))
 		if err != nil {
-			fmt.Printf("Error updating customer with shipping address ID: %v\n", err)
 			return fmt.Errorf("error updating customer with shipping address ID: %v", err)
 		}
-	} else {
-		fmt.Printf("Using existing shipping address with ID: %s\n", customer.ShippingAddressID)
 	}
-
-	fmt.Printf("[DEBUG] Before creating shopping cart item - item received: %+v, productIDStr: %s\n", item, productIDStr)
 
 	ecommerceShoppingCartItem := s.createEcommerceShoppingCartItemFromOrders(orders, customerResponse.ID, item, productIDStr)
 
-	fmt.Printf("Creando shopping cart item en ecommerce: %+v\n", ecommerceShoppingCartItem)
-
 	cartResponse, err := s.ecommerceSvc.CreateEcommerceShoppingCartItem(ctx, credentialsApiURL, credentialsApiKey, ecommerceShoppingCartItem)
 	if err != nil {
-		fmt.Printf("Error creando shopping cart item en ecommerce: %v\n", err)
 		return fmt.Errorf("error creando shopping cart item en ecommerce: %v", err)
 	}
 
@@ -1102,11 +1009,8 @@ func (s *billingService) createEcommerceCustomerAndOrder(ctx context.Context, cr
 
 	ecommerceOrder := s.createEcommerceOrderFromOrders(orders, customerResponse.ID, item, billingAddressID, shippingAddressID)
 
-	fmt.Printf("Creando orden en ecommerce: %+v\n", ecommerceOrder)
-
 	orderResponse, err := s.ecommerceSvc.CreateEcommerceSimpleOrder(ctx, credentialsApiURL, credentialsApiKey, ecommerceOrder)
 	if err != nil {
-		fmt.Printf("Error creando orden en ecommerce: %v\n", err)
 		return fmt.Errorf("error creando orden en ecommerce: %v", err)
 	}
 
