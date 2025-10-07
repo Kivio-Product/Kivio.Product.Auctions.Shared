@@ -9,7 +9,7 @@ import (
 )
 
 type RuleSpecificationService interface {
-	GenerateRuleSpecification(ctx context.Context, ruleId, typer, operator, parameter, offerId string) (*domain.RuleSpecification, error)
+	GenerateRuleSpecification(ctx context.Context, ruleId, typer, operator, parameter, offerId, itemName string) (*domain.RuleSpecification, error)
 	GetRuleSpecificationById(ctx context.Context, id string) (*domain.RuleSpecification, error)
 	GetRuleSpecificationByOfferId(ctx context.Context, offerId string) ([]domain.RuleSpecification, error)
 	DeleteRuleSpecificationById(ctx context.Context, id string) error
@@ -28,8 +28,8 @@ func NewRuleSpecificationService(repo infrastructure.RuleSpecificationRepository
 	return &ruleSpecificationService{repo: repo, RuleSpecificationFactory: ruleSpecificationFactory}
 }
 
-func (s *ruleSpecificationService) GenerateRuleSpecification(ctx context.Context, ruleId, typer, operator, parameter, offerId string) (*domain.RuleSpecification, error) {
-	ruleSpec, err := s.RuleSpecificationFactory.CreateRuleSpecification(ruleId, typer, operator, parameter, offerId)
+func (s *ruleSpecificationService) GenerateRuleSpecification(ctx context.Context, ruleId, typer, operator, parameter, offerId, itemName string) (*domain.RuleSpecification, error) {
+	ruleSpec, err := s.RuleSpecificationFactory.CreateRuleSpecification(ruleId, typer, operator, parameter, offerId, itemName)
 	if err != nil {
 		return &domain.RuleSpecification{}, err
 	}

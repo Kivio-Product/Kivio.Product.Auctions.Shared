@@ -7,7 +7,7 @@ import (
 )
 
 type RuleSpecificationFactory interface {
-	CreateRuleSpecification(ruleId, typer, operator, parameter, offerId string) (*RuleSpecification, error)
+	CreateRuleSpecification(ruleId, typer, operator, parameter, offerId, itemName string) (*RuleSpecification, error)
 }
 
 type DefaultRuleSpecificationFactory struct{}
@@ -16,7 +16,7 @@ func NewRuleSpecificationFactory() RuleSpecificationFactory {
 	return &DefaultRuleSpecificationFactory{}
 }
 
-func (f *DefaultRuleSpecificationFactory) CreateRuleSpecification(ruleId, typer, operator, parameter, offerId string) (*RuleSpecification, error) {
+func (f *DefaultRuleSpecificationFactory) CreateRuleSpecification(ruleId, typer, operator, parameter, offerId, itemName string) (*RuleSpecification, error) {
 	if ruleId == "" {
 		return nil, fmt.Errorf("RuleId cannot be empty")
 	}
@@ -39,6 +39,7 @@ func (f *DefaultRuleSpecificationFactory) CreateRuleSpecification(ruleId, typer,
 		Operator:            operator,
 		Parameter:           parameter,
 		OfferId:             offerId,
+		ItemName:            itemName,
 	}, nil
 }
 

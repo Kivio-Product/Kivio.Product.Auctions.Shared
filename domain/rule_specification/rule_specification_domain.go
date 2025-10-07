@@ -9,6 +9,7 @@ type RuleSpecification struct {
 	Type                string
 	Operator            string
 	Parameter           string
+	ItemName            string
 	State               bool
 }
 
