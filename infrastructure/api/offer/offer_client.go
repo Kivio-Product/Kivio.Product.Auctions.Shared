@@ -39,6 +39,8 @@ func (c *offerClient) GetToken(ctx context.Context, offerId string) (string, err
 
 	req.Header.Set("Api_Key", c.apiKey)
 
+	fmt.Printf("\n[DEBUG] cURL GetToken:\ncurl -X GET '%s' -H 'Api_Key: %s'\n\n", tokenURL, c.apiKey)
+
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to get token: %w", err)
@@ -79,6 +81,12 @@ func (c *offerClient) SendToken(ctx context.Context, offerId, token string) erro
 	req.Header.Set("Authorization", token)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Api_Key", c.apiKey)
+
+	fmt.Printf("\n[DEBUG] cURL SendToken:\ncurl -X POST '%s' \\\n", sendTokenURL)
+	fmt.Printf("  -H 'Authorization: %s' \\\n", token)
+	fmt.Printf("  -H 'Content-Type: application/json' \\\n")
+	fmt.Printf("  -H 'Api_Key: %s' \\\n", c.apiKey)
+	fmt.Printf("  -d '%s'\n\n", string(body))
 
 	resp, err := c.client.Do(req)
 	if err != nil {
