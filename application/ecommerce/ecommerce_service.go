@@ -24,6 +24,7 @@ type EcommerceService interface {
 	CreateEcommerceShoppingCartItem(ctx context.Context, apiUrl, apiKey string, cartItem *ecommerceBridge.EcommerceShoppingCartItem) (*ecommerceBridge.EcommerceShoppingCartItemResponse, error)
 	CreateEcommerceOrder(ctx context.Context, apiUrl, apiKey string, order *ecommerceBridge.EcommerceOrder) (*ecommerceBridge.EcommerceOrderResponse, error)
 	CreateEcommerceSimpleOrder(ctx context.Context, apiUrl, apiKey string, order *ecommerceBridge.EcommerceSimpleOrder) (*ecommerceBridge.EcommerceOrderResponse, error)
+	UpdateOrderItemPrice(ctx context.Context, apiUrl, apiKey string, orderID, itemID int, orderItem *ecommerceBridge.EcommerceOrderItem) error
 }
 
 func NewEcommerceService() EcommerceService {

@@ -924,6 +924,7 @@ func (s *billingService) createEcommerceOrderFromOrders(orders []*orderDomain.Or
 }
 
 func (s *billingService) createEcommerceCustomerAndOrder(ctx context.Context, credentialsApiURL string, credentialsApiKey string, billing *domain.Billing, orders []*orderDomain.Order, item *itemDomain.Item, productIDStr string, credentials interface{}) error {
+	fmt.Printf("[BILLING] Starting createEcommerceCustomerAndOrder for %d orders\n", len(orders))
 
 	customer, err := s.customerService.GetOrCreateCustomer(ctx, billing.Customer.Email)
 	if err != nil {
@@ -1016,6 +1017,37 @@ func (s *billingService) createEcommerceCustomerAndOrder(ctx context.Context, cr
 	}
 
 	fmt.Printf("Orden creada exitosamente con ID: %d\n", orderResponse.ID)
+
+	if len(orders) > 0 && orders[0].ItemSpecificationId != "" {
+		itemSpec, err := s.itemSpecRepo.GetById(ctx, orders[0].ItemSpecificationId)
+		if err != nil {
+			fmt.Printf("[BILLING] WARNING: Could not get itemSpec %s to update price: %v\n", orders[0].ItemSpecificationId, err)
+		} else {
+			priceInCents := float64(itemSpec.Amount)
+			priceInUnits := priceInCents / 100.0
+
+			fmt.Printf("[BILLING] Updating order item price with value from itemSpec: %.2f (from %d cents)\n", priceInUnits, itemSpec.Amount)
+
+			orderItem := &ecommerceInfra.EcommerceOrderItem{
+				Quantity:         1,
+				UnitPriceInclTax: priceInUnits,
+				UnitPriceExclTax: priceInUnits,
+				PriceInclTax:     priceInUnits,
+				PriceExclTax:     priceInUnits,
+			}
+
+			itemID := orderResponse.ID
+
+			fmt.Printf("[BILLING] Calling UpdateOrderItemPrice with OrderID: %d, ItemID: %d\n", orderResponse.ID, itemID)
+
+			err = s.ecommerceSvc.UpdateOrderItemPrice(ctx, credentialsApiURL, credentialsApiKey, orderResponse.ID, itemID, orderItem)
+			if err != nil {
+				fmt.Printf("[BILLING] WARNING: Failed to update order item price for order %d, item %d: %v\n", orderResponse.ID, itemID, err)
+			} else {
+				fmt.Printf("[BILLING] Order item price updated successfully for order %d, item %d\n", orderResponse.ID, itemID)
+			}
+		}
+	}
 
 	return nil
 }

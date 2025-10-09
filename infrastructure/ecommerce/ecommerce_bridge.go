@@ -242,6 +242,7 @@ type EcommerceService interface {
 	CreateEcommerceShoppingCartItem(ctx context.Context, apiUrl, apiKey string, cartItem *EcommerceShoppingCartItem) (*EcommerceShoppingCartItemResponse, error)
 	CreateEcommerceOrder(ctx context.Context, apiUrl, apiKey string, order *EcommerceOrder) (*EcommerceOrderResponse, error)
 	CreateEcommerceSimpleOrder(ctx context.Context, apiUrl, apiKey string, order *EcommerceSimpleOrder) (*EcommerceOrderResponse, error)
+	UpdateOrderItemPrice(ctx context.Context, apiUrl, apiKey string, orderID, itemID int, orderItem *EcommerceOrderItem) error
 }
 
 func (b *EcommerceBridge) GetItems(ctx context.Context, apiUrl, apiKey string, page, limit int) ([]itemDomain.Item, error) {
@@ -554,6 +555,35 @@ func (b *EcommerceBridge) CreateEcommerceSimpleOrder(ctx context.Context, apiUrl
 		Success: true,
 		Message: "Simple order created successfully",
 	}, nil
+}
+
+func (b *EcommerceBridge) UpdateOrderItemPrice(ctx context.Context, apiUrl, apiKey string, orderID, itemID int, orderItem *EcommerceOrderItem) error {
+	fmt.Printf("[ECOMMERCE] Updating order item price - OrderID: %d, ItemID: %d\n", orderID, itemID)
+
+	type OrderItemUpdateRequest struct {
+		ObjectPropertyNameValuePairs map[string]interface{} `json:"ObjectPropertyNameValuePairs"`
+		OrderItem                    EcommerceOrderItem     `json:"order_item"`
+	}
+
+	updateRequest := OrderItemUpdateRequest{
+		ObjectPropertyNameValuePairs: map[string]interface{}{},
+		OrderItem:                    *orderItem,
+	}
+
+	orderItemData, err := json.Marshal(updateRequest)
+	if err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to marshal order item data: %v\n", err)
+		return fmt.Errorf("failed to marshal order item data: %w", err)
+	}
+
+	err = b.client.UpdateOrderItemPrice(ctx, apiUrl, apiKey, orderID, itemID, orderItemData)
+	if err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to update order item price: %v\n", err)
+		return fmt.Errorf("failed to update order item price: %w", err)
+	}
+
+	fmt.Printf("[ECOMMERCE] SUCCESS: Order item price updated\n")
+	return nil
 }
 
 func NewEcommerceService() EcommerceService {
