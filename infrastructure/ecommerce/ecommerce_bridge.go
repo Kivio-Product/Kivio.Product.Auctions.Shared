@@ -189,9 +189,11 @@ type EcommerceOrderRequest struct {
 }
 
 type EcommerceOrderResponse struct {
-	ID      int    `json:"id"`
-	Success bool   `json:"success"`
-	Message string `json:"message"`
+	ID              int    `json:"id"`
+	OrderItemID     int    `json:"order_item_id"`
+	OrderItemsCount int    `json:"order_items_count"`
+	Success         bool   `json:"success"`
+	Message         string `json:"message"`
 }
 
 type EcommerceSimpleAddress struct {
@@ -502,21 +504,45 @@ func (b *EcommerceBridge) CreateEcommerceOrder(ctx context.Context, apiUrl, apiK
 		return nil, fmt.Errorf("failed to create order: %w", err)
 	}
 
+	type OrderItemResponse struct {
+		ID        int `json:"id"`
+		ProductID int `json:"product_id"`
+	}
+
+	type OrderResponse struct {
+		ID         int                 `json:"id"`
+		OrderItems []OrderItemResponse `json:"order_items"`
+	}
+
 	type OrderCreationResponse struct {
-		ID int `json:"id"`
+		Orders []OrderResponse `json:"orders"`
 	}
 
 	var response OrderCreationResponse
 	if err := json.Unmarshal(respBody, &response); err != nil {
 		fmt.Printf("[ECOMMERCE] ERROR: Failed to unmarshal order response: %v\n", err)
+		fmt.Printf("[ECOMMERCE] Response body: %s\n", string(respBody))
 		return nil, fmt.Errorf("failed to unmarshal order response: %w", err)
 	}
 
-	fmt.Printf("[ECOMMERCE] SUCCESS: Order created with ID: %d\n", response.ID)
+	if len(response.Orders) == 0 {
+		fmt.Printf("[ECOMMERCE] ERROR: No orders in response\n")
+		return nil, fmt.Errorf("no orders in response")
+	}
+
+	orderID := response.Orders[0].ID
+	var firstOrderItemID int
+	if len(response.Orders[0].OrderItems) > 0 {
+		firstOrderItemID = response.Orders[0].OrderItems[0].ID
+	}
+
+	fmt.Printf("[ECOMMERCE] SUCCESS: Order created with ID: %d, First Order Item ID: %d\n", orderID, firstOrderItemID)
 	return &EcommerceOrderResponse{
-		ID:      response.ID,
-		Success: true,
-		Message: "Order created successfully",
+		ID:              orderID,
+		OrderItemID:     firstOrderItemID,
+		OrderItemsCount: len(response.Orders[0].OrderItems),
+		Success:         true,
+		Message:         "Order created successfully",
 	}, nil
 }
 
@@ -539,21 +565,45 @@ func (b *EcommerceBridge) CreateEcommerceSimpleOrder(ctx context.Context, apiUrl
 		return nil, fmt.Errorf("failed to create simple order: %w", err)
 	}
 
+	type OrderItemResponse struct {
+		ID        int `json:"id"`
+		ProductID int `json:"product_id"`
+	}
+
+	type OrderResponse struct {
+		ID         int                 `json:"id"`
+		OrderItems []OrderItemResponse `json:"order_items"`
+	}
+
 	type SimpleOrderCreationResponse struct {
-		ID int `json:"id"`
+		Orders []OrderResponse `json:"orders"`
 	}
 
 	var response SimpleOrderCreationResponse
 	if err := json.Unmarshal(respBody, &response); err != nil {
 		fmt.Printf("[ECOMMERCE] ERROR: Failed to unmarshal simple order response: %v\n", err)
+		fmt.Printf("[ECOMMERCE] Response body: %s\n", string(respBody))
 		return nil, fmt.Errorf("failed to unmarshal simple order response: %w", err)
 	}
 
-	fmt.Printf("[ECOMMERCE] SUCCESS: Simple order created with ID: %d\n", response.ID)
+	if len(response.Orders) == 0 {
+		fmt.Printf("[ECOMMERCE] ERROR: No orders in response\n")
+		return nil, fmt.Errorf("no orders in response")
+	}
+
+	orderID := response.Orders[0].ID
+	var firstOrderItemID int
+	if len(response.Orders[0].OrderItems) > 0 {
+		firstOrderItemID = response.Orders[0].OrderItems[0].ID
+	}
+
+	fmt.Printf("[ECOMMERCE] SUCCESS: Simple order created with ID: %d, First Order Item ID: %d\n", orderID, firstOrderItemID)
 	return &EcommerceOrderResponse{
-		ID:      response.ID,
-		Success: true,
-		Message: "Simple order created successfully",
+		ID:           orderID,
+		OrderItemID:  firstOrderItemID,
+		Success:      true,
+		Message:      "Simple order created successfully",
+		OrderItemsCount: len(response.Orders[0].OrderItems),
 	}, nil
 }
 

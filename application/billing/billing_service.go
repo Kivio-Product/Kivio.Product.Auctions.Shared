@@ -1016,9 +1016,10 @@ func (s *billingService) createEcommerceCustomerAndOrder(ctx context.Context, cr
 		return fmt.Errorf("error creando orden en ecommerce: %v", err)
 	}
 
-	fmt.Printf("Orden creada exitosamente con ID: %d\n", orderResponse.ID)
+	fmt.Printf("Orden creada exitosamente con ID: %d, Order Items: %d, First Item ID: %d\n",
+		orderResponse.ID, orderResponse.OrderItemsCount, orderResponse.OrderItemID)
 
-	if len(orders) > 0 && orders[0].ItemSpecificationId != "" {
+	if len(orders) > 0 && orders[0].ItemSpecificationId != "" && orderResponse.OrderItemID > 0 {
 		itemSpec, err := s.itemSpecRepo.GetById(ctx, orders[0].ItemSpecificationId)
 		if err != nil {
 			fmt.Printf("[BILLING] WARNING: Could not get itemSpec %s to update price: %v\n", orders[0].ItemSpecificationId, err)
@@ -1036,17 +1037,17 @@ func (s *billingService) createEcommerceCustomerAndOrder(ctx context.Context, cr
 				PriceExclTax:     priceInUnits,
 			}
 
-			itemID := orderResponse.ID
+			fmt.Printf("[BILLING] Calling UpdateOrderItemPrice with OrderID: %d, ItemID: %d\n", orderResponse.ID, orderResponse.OrderItemID)
 
-			fmt.Printf("[BILLING] Calling UpdateOrderItemPrice with OrderID: %d, ItemID: %d\n", orderResponse.ID, itemID)
-
-			err = s.ecommerceSvc.UpdateOrderItemPrice(ctx, credentialsApiURL, credentialsApiKey, orderResponse.ID, itemID, orderItem)
+			err = s.ecommerceSvc.UpdateOrderItemPrice(ctx, credentialsApiURL, credentialsApiKey, orderResponse.ID, orderResponse.OrderItemID, orderItem)
 			if err != nil {
-				fmt.Printf("[BILLING] WARNING: Failed to update order item price for order %d, item %d: %v\n", orderResponse.ID, itemID, err)
+				fmt.Printf("[BILLING] WARNING: Failed to update order item price for order %d, item %d: %v\n", orderResponse.ID, orderResponse.OrderItemID, err)
 			} else {
-				fmt.Printf("[BILLING] Order item price updated successfully for order %d, item %d\n", orderResponse.ID, itemID)
+				fmt.Printf("[BILLING] Order item price updated successfully for order %d, item %d\n", orderResponse.ID, orderResponse.OrderItemID)
 			}
 		}
+	} else if len(orders) > 0 && orderResponse.OrderItemID == 0 {
+		fmt.Printf("[BILLING] WARNING: Order created but no order item ID found in response. Cannot update price.\n")
 	}
 
 	return nil
