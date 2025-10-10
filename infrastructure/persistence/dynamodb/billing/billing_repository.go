@@ -170,8 +170,9 @@ func (r *billingRepository) GetOrderBillingPaginated(ctx context.Context, params
 
 	if start, ok := filters["created_at_start"]; ok && start != "" {
 		if end, okEnd := filters["created_at_end"]; okEnd && end != "" {
+			endOfDay := end[:10] + "T23:59:59Z"
 			exprAttrValues[":startDate"] = &dynamodb.AttributeValue{S: aws.String(start)}
-			exprAttrValues[":endDate"] = &dynamodb.AttributeValue{S: aws.String(end)}
+			exprAttrValues[":endDate"] = &dynamodb.AttributeValue{S: aws.String(endOfDay)}
 			keyCondition += " AND createdAt BETWEEN :startDate AND :endDate"
 		} else {
 			startOfDay := start[:10] + "T00:00:00Z"
