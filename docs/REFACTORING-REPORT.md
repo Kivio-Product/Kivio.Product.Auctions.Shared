@@ -129,16 +129,63 @@ func (f *InvoiceStrategyFactory) GetStrategy(ctx context.Context, posID string, 
 10. `docs/REFACTORING-REPORT.md` - Este documento
 11. `docs/INTEGRATION-GUIDE.md` - Guía de integración (próximo paso)
 
-### **Archivos Modificados (2)**
+### **Archivos Modificados (5)**
 
-#### 1. `application/billing/billing_service.go`
+#### 1. `domain/item_specification/item_specification_domain.go`
+**Cambios:**
+- ✅ Agregado tipo `ItemSource` con constantes (local, ecommerce, shopify, woocommerce)
+- ✅ Agregado campo `Source ItemSource` al struct ItemSpecification
+- ✅ Marcado `IsExternal` como DEPRECATED
+- ✅ Agregado método `GetSource()` para migración segura desde IsExternal
+- ✅ Agregado método `SetSource()` para actualizar ambos campos (backward compatibility)
+
+**Antes:**
+```go
+type ItemSpecification struct {
+    // ... campos ...
+    IsExternal bool
+    // ... más campos ...
+}
+```
+
+**Después:**
+```go
+type ItemSource string
+
+const (
+    SourceLocal     ItemSource = "local"
+    SourceEcommerce ItemSource = "ecommerce"
+    SourceShopify   ItemSource = "shopify"
+    SourceWooCommerce ItemSource = "woocommerce"
+)
+
+type ItemSpecification struct {
+    // ... campos ...
+    IsExternal bool       // DEPRECATED: Usar Source en su lugar
+    Source     ItemSource // Fuente del item: local, ecommerce, shopify, etc.
+    // ... más campos ...
+}
+
+func (o *ItemSpecification) GetSource() ItemSource {
+    if o.Source != "" {
+        return o.Source
+    }
+    if o.IsExternal {
+        return SourceEcommerce // Default para legacy
+    }
+    return SourceLocal
+}
+```
+
+#### 2. `application/billing/billing_service.go`
 **Cambios:**
 - ✅ Agregado `itemSourceFactory *strategyApp.ItemSourceFactory` al struct
 - ✅ Modificado constructor `NewBillingService()` para recibir factory
-- ✅ Refactorizado líneas 311-330 (PayU) - Eliminado `if itemSpec.IsExternal`
-- ✅ Refactorizado líneas 609-628 (Wompi) - Uso de strategy
+- ✅ Refactorizado líneas 311-330 (PayU) - Cambió de `IsExternal` a usar `GetSource()`
+- ✅ Refactorizado líneas 609-628 (Wompi) - Cambió de `IsExternal` a usar `GetSource()`
+- ✅ Actualizado verificación de items externos para usar `GetSource() != "local"`
 
-**Antes:**
+**Antes (PayU confirmación):**
 ```go
 if itemSpec.IsExternal {
     credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, itemSpec.PointOfSaleId)
@@ -150,7 +197,8 @@ if itemSpec.IsExternal {
 
 **Después:**
 ```go
-itemSourceStrategy, err := s.itemSourceFactory.GetStrategyByItemSpec(ctx, itemSpec.IsExternal, order.PointOfSaleId)
+// Usar GetSource() y pasar como string al factory
+itemSourceStrategy, err := s.itemSourceFactory.GetStrategyByItemSpec(ctx, string(itemSpec.GetSource()), order.PointOfSaleId)
 if err != nil {
     fmt.Printf("error getting item source strategy: %v\n", err)
     continue
@@ -161,14 +209,21 @@ if err != nil {
     fmt.Printf("error getting item from %s source: %v\n", itemSourceStrategy.GetSourceType(), err)
     continue
 }
+
+// Verificación de items externos ahora usa GetSource()
+if itemSpec.GetSource() != "local" && itemSpec.GetSource() != "" && item != nil {
+    credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, order.PointOfSaleId)
+    // ... crear orden en ecommerce ...
+}
 ```
 
-#### 2. `application/invoice/invoice_service.go`
+#### 3. `application/invoice/invoice_service.go`
 **Cambios:**
 - ✅ Agregado `invoiceStrategyFactory *strategyApp.InvoiceStrategyFactory` al struct
 - ✅ Agregado `itemSpecRepo itemSpecInfrastructure.ItemSpecificationRepository` al struct
 - ✅ Modificado constructor `NewInvoiceService()` para recibir factory y repo
-- ✅ Refactorizado `CreateInvoiceForOrders()` - Ahora usa strategy factory
+- ✅ Refactorizado `CreateInvoiceForOrders()` - Cambió de `itemsAreExternal []bool` a `itemSources []string`
+- ✅ Ahora usa `GetSource()` en lugar de `IsExternal`
 
 **Antes:**
 ```go
@@ -187,15 +242,15 @@ func (s *invoiceService) CreateInvoiceForOrders(...) (*invoiceDomain.SiigoInvoic
 func (s *invoiceService) CreateInvoiceForOrders(...) (*invoiceDomain.SiigoInvoiceResponse, error) {
     // ... código preparación ...
 
-    // 1. Determinar tipo de items (local vs external)
-    var itemsAreExternal []bool
+    // 1. Determinar el source de los items consultando itemSpec
+    var itemSources []string
     for _, order := range orders {
         itemSpec, err := s.itemSpecRepo.GetById(ctx, order.ItemSpecificationId)
-        itemsAreExternal = append(itemsAreExternal, itemSpec.IsExternal)
+        itemSources = append(itemSources, string(itemSpec.GetSource()))
     }
 
-    // 2. Obtener strategy apropiado consultando integrations
-    invoiceStrategy, err := s.invoiceStrategyFactory.GetStrategyForOrders(ctx, posID, itemsAreExternal)
+    // 2. Obtener strategy apropiado consultando integrations y source
+    invoiceStrategy, err := s.invoiceStrategyFactory.GetStrategyForOrders(ctx, posID, itemSources)
 
     // 3. Delegar al strategy
     response, err := invoiceStrategy.CreateInvoiceForOrders(ctx, billingID, orders, customer, invoiceConfig, posName)
@@ -204,9 +259,116 @@ func (s *invoiceService) CreateInvoiceForOrders(...) (*invoiceDomain.SiigoInvoic
 }
 ```
 
+#### 4. `application/strategy/item_source_factory.go`
+**Cambios:**
+- ✅ Refactorizado `GetStrategyByItemSpec()` para aceptar `source string` en lugar de `isExternal bool`
+- ✅ Agregado switch statement para mapear source a strategy
+- ✅ Agregado soporte para shopify y woocommerce (con placeholders)
+- ✅ Agregado método legacy `GetStrategyByIsExternalLegacy()` para backward compatibility
+
+**Antes:**
+```go
+func (f *ItemSourceFactory) GetStrategyByItemSpec(ctx context.Context, isExternal bool, posID string) (domainStrategy.ItemSourceStrategy, error) {
+    if isExternal {
+        return f.GetStrategyByItemSpec(ctx, "ecommerce", posID)
+    }
+    return f.localSource, nil
+}
+```
+
+**Después:**
+```go
+func (f *ItemSourceFactory) GetStrategyByItemSpec(ctx context.Context, source string, posID string) (domainStrategy.ItemSourceStrategy, error) {
+    if source == "" || source == "local" {
+        return f.localSource, nil
+    }
+
+    // Verificar integración activa
+    integrations, err := f.integrationService.GetIntegrationsByPosID(ctx, posID)
+    // ...
+
+    // Mapear source a strategy
+    switch source {
+    case "ecommerce":
+        return f.ecommerceSource, nil
+    case "shopify":
+        return nil, fmt.Errorf("shopify source not implemented yet")
+    case "woocommerce":
+        return nil, fmt.Errorf("woocommerce source not implemented yet")
+    default:
+        return nil, fmt.Errorf("unknown item source: %s", source)
+    }
+}
+```
+
+#### 5. `application/strategy/invoice_strategy_factory.go`
+**Cambios:**
+- ✅ Refactorizado `GetStrategy()` para aceptar `source string` en lugar de `isExternal bool`
+- ✅ Agregado switch statement para mapear source a invoice strategy
+- ✅ Refactorizado `GetStrategyForOrders()` para aceptar `itemSources []string`
+- ✅ Mejorado mensaje de error para mostrar sources en conflicto
+
+**Antes:**
+```go
+func (f *InvoiceStrategyFactory) GetStrategy(ctx context.Context, posID string, isExternal bool) (domainStrategy.InvoiceStrategy, error) {
+    if !isExternal {
+        return f.siigoStrategy, nil
+    }
+    // ... verificar ecommerce ...
+    return f.ecommerceStrategy, nil
+}
+
+func (f *InvoiceStrategyFactory) GetStrategyForOrders(ctx context.Context, posID string, itemsAreExternal []bool) (domainStrategy.InvoiceStrategy, error) {
+    // Verificar que todos sean del mismo tipo
+    firstIsExternal := itemsAreExternal[0]
+    // ...
+}
+```
+
+**Después:**
+```go
+func (f *InvoiceStrategyFactory) GetStrategy(ctx context.Context, posID string, source string) (domainStrategy.InvoiceStrategy, error) {
+    if source == "" || source == "local" {
+        return f.siigoStrategy, nil
+    }
+
+    // Verificar integración activa del tipo source
+    // ...
+
+    switch source {
+    case "ecommerce":
+        return f.ecommerceStrategy, nil
+    case "shopify":
+        return nil, fmt.Errorf("shopify invoice strategy not implemented yet")
+    case "woocommerce":
+        return nil, fmt.Errorf("woocommerce invoice strategy not implemented yet")
+    default:
+        return nil, fmt.Errorf("unknown item source: %s", source)
+    }
+}
+
+func (f *InvoiceStrategyFactory) GetStrategyForOrders(ctx context.Context, posID string, itemSources []string) (domainStrategy.InvoiceStrategy, error) {
+    // Verificar que todos sean del mismo source
+    firstSource := itemSources[0]
+    for _, source := range itemSources {
+        if source != firstSource {
+            return nil, fmt.Errorf("cannot invoice mixed sources (%s and %s) in the same billing", firstSource, source)
+        }
+    }
+    // ...
+}
+```
+
 ---
 
 ## 🎨 Beneficios de la Refactorización
+
+### ✅ **Campo Source en lugar de Boolean IsExternal**
+- El campo `Source` es explícito: "ecommerce", "shopify", "woocommerce", etc.
+- Ya no se asume que todos los items externos son "ecommerce"
+- Facilita agregar nuevos proveedores sin modificar lógica booleana
+- Migración segura: `GetSource()` mantiene compatibilidad con `IsExternal` legacy
+- Los factories ahora deciden basándose en el tipo específico de source
 
 ### ✅ **Separación Completa de Terceros**
 - Ecommerce, Siigo, y otros terceros están completamente aislados en strategies

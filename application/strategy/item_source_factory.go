@@ -54,30 +54,54 @@ func (f *ItemSourceFactory) GetStrategy(ctx context.Context, posID string) (doma
 	return f.localSource, nil
 }
 
-// GetStrategyByItemSpec retorna el strategy basado en el flag IsExternal del ItemSpec
-// Este método es útil cuando ya tenemos el ItemSpec y queremos determinar el strategy
-func (f *ItemSourceFactory) GetStrategyByItemSpec(ctx context.Context, isExternal bool, posID string) (domainStrategy.ItemSourceStrategy, error) {
-	if isExternal {
-		// Verificar que realmente tiene integración activa
-		integrations, err := f.integrationService.GetIntegrationsByPosID(ctx, posID)
-		if err != nil {
-			return nil, fmt.Errorf("item marked as external but cannot verify integrations: %w", err)
-		}
-
-		hasActiveEcommerce := false
-		for _, integration := range integrations {
-			if integration.Type == "ecommerce" && integration.Status == domainIntegration.Active {
-				hasActiveEcommerce = true
-				break
-			}
-		}
-
-		if !hasActiveEcommerce {
-			return nil, fmt.Errorf("item marked as external but no active ecommerce integration found for POS %s", posID)
-		}
-
-		return f.ecommerceSource, nil
+// GetStrategyByItemSpec retorna el strategy basado en el Source del ItemSpec
+// Este método verifica que el source coincida con una integración activa
+func (f *ItemSourceFactory) GetStrategyByItemSpec(ctx context.Context, source string, posID string) (domainStrategy.ItemSourceStrategy, error) {
+	// Si es local, retornar strategy local directamente
+	if source == "" || source == "local" {
+		return f.localSource, nil
 	}
 
+	// Para sources externos, verificar que existe integración activa
+	integrations, err := f.integrationService.GetIntegrationsByPosID(ctx, posID)
+	if err != nil {
+		return nil, fmt.Errorf("item source is '%s' but cannot verify integrations: %w", source, err)
+	}
+
+	// Verificar que existe integración activa del tipo especificado
+	hasActiveIntegration := false
+	for _, integration := range integrations {
+		if integration.Type == source && integration.Status == domainIntegration.Active {
+			hasActiveIntegration = true
+			break
+		}
+	}
+
+	if !hasActiveIntegration {
+		return nil, fmt.Errorf("item source is '%s' but no active '%s' integration found for POS %s", source, source, posID)
+	}
+
+	// Mapear source a strategy correspondiente
+	switch source {
+	case "ecommerce":
+		return f.ecommerceSource, nil
+	case "shopify":
+		// Futuro: retornar shopify strategy
+		return nil, fmt.Errorf("shopify source not implemented yet")
+	case "woocommerce":
+		// Futuro: retornar woocommerce strategy
+		return nil, fmt.Errorf("woocommerce source not implemented yet")
+	default:
+		return nil, fmt.Errorf("unknown item source: %s", source)
+	}
+}
+
+// GetStrategyByIsExternalLegacy es para backward compatibility con código legacy
+// DEPRECATED: Usar GetStrategyByItemSpec con source en su lugar
+func (f *ItemSourceFactory) GetStrategyByIsExternalLegacy(ctx context.Context, isExternal bool, posID string) (domainStrategy.ItemSourceStrategy, error) {
+	if isExternal {
+		// Inferir que es ecommerce (legacy behavior)
+		return f.GetStrategyByItemSpec(ctx, "ecommerce", posID)
+	}
 	return f.localSource, nil
 }

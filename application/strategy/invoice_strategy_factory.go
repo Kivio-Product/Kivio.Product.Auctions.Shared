@@ -32,53 +32,63 @@ func NewInvoiceStrategyFactory(
 
 // GetStrategy retorna el strategy apropiado basado en:
 // 1. Las integraciones del POS
-// 2. Si el item es local o externo (isExternal flag)
-func (f *InvoiceStrategyFactory) GetStrategy(ctx context.Context, posID string, isExternal bool) (domainStrategy.InvoiceStrategy, error) {
-	// Si el item NO es externo, siempre usar Siigo
-	if !isExternal {
-		fmt.Printf("[InvoiceStrategyFactory] Item is local, using Siigo strategy for POS %s\n", posID)
+// 2. El source del item (local, ecommerce, shopify, etc.)
+func (f *InvoiceStrategyFactory) GetStrategy(ctx context.Context, posID string, source string) (domainStrategy.InvoiceStrategy, error) {
+	// Si el source es vacío o "local", siempre usar Siigo
+	if source == "" || source == "local" {
+		fmt.Printf("[InvoiceStrategyFactory] Item source is local, using Siigo strategy for POS %s\n", posID)
 		return f.siigoStrategy, nil
 	}
 
-	// Si el item ES externo, verificar que tiene integración de ecommerce activa
+	// Si el source es externo, verificar que tiene la integración activa correspondiente
 	integrations, err := f.integrationService.GetIntegrationsByPosID(ctx, posID)
 	if err != nil {
-		return nil, fmt.Errorf("item is external but cannot verify integrations: %w", err)
+		return nil, fmt.Errorf("item source is '%s' but cannot verify integrations: %w", source, err)
 	}
 
-	hasActiveEcommerce := false
+	hasActiveIntegration := false
 	for _, integration := range integrations {
-		if integration.Type == "ecommerce" && integration.Status == domainIntegration.Active {
-			hasActiveEcommerce = true
+		if integration.Type == source && integration.Status == domainIntegration.Active {
+			hasActiveIntegration = true
 			break
 		}
 	}
 
-	if !hasActiveEcommerce {
-		return nil, fmt.Errorf("item marked as external but no active ecommerce integration found for POS %s", posID)
+	if !hasActiveIntegration {
+		return nil, fmt.Errorf("item source is '%s' but no active '%s' integration found for POS %s", source, source, posID)
 	}
 
-	fmt.Printf("[InvoiceStrategyFactory] Item is external and has active ecommerce, using ecommerce order strategy for POS %s\n", posID)
-	return f.ecommerceStrategy, nil
+	// Mapear source a strategy correspondiente
+	switch source {
+	case "ecommerce":
+		fmt.Printf("[InvoiceStrategyFactory] Item source is ecommerce and has active integration, using ecommerce order strategy for POS %s\n", posID)
+		return f.ecommerceStrategy, nil
+	case "shopify":
+		return nil, fmt.Errorf("shopify invoice strategy not implemented yet")
+	case "woocommerce":
+		return nil, fmt.Errorf("woocommerce invoice strategy not implemented yet")
+	default:
+		return nil, fmt.Errorf("unknown item source: %s", source)
+	}
 }
 
 // GetStrategyForOrders determina el strategy basado en múltiples ordenes
 // Si todas son locales -> Siigo
-// Si todas son externas -> Ecommerce
-// Si hay mix -> Error (no se puede facturar mix de items locales y externos juntos)
-func (f *InvoiceStrategyFactory) GetStrategyForOrders(ctx context.Context, posID string, itemsAreExternal []bool) (domainStrategy.InvoiceStrategy, error) {
-	if len(itemsAreExternal) == 0 {
+// Si todas son del mismo source externo (ecommerce, shopify, etc.) -> Strategy correspondiente
+// Si hay mix de sources -> Error (no se puede facturar mix de diferentes sources juntos)
+func (f *InvoiceStrategyFactory) GetStrategyForOrders(ctx context.Context, posID string, itemSources []string) (domainStrategy.InvoiceStrategy, error) {
+	if len(itemSources) == 0 {
 		return nil, fmt.Errorf("no items provided to determine invoice strategy")
 	}
 
-	// Verificar consistencia: todos deben ser del mismo tipo
-	firstIsExternal := itemsAreExternal[0]
-	for _, isExternal := range itemsAreExternal {
-		if isExternal != firstIsExternal {
-			return nil, fmt.Errorf("cannot invoice mixed local and external items in the same billing")
+	// Verificar consistencia: todos deben ser del mismo source
+	firstSource := itemSources[0]
+	for _, source := range itemSources {
+		if source != firstSource {
+			return nil, fmt.Errorf("cannot invoice mixed sources (%s and %s) in the same billing", firstSource, source)
 		}
 	}
 
-	// Todos son del mismo tipo, usar el strategy correspondiente
-	return f.GetStrategy(ctx, posID, firstIsExternal)
+	// Todos son del mismo source, usar el strategy correspondiente
+	return f.GetStrategy(ctx, posID, firstSource)
 }

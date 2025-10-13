@@ -13,6 +13,16 @@ const (
 	StateNoAvailable ItemSpecificationState = "noavailable"
 )
 
+// ItemSource representa la fuente del item
+type ItemSource string
+
+const (
+	SourceLocal     ItemSource = "local"      // Item local almacenado en DynamoDB
+	SourceEcommerce ItemSource = "ecommerce"  // Item de integración ecommerce (nopCommerce)
+	SourceShopify   ItemSource = "shopify"    // Item de Shopify (futuro)
+	SourceWooCommerce ItemSource = "woocommerce" // Item de WooCommerce (futuro)
+)
+
 type ItemSpecification struct {
 	Id                 string
 	Amount             int64
@@ -21,7 +31,8 @@ type ItemSpecification struct {
 	OfferId            string
 	ItemId             string
 	Availability       int64
-	IsExternal         bool
+	IsExternal         bool   // DEPRECATED: Usar Source en su lugar
+	Source             ItemSource // Fuente del item: local, ecommerce, shopify, etc.
 	PointOfSaleId      string
 	State              ItemSpecificationState
 	ReservedAt         *time.Time
@@ -116,4 +127,25 @@ func (o *ItemSpecification) CheckAndUpdateAvailabilityState() error {
 		o.ReservedAt = nil
 	}
 	return nil
+}
+
+// GetSource retorna el source del item, migrando desde IsExternal si es necesario
+func (o *ItemSpecification) GetSource() ItemSource {
+	// Si Source ya está definido, usarlo
+	if o.Source != "" {
+		return o.Source
+	}
+
+	// Migración: Si IsExternal está definido, inferir source
+	if o.IsExternal {
+		return SourceEcommerce // Default para items externos legacy
+	}
+
+	return SourceLocal
+}
+
+// SetSource establece el source del item y actualiza IsExternal para backward compatibility
+func (o *ItemSpecification) SetSource(source ItemSource) {
+	o.Source = source
+	o.IsExternal = (source != SourceLocal)
 }

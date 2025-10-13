@@ -81,9 +81,9 @@ func (s *invoiceService) CreateInvoiceForOrders(ctx context.Context, billingID s
 	firstOrder := orders[0]
 	posID := firstOrder.PointOfSaleId
 
-	// Determinar si los items son externos consultando itemSpec
-	// Si todos son del mismo tipo, usar el strategy correspondiente
-	var itemsAreExternal []bool
+	// Determinar el source de los items consultando itemSpec
+	// Si todos son del mismo source, usar el strategy correspondiente
+	var itemSources []string
 	for _, order := range orders {
 		itemSpec, err := s.itemSpecRepo.GetById(ctx, order.ItemSpecificationId)
 		if err != nil {
@@ -93,11 +93,11 @@ func (s *invoiceService) CreateInvoiceForOrders(ctx context.Context, billingID s
 			})
 			return nil, fmt.Errorf("error getting itemSpec for order %s: %w", order.OrderId, err)
 		}
-		itemsAreExternal = append(itemsAreExternal, itemSpec.IsExternal)
+		itemSources = append(itemSources, string(itemSpec.GetSource()))
 	}
 
-	// Obtener el strategy apropiado basado en las integraciones y tipo de items
-	invoiceStrategy, err := s.invoiceStrategyFactory.GetStrategyForOrders(ctx, posID, itemsAreExternal)
+	// Obtener el strategy apropiado basado en las integraciones y source de items
+	invoiceStrategy, err := s.invoiceStrategyFactory.GetStrategyForOrders(ctx, posID, itemSources)
 	if err != nil {
 		s.serviceLogger.LogServiceError(ctx, "CreateInvoiceForOrders", err, map[string]interface{}{
 			"billing_id": billingID,

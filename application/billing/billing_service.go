@@ -313,7 +313,7 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 			firstOrderAmount += int64(order.OfferedAmount)
 
 			var item *itemDomain.Item
-			itemSourceStrategy, err := s.itemSourceFactory.GetStrategyByItemSpec(ctx, itemSpec.IsExternal, order.PointOfSaleId)
+			itemSourceStrategy, err := s.itemSourceFactory.GetStrategyByItemSpec(ctx, string(itemSpec.GetSource()), order.PointOfSaleId)
 			if err != nil {
 				fmt.Printf("error getting item source strategy: %v\n", err)
 				continue
@@ -339,7 +339,7 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 			case "Approved":
 				order.State = "Approved"
 				itemSpec.Availability--
-				if itemSpec.IsExternal && item != nil {
+				if itemSpec.GetSource() != "local" && itemSpec.GetSource() != "" && item != nil {
 					credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, order.PointOfSaleId)
 					if err == nil {
 						creds := &struct {
@@ -603,8 +603,8 @@ func (s *billingService) ConfirmWompiResponse(ctx context.Context, body []byte) 
 
 			// Usar strategy para obtener items y crear ordenes en ecommerce si es necesario
 			itemSpec, err := s.itemSpecRepo.GetById(ctx, order.ItemSpecificationId)
-			if err == nil && itemSpec.IsExternal {
-				itemSourceStrategy, err := s.itemSourceFactory.GetStrategyByItemSpec(ctx, itemSpec.IsExternal, order.PointOfSaleId)
+			if err == nil && itemSpec.GetSource() != "local" && itemSpec.GetSource() != "" {
+				itemSourceStrategy, err := s.itemSourceFactory.GetStrategyByItemSpec(ctx, string(itemSpec.GetSource()), order.PointOfSaleId)
 				if err == nil {
 					item, err := itemSourceStrategy.GetItemByID(ctx, itemSpec.ItemId)
 					if err == nil && item != nil {
