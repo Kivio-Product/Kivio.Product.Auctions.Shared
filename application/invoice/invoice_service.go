@@ -6,12 +6,14 @@ import (
 	"time"
 
 	applicationLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/logging"
+	strategyApp "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/strategy"
 	billingDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/billing"
 	invoiceDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/invoice"
 	"github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/logging"
 	orderDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 	siigoClient "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/api/siigo"
 	infrastructureLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/logging"
+	itemSpecInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item_specification"
 )
 
 type InvoiceService interface {
@@ -19,22 +21,31 @@ type InvoiceService interface {
 }
 
 type invoiceService struct {
-	siigoClient    siigoClient.SiigoClient
-	invoiceFactory invoiceDomain.InvoiceFactory
-	serviceLogger  *applicationLogging.ServiceLogger
-	eventLogger    *logging.DomainEventLogger
+	siigoClient           siigoClient.SiigoClient
+	invoiceFactory        invoiceDomain.InvoiceFactory
+	serviceLogger         *applicationLogging.ServiceLogger
+	eventLogger           *logging.DomainEventLogger
+	invoiceStrategyFactory *strategyApp.InvoiceStrategyFactory
+	itemSpecRepo          itemSpecInfrastructure.ItemSpecificationRepository
 }
 
-func NewInvoiceService(siigoClient siigoClient.SiigoClient, invoiceFactory invoiceDomain.InvoiceFactory) InvoiceService {
+func NewInvoiceService(
+	siigoClient siigoClient.SiigoClient,
+	invoiceFactory invoiceDomain.InvoiceFactory,
+	invoiceStrategyFactory *strategyApp.InvoiceStrategyFactory,
+	itemSpecRepo itemSpecInfrastructure.ItemSpecificationRepository,
+) InvoiceService {
 	loggerRepo := infrastructureLogging.GetLoggerRepository()
 	serviceLogger := applicationLogging.NewServiceLogger(loggerRepo, "InvoiceService")
 	eventLogger := logging.NewDomainEventLogger(loggerRepo.GetLogger())
 
 	return &invoiceService{
-		siigoClient:    siigoClient,
-		invoiceFactory: invoiceFactory,
-		serviceLogger:  serviceLogger,
-		eventLogger:    eventLogger,
+		siigoClient:            siigoClient,
+		invoiceFactory:         invoiceFactory,
+		serviceLogger:          serviceLogger,
+		eventLogger:            eventLogger,
+		invoiceStrategyFactory: invoiceStrategyFactory,
+		itemSpecRepo:           itemSpecRepo,
 	}
 }
 
@@ -70,137 +81,56 @@ func (s *invoiceService) CreateInvoiceForOrders(ctx context.Context, billingID s
 	firstOrder := orders[0]
 	posID := firstOrder.PointOfSaleId
 
-	var orderInfos []*invoiceDomain.OrderInfo
-	var totalAmount float64
-
+	// Determinar si los items son externos consultando itemSpec
+	// Si todos son del mismo tipo, usar el strategy correspondiente
+	var itemsAreExternal []bool
 	for _, order := range orders {
-		itemName := order.ExtraData
-		if itemName == "" {
-			itemName = fmt.Sprintf("Producto Order ID: %s", order.OrderId)
+		itemSpec, err := s.itemSpecRepo.GetById(ctx, order.ItemSpecificationId)
+		if err != nil {
+			s.serviceLogger.LogServiceError(ctx, "CreateInvoiceForOrders", err, map[string]interface{}{
+				"order_id": order.OrderId,
+				"error":    "failed_to_get_itemspec",
+			})
+			return nil, fmt.Errorf("error getting itemSpec for order %s: %w", order.OrderId, err)
 		}
-
-		orderInfo := &invoiceDomain.OrderInfo{
-			OrderID:         order.OrderId,
-			ItemName:        itemName,
-			ItemDescription: fmt.Sprintf("Orden de subasta - %s", itemName),
-			Quantity:        order.TotalQuantity,
-			UnitPrice:       float64(order.OfferedAmount) / float64(order.TotalQuantity),
-			TotalPrice:      float64(order.OfferedAmount),
-		}
-
-		orderInfos = append(orderInfos, orderInfo)
-		totalAmount += float64(order.OfferedAmount)
+		itemsAreExternal = append(itemsAreExternal, itemSpec.IsExternal)
 	}
 
-	invoiceAddress := invoiceDomain.InvoiceAddress{
-		Address: customer.Address.Address,
-		City: invoiceDomain.InvoiceCity{
-			CountryCode: customer.Address.City.CountryCode,
-			CountryName: customer.Address.City.CountryName,
-			StateCode:   customer.Address.City.StateCode,
-			StateName:   customer.Address.City.StateName,
-			CityCode:    customer.Address.City.CityCode,
-			CityName:    customer.Address.City.CityName,
-		},
-		PostalCode: customer.Address.PostalCode,
-	}
-
-	var invoicePhones []invoiceDomain.InvoicePhone
-	for _, phone := range customer.Phones {
-		invoicePhones = append(invoicePhones, invoiceDomain.InvoicePhone{
-			Indicative: phone.Indicative,
-			Number:     phone.Number,
-			Extension:  phone.Extension,
-		})
-	}
-
-	var invoiceContacts []invoiceDomain.InvoiceContact
-	for _, contact := range customer.Contacts {
-		invoiceContacts = append(invoiceContacts, invoiceDomain.InvoiceContact{
-			FirstName: contact.FirstName,
-			LastName:  contact.LastName,
-			Email:     contact.Email,
-			Phone: invoiceDomain.InvoicePhone{
-				Indicative: contact.Phone.Indicative,
-				Number:     contact.Phone.Number,
-				Extension:  contact.Phone.Extension,
-			},
-		})
-	}
-
-	invoiceRequest := &invoiceDomain.InvoiceRequest{
-		DocumentID:         invoiceConfig.DocumentID,
-		CustomerEmail:      customer.Email,
-		CustomerID:         customer.Identification,
-		CustomerPersonType: customer.PersonType,
-		CustomerIDType:     customer.IDType,
-		CustomerName:       customer.Name,
-		CustomerAddress:    invoiceAddress,
-		CustomerPhones:     invoicePhones,
-		CustomerContacts:   invoiceContacts,
-		SellerID:           invoiceConfig.SellerID,
-		Orders:             orderInfos,
-		PaymentID:          invoiceConfig.PaymentID,
-		TaxID:              invoiceConfig.TaxID,
-		PointOfSaleID:      posID,
-		PointOfSaleName:    posName,
-		TotalAmount:        totalAmount,
-		Currency:           "COP",
-		BillingID:          billingID,
-	}
-
-	siigoInvoice, err := s.invoiceFactory.CreateSiigoInvoice(invoiceRequest)
+	// Obtener el strategy apropiado basado en las integraciones y tipo de items
+	invoiceStrategy, err := s.invoiceStrategyFactory.GetStrategyForOrders(ctx, posID, itemsAreExternal)
 	if err != nil {
 		s.serviceLogger.LogServiceError(ctx, "CreateInvoiceForOrders", err, map[string]interface{}{
-			"billing_id":  billingID,
-			"customer_id": customer.Identification,
-			"order_count": len(orders),
-			"error":       "failed_to_create_siigo_invoice",
+			"billing_id": billingID,
+			"pos_id":     posID,
+			"error":      "failed_to_get_invoice_strategy",
 		})
-		return nil, fmt.Errorf("error creating Siigo invoice: %w", err)
+		return nil, fmt.Errorf("error getting invoice strategy: %w", err)
 	}
 
-	s.serviceLogger.LogExternalAPICall(ctx, "Siigo", "/invoices", 0, false, map[string]interface{}{
-		"operation":    "create_invoice",
-		"billing_id":   billingID,
-		"customer_id":  customer.Identification,
-		"total_amount": totalAmount,
-		"order_count":  len(orders),
+	s.serviceLogger.LogWorkflow(ctx, "InvoiceGeneration", "UsingStrategy", map[string]interface{}{
+		"strategy_type": invoiceStrategy.GetInvoiceType(),
+		"billing_id":    billingID,
+		"pos_id":        posID,
+		"order_count":   len(orders),
 	})
 
-	invoiceResponse, err := s.siigoClient.CreateInvoice(ctx, siigoInvoice)
+	// Delegar la creación de factura/orden al strategy
+	response, err := invoiceStrategy.CreateInvoiceForOrders(ctx, billingID, orders, customer, invoiceConfig, posName)
 	if err != nil {
 		s.serviceLogger.LogServiceError(ctx, "CreateInvoiceForOrders", err, map[string]interface{}{
-			"billing_id":   billingID,
-			"customer_id":  customer.Identification,
-			"total_amount": totalAmount,
-			"error":        "failed_to_send_invoice_to_siigo",
+			"billing_id":    billingID,
+			"strategy_type": invoiceStrategy.GetInvoiceType(),
+			"error":         "strategy_execution_failed",
 		})
-		return nil, fmt.Errorf("error sending invoice to Siigo: %w", err)
+		return nil, fmt.Errorf("error executing invoice strategy: %w", err)
 	}
-
-	s.serviceLogger.LogWorkflow(ctx, "InvoiceGeneration", "InvoiceCreated", map[string]interface{}{
-		"invoice_id":     invoiceResponse.ID,
-		"invoice_number": invoiceResponse.Number,
-		"billing_id":     billingID,
-		"customer_id":    customer.Identification,
-		"total_amount":   invoiceResponse.Total,
-		"order_count":    len(orders),
-		"pos_id":         posID,
-	})
 
 	s.serviceLogger.LogServiceEnd(ctx, "CreateInvoiceForOrders", time.Since(start), map[string]interface{}{
-		"billing_id":     billingID,
-		"invoice_id":     invoiceResponse.ID,
-		"invoice_number": invoiceResponse.Number,
-		"customer_id":    customer.Identification,
-		"total_amount":   invoiceResponse.Total,
-		"order_count":    len(orders),
-		"success":        true,
+		"billing_id":    billingID,
+		"strategy_type": invoiceStrategy.GetInvoiceType(),
+		"order_count":   len(orders),
+		"success":       true,
 	})
 
-	fmt.Printf("Factura creada exitosamente en Siigo: ID=%s, Number=%d, Total=%.2f\n",
-		invoiceResponse.ID, invoiceResponse.Number, invoiceResponse.Total)
-
-	return invoiceResponse, nil
+	return response, nil
 }

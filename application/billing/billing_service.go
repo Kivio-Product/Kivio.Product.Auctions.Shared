@@ -24,6 +24,7 @@ import (
 	emailService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
 	invoiceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/invoice"
 	pointOfSaleService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/point_of_sale"
+	strategyApp "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/strategy"
 	ecommerceInfra "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/ecommerce"
 
 	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
@@ -57,6 +58,8 @@ type billingService struct {
 	offerService       offerService.IOfferService
 	invoiceService     invoiceService.InvoiceService
 	customerService    customerService.CustomerService
+	// Strategy factories
+	itemSourceFactory *strategyApp.ItemSourceFactory
 }
 
 func NewBillingService(
@@ -72,6 +75,7 @@ func NewBillingService(
 	pointOfSaleService pointOfSaleService.IPosService,
 	invoiceService invoiceService.InvoiceService,
 	customerService customerService.CustomerService,
+	itemSourceFactory *strategyApp.ItemSourceFactory,
 ) BillingService {
 	return &billingService{
 		repo:               repo,
@@ -86,6 +90,7 @@ func NewBillingService(
 		pointOfSaleService: pointOfSaleService,
 		invoiceService:     invoiceService,
 		customerService:    customerService,
+		itemSourceFactory:  itemSourceFactory,
 	}
 }
 
@@ -308,25 +313,16 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 			firstOrderAmount += int64(order.OfferedAmount)
 
 			var item *itemDomain.Item
-			if itemSpec.IsExternal {
-				credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, itemSpec.PointOfSaleId)
-				if err != nil {
-					fmt.Printf("error getting ecommerce credentials: %v\n", err)
-					continue
-				}
+			itemSourceStrategy, err := s.itemSourceFactory.GetStrategyByItemSpec(ctx, itemSpec.IsExternal, order.PointOfSaleId)
+			if err != nil {
+				fmt.Printf("error getting item source strategy: %v\n", err)
+				continue
+			}
 
-				itemId := strings.TrimPrefix(itemSpec.ItemId, "kivio-ecommerce∼")
-				item, err = s.ecommerceSvc.GetItemByID(ctx, itemId, credentials.ApiURL, credentials.ApiKey)
-				if err != nil {
-					fmt.Printf("error getting item from ecommerce: %v\n", err)
-					continue
-				}
-			} else {
-				item, err = s.itemRepo.GetItemById(ctx, itemSpec.ItemId)
-				if err != nil {
-					fmt.Printf("no se encontro el item con Id: %s\n", itemSpec.ItemId)
-					continue
-				}
+			item, err = itemSourceStrategy.GetItemByID(ctx, itemSpec.ItemId)
+			if err != nil {
+				fmt.Printf("error getting item from %s source: %v\n", itemSourceStrategy.GetSourceType(), err)
+				continue
 			}
 
 			if item != nil {
@@ -605,24 +601,26 @@ func (s *billingService) ConfirmWompiResponse(ctx context.Context, body []byte) 
 		case "Approved":
 			order.State = "Approved"
 
+			// Usar strategy para obtener items y crear ordenes en ecommerce si es necesario
 			itemSpec, err := s.itemSpecRepo.GetById(ctx, order.ItemSpecificationId)
 			if err == nil && itemSpec.IsExternal {
-				var item *itemDomain.Item
-				credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, itemSpec.PointOfSaleId)
+				itemSourceStrategy, err := s.itemSourceFactory.GetStrategyByItemSpec(ctx, itemSpec.IsExternal, order.PointOfSaleId)
 				if err == nil {
-					itemId := strings.TrimPrefix(itemSpec.ItemId, "kivio-ecommerce∼")
-					item, err = s.ecommerceSvc.GetItemByID(ctx, itemId, credentials.ApiURL, credentials.ApiKey)
+					item, err := itemSourceStrategy.GetItemByID(ctx, itemSpec.ItemId)
 					if err == nil && item != nil {
-
-						creds := &struct {
-							ApiURL string
-							ApiKey string
-						}{
-							ApiURL: credentials.ApiURL,
-							ApiKey: credentials.ApiKey,
+						// Crear orden en ecommerce (lógica legacy mantenida temporalmente)
+						credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, itemSpec.PointOfSaleId)
+						if err == nil {
+							creds := &struct {
+								ApiURL string
+								ApiKey string
+							}{
+								ApiURL: credentials.ApiURL,
+								ApiKey: credentials.ApiKey,
+							}
+							itemId := strings.TrimPrefix(itemSpec.ItemId, "kivio-ecommerce∼")
+							err = s.createEcommerceCustomerAndOrder(ctx, credentials.ApiURL, credentials.ApiKey, billing, validOrders, item, itemId, creds)
 						}
-
-						err = s.createEcommerceCustomerAndOrder(ctx, credentials.ApiURL, credentials.ApiKey, billing, validOrders, item, itemId, creds)
 					}
 				}
 			}
