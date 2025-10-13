@@ -341,7 +341,7 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 			case "Approved":
 				order.State = "Approved"
 				itemSpec.Availability--
-				if itemSpec.GetSource() != "local" && itemSpec.GetSource() != "" && item != nil {
+				if itemSpec.GetSource() != "" && item != nil {
 					orderCreationStrategy, err := s.orderCreationFactory.GetStrategy(ctx, string(itemSpec.GetSource()), order.PointOfSaleId)
 					if err != nil {
 						fmt.Printf("[PayU] Cannot create external order: %v\n", err)
