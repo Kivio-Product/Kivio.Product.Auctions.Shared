@@ -19,15 +19,15 @@ import (
 	orderDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 	paymentDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/payment"
 
+	billingHelpers "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/billing/helpers"
 	customerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/customer"
 	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
 	emailService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email"
 	invoiceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/invoice"
+	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
 	pointOfSaleService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/point_of_sale"
 	strategyApp "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/strategy"
-	ecommerceInfra "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/ecommerce"
 
-	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
 	billingInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/billing"
 	itemInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item"
 	itemSpecInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item_specification"
@@ -46,20 +46,20 @@ type BillingService interface {
 }
 
 type billingService struct {
-	repo               billingInfrastructure.BillingRepository
-	billingFactory     domain.BillingFactory
-	orderRepo          orderInfrastructure.OrderRepository
-	itemSpecRepo       itemSpecInfrastructure.ItemSpecificationRepository
-	itemRepo           itemInfrastructure.ItemRepository
-	pointOfSaleService pointOfSaleService.IPosService
-	emailService       emailService.EmailServiceInterface
-	ecommerceCredSvc   ecommerceService.EcommerceCredentialsService
-	ecommerceSvc       ecommerceService.EcommerceService
-	offerService       offerService.IOfferService
-	invoiceService     invoiceService.InvoiceService
-	customerService    customerService.CustomerService
-	// Strategy factories
-	itemSourceFactory *strategyApp.ItemSourceFactory
+	repo                 billingInfrastructure.BillingRepository
+	billingFactory       domain.BillingFactory
+	orderRepo            orderInfrastructure.OrderRepository
+	itemSpecRepo         itemSpecInfrastructure.ItemSpecificationRepository
+	itemRepo             itemInfrastructure.ItemRepository
+	pointOfSaleService   pointOfSaleService.IPosService
+	emailService         emailService.EmailServiceInterface
+	ecommerceCredSvc     ecommerceService.EcommerceCredentialsService
+	ecommerceSvc         ecommerceService.EcommerceService
+	offerService         offerService.IOfferService
+	invoiceService       invoiceService.InvoiceService
+	customerService      customerService.CustomerService
+	itemSourceFactory    *strategyApp.ItemSourceFactory
+	orderCreationFactory *strategyApp.OrderCreationStrategyFactory
 }
 
 func NewBillingService(
@@ -76,26 +76,28 @@ func NewBillingService(
 	invoiceService invoiceService.InvoiceService,
 	customerService customerService.CustomerService,
 	itemSourceFactory *strategyApp.ItemSourceFactory,
+	orderCreationFactory *strategyApp.OrderCreationStrategyFactory,
 ) BillingService {
 	return &billingService{
-		repo:               repo,
-		billingFactory:     billingFactory,
-		orderRepo:          orderRepo,
-		itemSpecRepo:       itemSpecRepo,
-		itemRepo:           itemRepo,
-		emailService:       emailService,
-		ecommerceCredSvc:   ecommerceCredSvc,
-		ecommerceSvc:       ecommerceSvc,
-		offerService:       offerService,
-		pointOfSaleService: pointOfSaleService,
-		invoiceService:     invoiceService,
-		customerService:    customerService,
-		itemSourceFactory:  itemSourceFactory,
+		repo:                 repo,
+		billingFactory:       billingFactory,
+		orderRepo:            orderRepo,
+		itemSpecRepo:         itemSpecRepo,
+		itemRepo:             itemRepo,
+		emailService:         emailService,
+		ecommerceCredSvc:     ecommerceCredSvc,
+		ecommerceSvc:         ecommerceSvc,
+		offerService:         offerService,
+		pointOfSaleService:   pointOfSaleService,
+		invoiceService:       invoiceService,
+		customerService:      customerService,
+		itemSourceFactory:    itemSourceFactory,
+		orderCreationFactory: orderCreationFactory,
 	}
 }
 
 func (s *billingService) CreateBilling(ctx context.Context, provider, posId, customerId string, customer *domain.Customer) (*domain.Billing, error) {
-	invoiceConfig := getInvoiceConfigFromEnv()
+	invoiceConfig := billingHelpers.GetInvoiceConfigFromEnv()
 	billing, err := s.billingFactory.CreateBilling(provider, posId, customer, invoiceConfig)
 	if err != nil {
 		return nil, err
@@ -340,21 +342,16 @@ func (s *billingService) ConfirmPayUResponse(ctx context.Context, res *paymentDo
 				order.State = "Approved"
 				itemSpec.Availability--
 				if itemSpec.GetSource() != "local" && itemSpec.GetSource() != "" && item != nil {
-					credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, order.PointOfSaleId)
-					if err == nil {
-						creds := &struct {
-							ApiURL string
-							ApiKey string
-						}{
-							ApiURL: credentials.ApiURL,
-							ApiKey: credentials.ApiKey,
+					orderCreationStrategy, err := s.orderCreationFactory.GetStrategy(ctx, string(itemSpec.GetSource()), order.PointOfSaleId)
+					if err != nil {
+						fmt.Printf("[PayU] Cannot create external order: %v\n", err)
+					} else {
+						err = orderCreationStrategy.CreateExternalOrder(ctx, billing, validOrders, item, itemSpec)
+						if err != nil {
+							fmt.Printf("[PayU] Error creating %s order: %v\n", orderCreationStrategy.GetOrderType(), err)
+						} else {
+							fmt.Printf("[PayU] Successfully created %s order\n", orderCreationStrategy.GetOrderType())
 						}
-
-						productIDStr := ""
-						if strings.HasPrefix(itemSpec.ItemId, "kivio-ecommerce∼") {
-							productIDStr = strings.TrimPrefix(itemSpec.ItemId, "kivio-ecommerce∼")
-						}
-						err = s.createEcommerceCustomerAndOrder(ctx, credentials.ApiURL, credentials.ApiKey, billing, validOrders, item, productIDStr, creds)
 					}
 				}
 			case "Rejected", "Error":
@@ -601,25 +598,22 @@ func (s *billingService) ConfirmWompiResponse(ctx context.Context, body []byte) 
 		case "Approved":
 			order.State = "Approved"
 
-			// Usar strategy para obtener items y crear ordenes en ecommerce si es necesario
 			itemSpec, err := s.itemSpecRepo.GetById(ctx, order.ItemSpecificationId)
-			if err == nil && itemSpec.GetSource() != "local" && itemSpec.GetSource() != "" {
+			if err == nil && itemSpec.GetSource() != "" {
 				itemSourceStrategy, err := s.itemSourceFactory.GetStrategyByItemSpec(ctx, string(itemSpec.GetSource()), order.PointOfSaleId)
 				if err == nil {
 					item, err := itemSourceStrategy.GetItemByID(ctx, itemSpec.ItemId)
 					if err == nil && item != nil {
-						// Crear orden en ecommerce (lógica legacy mantenida temporalmente)
-						credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, itemSpec.PointOfSaleId)
-						if err == nil {
-							creds := &struct {
-								ApiURL string
-								ApiKey string
-							}{
-								ApiURL: credentials.ApiURL,
-								ApiKey: credentials.ApiKey,
+						orderCreationStrategy, err := s.orderCreationFactory.GetStrategy(ctx, string(itemSpec.GetSource()), order.PointOfSaleId)
+						if err != nil {
+							fmt.Printf("[Wompi] Cannot create external order: %v\n", err)
+						} else {
+							err = orderCreationStrategy.CreateExternalOrder(ctx, billing, validOrders, item, itemSpec)
+							if err != nil {
+								fmt.Printf("[Wompi] Error creating %s order: %v\n", orderCreationStrategy.GetOrderType(), err)
+							} else {
+								fmt.Printf("[Wompi] Successfully created %s order\n", orderCreationStrategy.GetOrderType())
 							}
-							itemId := strings.TrimPrefix(itemSpec.ItemId, "kivio-ecommerce∼")
-							err = s.createEcommerceCustomerAndOrder(ctx, credentials.ApiURL, credentials.ApiKey, billing, validOrders, item, itemId, creds)
 						}
 					}
 				}
@@ -716,337 +710,4 @@ func validateWompiEventSignature(webhook *WompiWebhook) bool {
 	fmt.Printf("========================================\n")
 
 	return strings.EqualFold(expected, webhook.Signature.Checksum)
-}
-
-func getInvoiceConfigFromEnv() *domain.InvoiceConfig {
-	documentIDStr := os.Getenv("INVOICE_DOCUMENT_ID")
-	sellerIDStr := os.Getenv("INVOICE_SELLER_ID")
-	paymentIDStr := os.Getenv("INVOICE_PAYMENT_ID")
-	taxIDStr := os.Getenv("INVOICE_TAX_ID")
-
-	documentID, _ := strconv.Atoi(documentIDStr)
-	sellerID, _ := strconv.Atoi(sellerIDStr)
-	paymentID, _ := strconv.Atoi(paymentIDStr)
-	taxID, _ := strconv.Atoi(taxIDStr)
-
-	return &domain.InvoiceConfig{
-		DocumentID: documentID,
-		SellerID:   sellerID,
-		PaymentID:  paymentID,
-		TaxID:      taxID,
-	}
-}
-
-func (s *billingService) createEcommerceCustomerFromBilling(billing *domain.Billing) *ecommerceInfra.EcommerceCustomer {
-	now := time.Now()
-
-	customer := &ecommerceInfra.EcommerceCustomer{
-		Username:     "",
-		Email:        billing.Customer.Email,
-		FirstName:    "",
-		LastName:     "",
-		Active:       true,
-		CreatedOnUTC: now,
-		RoleIDs:      []int{4},
-	}
-
-	if len(billing.Customer.Name) > 0 {
-		if len(billing.Customer.Name) > 1 {
-			customer.FirstName = billing.Customer.Name[0]
-			customer.LastName = strings.Join(billing.Customer.Name[1:], " ")
-		} else {
-			fullName := billing.Customer.Name[0]
-			nameParts := strings.Fields(strings.TrimSpace(fullName))
-			if len(nameParts) > 1 {
-				customer.FirstName = nameParts[0]
-				customer.LastName = strings.Join(nameParts[1:], " ")
-			} else {
-				customer.FirstName = fullName
-				customer.LastName = ""
-			}
-		}
-	}
-
-	return customer
-}
-
-func (s *billingService) createEcommerceBillingAddressFromBilling(billing *domain.Billing) *ecommerceInfra.EcommerceAddress {
-	now := time.Now()
-
-	firstName := ""
-	lastName := ""
-
-	if len(billing.Customer.Name) > 0 {
-		if len(billing.Customer.Name) > 1 {
-			firstName = billing.Customer.Name[0]
-			lastName = strings.Join(billing.Customer.Name[1:], " ")
-		} else {
-			fullName := billing.Customer.Name[0]
-			nameParts := strings.Fields(strings.TrimSpace(fullName))
-			if len(nameParts) > 1 {
-				firstName = nameParts[0]
-				lastName = strings.Join(nameParts[1:], " ")
-			} else {
-				firstName = fullName
-				lastName = ""
-			}
-		}
-	}
-
-	address := &ecommerceInfra.EcommerceAddress{
-		FirstName:     firstName,
-		LastName:      lastName,
-		Email:         billing.Customer.Email,
-		City:          billing.Customer.Address.City.CityName,
-		Address1:      billing.Customer.Address.Address,
-		ZipPostalCode: billing.Customer.Address.PostalCode,
-		Country:       billing.Customer.Address.City.CountryName,
-		Province:      billing.Customer.Address.City.StateName,
-		CreatedOnUTC:  now,
-		CountryID:     49,
-	}
-
-	if len(billing.Customer.Phones) > 0 {
-		address.PhoneNumber = billing.Customer.Phones[0].Indicative + billing.Customer.Phones[0].Number
-	}
-
-	return address
-}
-
-func (s *billingService) createEcommerceShippingAddressFromBilling(billing *domain.Billing) *ecommerceInfra.EcommerceAddress {
-	now := time.Now()
-
-	firstName := ""
-	lastName := ""
-
-	if len(billing.Customer.Name) > 0 {
-		if len(billing.Customer.Name) > 1 {
-			firstName = billing.Customer.Name[0]
-			lastName = strings.Join(billing.Customer.Name[1:], " ")
-		} else {
-			fullName := billing.Customer.Name[0]
-			nameParts := strings.Fields(strings.TrimSpace(fullName))
-			if len(nameParts) > 1 {
-				firstName = nameParts[0]
-				lastName = strings.Join(nameParts[1:], " ")
-			} else {
-				firstName = fullName
-				lastName = ""
-			}
-		}
-	}
-
-	var addressInfo domain.CustomerAddress
-	if billing.Customer.ShippingAddress != nil {
-		addressInfo = *billing.Customer.ShippingAddress
-		fmt.Printf("Using customer shipping address: %+v\n", addressInfo)
-	} else {
-		addressInfo = billing.Customer.Address
-		fmt.Printf("Using customer billing address as fallback for shipping: %+v\n", addressInfo)
-	}
-
-	address := &ecommerceInfra.EcommerceAddress{
-		FirstName:     firstName,
-		LastName:      lastName,
-		Email:         billing.Customer.Email,
-		City:          addressInfo.City.CityName,
-		Address1:      addressInfo.Address,
-		ZipPostalCode: addressInfo.PostalCode,
-		Country:       addressInfo.City.CountryName,
-		Province:      addressInfo.City.StateName,
-		CreatedOnUTC:  now,
-		CountryID:     49,
-	}
-
-	if len(billing.Customer.Phones) > 0 {
-		address.PhoneNumber = billing.Customer.Phones[0].Indicative + billing.Customer.Phones[0].Number
-	}
-
-	return address
-}
-
-func (s *billingService) createEcommerceShoppingCartItemFromOrders(orders []*orderDomain.Order, customerID int, item *itemDomain.Item, productIDStr string) *ecommerceInfra.EcommerceShoppingCartItem {
-	now := time.Now()
-
-	var productID int
-	if productIDStr != "" {
-		if id, err := strconv.Atoi(productIDStr); err == nil {
-			productID = id
-		}
-	} else {
-		if item != nil && item.ItemId != "" {
-			if strings.HasPrefix(item.ItemId, "kivio-ecommerce∼") {
-				extractedIDStr := strings.TrimPrefix(item.ItemId, "kivio-ecommerce∼")
-				if id, err := strconv.Atoi(extractedIDStr); err == nil {
-					productID = id
-				}
-			}
-		}
-	}
-
-	cartItem := &ecommerceInfra.EcommerceShoppingCartItem{
-		Quantity:         1,
-		CreatedOnUTC:     now,
-		ShoppingCartType: "ShoppingCart",
-		ProductID:        productID,
-		CustomerID:       customerID,
-	}
-
-	return cartItem
-}
-
-func (s *billingService) createEcommerceOrderFromOrders(orders []*orderDomain.Order, customerID int, item *itemDomain.Item, billingAddressID, shippingAddressID int) *ecommerceInfra.EcommerceSimpleOrder {
-	now := time.Now()
-	totalAmount := float64(0)
-
-	for _, order := range orders {
-		itemAmount := float64(order.OfferedAmount) / 100.0
-		totalAmount += itemAmount
-	}
-
-	order := &ecommerceInfra.EcommerceSimpleOrder{
-		StoreID:                 1,
-		PaymentMethodSystemName: "Payments.CashOnDelivery",
-		CustomerCurrencyCode:    "COP",
-		CurrencyRate:            1,
-		OrderTax:                0,
-		OrderTotal:              totalAmount,
-		PaidDateUTC:             now,
-		CreatedOnUTC:            now,
-		CustomerID:              customerID,
-		BillingAddress:          &ecommerceInfra.EcommerceSimpleAddress{ID: billingAddressID},
-		ShippingAddress:         &ecommerceInfra.EcommerceSimpleAddress{ID: shippingAddressID},
-	}
-
-	return order
-}
-
-func (s *billingService) createEcommerceCustomerAndOrder(ctx context.Context, credentialsApiURL string, credentialsApiKey string, billing *domain.Billing, orders []*orderDomain.Order, item *itemDomain.Item, productIDStr string, credentials interface{}) error {
-	fmt.Printf("[BILLING] Starting createEcommerceCustomerAndOrder for %d orders\n", len(orders))
-
-	customer, err := s.customerService.GetOrCreateCustomer(ctx, billing.Customer.Email)
-	if err != nil {
-		return fmt.Errorf("error getting or creating customer: %v", err)
-	}
-
-	var customerResponse *ecommerceInfra.EcommerceCustomerResponse
-	var billingAddressResponse *ecommerceInfra.EcommerceBillingAddressResponse
-
-	if customer.ExternalCustomerID == "" {
-		ecommerceCustomer := s.createEcommerceCustomerFromBilling(billing)
-
-		customerResponse, err = s.ecommerceSvc.CreateEcommerceCustomer(ctx, credentialsApiURL, credentialsApiKey, ecommerceCustomer)
-		if err != nil {
-			return fmt.Errorf("error creando customer en ecommerce: %v", err)
-		}
-
-		err = s.customerService.UpdateExternalCustomerID(ctx, customer.Email, fmt.Sprintf("%d", customerResponse.ID))
-		if err != nil {
-			return fmt.Errorf("error updating customer with external ID: %v", err)
-		}
-	} else {
-		customerResponse = &ecommerceInfra.EcommerceCustomerResponse{
-			ID: func() int {
-				id, _ := strconv.Atoi(customer.ExternalCustomerID)
-				return id
-			}(),
-		}
-	}
-
-	if customer.BillingAddressID == "" {
-		ecommerceBillingAddress := s.createEcommerceBillingAddressFromBilling(billing)
-
-		billingAddressResponse, err = s.ecommerceSvc.CreateEcommerceBillingAddress(ctx, credentialsApiURL, credentialsApiKey, customerResponse.ID, ecommerceBillingAddress)
-		if err != nil {
-			return fmt.Errorf("error creando billing address en ecommerce: %v", err)
-		}
-
-		err = s.customerService.UpdateBillingAddress(ctx, customer.Email, fmt.Sprintf("%d", billingAddressResponse.ID))
-		if err != nil {
-			return fmt.Errorf("error updating customer with billing address ID: %v", err)
-		}
-	}
-
-	if customer.ShippingAddressID == "" {
-		ecommerceShippingAddress := s.createEcommerceShippingAddressFromBilling(billing)
-
-		shippingAddressResponse, err := s.ecommerceSvc.CreateEcommerceShippingAddress(ctx, credentialsApiURL, credentialsApiKey, customerResponse.ID, ecommerceShippingAddress)
-		if err != nil {
-			return fmt.Errorf("error creando shipping address en ecommerce: %v", err)
-		}
-
-		err = s.customerService.UpdateShippingAddress(ctx, customer.Email, fmt.Sprintf("%d", shippingAddressResponse.ID))
-		if err != nil {
-			return fmt.Errorf("error updating customer with shipping address ID: %v", err)
-		}
-	}
-
-	ecommerceShoppingCartItem := s.createEcommerceShoppingCartItemFromOrders(orders, customerResponse.ID, item, productIDStr)
-
-	cartResponse, err := s.ecommerceSvc.CreateEcommerceShoppingCartItem(ctx, credentialsApiURL, credentialsApiKey, ecommerceShoppingCartItem)
-	if err != nil {
-		return fmt.Errorf("error creando shopping cart item en ecommerce: %v", err)
-	}
-
-	fmt.Printf("Shopping cart item creado exitosamente con ID: %d\n", cartResponse.ID)
-
-	var billingAddressID, shippingAddressID int
-	if billingAddressResponse != nil {
-		billingAddressID = billingAddressResponse.ID
-	} else {
-		if id, err := strconv.Atoi(customer.BillingAddressID); err == nil {
-			billingAddressID = id
-		}
-	}
-
-	if customer.ShippingAddressID != "" {
-		if id, err := strconv.Atoi(customer.ShippingAddressID); err == nil {
-			shippingAddressID = id
-		}
-	} else {
-		shippingAddressID = billingAddressID
-	}
-
-	ecommerceOrder := s.createEcommerceOrderFromOrders(orders, customerResponse.ID, item, billingAddressID, shippingAddressID)
-
-	orderResponse, err := s.ecommerceSvc.CreateEcommerceSimpleOrder(ctx, credentialsApiURL, credentialsApiKey, ecommerceOrder)
-	if err != nil {
-		return fmt.Errorf("error creando orden en ecommerce: %v", err)
-	}
-
-	fmt.Printf("Orden creada exitosamente con ID: %d, Order Items: %d, First Item ID: %d\n",
-		orderResponse.ID, orderResponse.OrderItemsCount, orderResponse.OrderItemID)
-
-	if len(orders) > 0 && orders[0].ItemSpecificationId != "" && orderResponse.OrderItemID > 0 {
-		itemSpec, err := s.itemSpecRepo.GetById(ctx, orders[0].ItemSpecificationId)
-		if err != nil {
-			fmt.Printf("[BILLING] WARNING: Could not get itemSpec %s to update price: %v\n", orders[0].ItemSpecificationId, err)
-		} else {
-			priceInCents := float64(itemSpec.Amount)
-			priceInUnits := priceInCents / 100.0
-
-			fmt.Printf("[BILLING] Updating order item price with value from itemSpec: %.2f (from %d cents)\n", priceInUnits, itemSpec.Amount)
-
-			orderItem := &ecommerceInfra.EcommerceOrderItem{
-				Quantity:         1,
-				UnitPriceInclTax: priceInUnits,
-				UnitPriceExclTax: priceInUnits,
-				PriceInclTax:     priceInUnits,
-				PriceExclTax:     priceInUnits,
-			}
-
-			fmt.Printf("[BILLING] Calling UpdateOrderItemPrice with OrderID: %d, ItemID: %d\n", orderResponse.ID, orderResponse.OrderItemID)
-
-			err = s.ecommerceSvc.UpdateOrderItemPrice(ctx, credentialsApiURL, credentialsApiKey, orderResponse.ID, orderResponse.OrderItemID, orderItem)
-			if err != nil {
-				fmt.Printf("[BILLING] WARNING: Failed to update order item price for order %d, item %d: %v\n", orderResponse.ID, orderResponse.OrderItemID, err)
-			} else {
-				fmt.Printf("[BILLING] Order item price updated successfully for order %d, item %d\n", orderResponse.ID, orderResponse.OrderItemID)
-			}
-		}
-	} else if len(orders) > 0 && orderResponse.OrderItemID == 0 {
-		fmt.Printf("[BILLING] WARNING: Order created but no order item ID found in response. Cannot update price.\n")
-	}
-
-	return nil
 }
