@@ -83,7 +83,6 @@ func (s *customerConfigService) DeleteCustomerConfig(ctx context.Context, custom
 func (s *customerConfigService) IsMultipleItemsAllowed(ctx context.Context, customerID, pointOfSaleID string) (bool, error) {
 	config, err := s.repo.GetByCustomerID(ctx, customerID, pointOfSaleID)
 	if err != nil {
-		// If config doesn't exist, default to single item only (false)
 		return false, nil
 	}
 

@@ -5,7 +5,6 @@ import (
 	"strings"
 )
 
-// LokiConfig holds the configuration for Loki client
 type LokiConfig struct {
 	Enabled     bool   `json:"enabled"`
 	URL         string `json:"url"`
@@ -16,7 +15,6 @@ type LokiConfig struct {
 	LogLevel    string `json:"log_level"`
 }
 
-// GetLokiConfigFromEnv creates LokiConfig from environment variables
 func GetLokiConfigFromEnv() *LokiConfig {
 	return &LokiConfig{
 		Enabled:     getEnvBool("LOKI_ENABLED", true),
@@ -29,12 +27,10 @@ func GetLokiConfigFromEnv() *LokiConfig {
 	}
 }
 
-// IsValid checks if the Loki configuration is valid
 func (c *LokiConfig) IsValid() bool {
 	return c.Enabled && c.URL != "" && c.Username != "" && c.Password != ""
 }
 
-// getEnv gets an environment variable with a default value
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
@@ -42,7 +38,6 @@ func getEnv(key, defaultValue string) string {
 	return defaultValue
 }
 
-// getEnvBool gets a boolean environment variable with a default value
 func getEnvBool(key string, defaultValue bool) bool {
 	if value := os.Getenv(key); value != "" {
 		return strings.ToLower(value) == "true"

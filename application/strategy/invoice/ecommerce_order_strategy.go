@@ -5,21 +5,20 @@ import (
 	"fmt"
 	"time"
 
-	applicationLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/logging"
+	"strconv"
+	"strings"
+
 	customerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/customer"
 	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
+	applicationLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/logging"
 	billingDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/billing"
 	invoiceDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/invoice"
 	"github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/logging"
 	orderDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 	ecommerceInfra "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/ecommerce"
 	infrastructureLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/logging"
-	"strconv"
-	"strings"
 )
 
-// EcommerceOrderStrategy implementa la estrategia de "facturación" creando ordenes en el ecommerce
-// Se usa para items externos que vienen de un ecommerce integrado
 type EcommerceOrderStrategy struct {
 	ecommerceCredSvc ecommerceService.EcommerceCredentialsService
 	ecommerceSvc     ecommerceService.EcommerceService
@@ -28,7 +27,6 @@ type EcommerceOrderStrategy struct {
 	eventLogger      *logging.DomainEventLogger
 }
 
-// NewEcommerceOrderStrategy crea una nueva instancia del strategy para ordenes de ecommerce
 func NewEcommerceOrderStrategy(
 	ecommerceCredSvc ecommerceService.EcommerceCredentialsService,
 	ecommerceSvc ecommerceService.EcommerceService,
@@ -47,8 +45,6 @@ func NewEcommerceOrderStrategy(
 	}
 }
 
-// CreateInvoiceForOrders crea ordenes en el ecommerce para items externos
-// En lugar de crear una factura en Siigo, crea una orden en el sistema de ecommerce
 func (s *EcommerceOrderStrategy) CreateInvoiceForOrders(
 	ctx context.Context,
 	billingID string,
@@ -78,7 +74,6 @@ func (s *EcommerceOrderStrategy) CreateInvoiceForOrders(
 	firstOrder := orders[0]
 	posID := firstOrder.PointOfSaleId
 
-	// Obtener credenciales del ecommerce
 	credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, posID)
 	if err != nil {
 		s.serviceLogger.LogServiceError(ctx, "CreateInvoiceForOrders", err, map[string]interface{}{
@@ -89,14 +84,10 @@ func (s *EcommerceOrderStrategy) CreateInvoiceForOrders(
 		return nil, fmt.Errorf("error getting ecommerce credentials: %w", err)
 	}
 
-	// Crear billing mock con customer info
 	billing := &billingDomain.Billing{
 		Customer: customer,
 	}
 
-	// Crear orden en ecommerce
-	// Nota: Esta lógica está simplificada. La lógica completa de createEcommerceCustomerAndOrder
-	// debería ser extraída a un método helper o service separado
 	err = s.createEcommerceOrder(ctx, credentials.ApiURL, credentials.ApiKey, billing, orders, posID)
 	if err != nil {
 		s.serviceLogger.LogServiceError(ctx, "CreateInvoiceForOrders", err, map[string]interface{}{
@@ -113,16 +104,13 @@ func (s *EcommerceOrderStrategy) CreateInvoiceForOrders(
 		"success":     true,
 	})
 
-	// Retornar respuesta mock ya que la interfaz espera SiigoInvoiceResponse
-	// En el futuro esto debería ser una respuesta genérica
 	return &invoiceDomain.SiigoInvoiceResponse{
-		ID:     billingID, // Usar billingID como referencia
-		Number: 0,         // No hay número de factura en ecommerce
-		Total:  0,         // Calcular total si es necesario
+		ID:     billingID,
+		Number: 0,
+		Total:  0,
 	}, nil
 }
 
-// createEcommerceOrder crea una orden completa en el ecommerce
 func (s *EcommerceOrderStrategy) createEcommerceOrder(
 	ctx context.Context,
 	apiURL string,
@@ -133,7 +121,6 @@ func (s *EcommerceOrderStrategy) createEcommerceOrder(
 ) error {
 	fmt.Printf("[EcommerceOrderStrategy] Starting createEcommerceOrder for %d orders\n", len(orders))
 
-	// 1. Obtener o crear customer
 	customer, err := s.customerService.GetOrCreateCustomer(ctx, billing.Customer.Email)
 	if err != nil {
 		return fmt.Errorf("error getting or creating customer: %w", err)
@@ -141,7 +128,6 @@ func (s *EcommerceOrderStrategy) createEcommerceOrder(
 
 	var customerResponse *ecommerceInfra.EcommerceCustomerResponse
 
-	// 2. Crear customer en ecommerce si no existe
 	if customer.ExternalCustomerID == "" {
 		ecommerceCustomer := s.createEcommerceCustomer(billing)
 		customerResponse, err = s.ecommerceSvc.CreateEcommerceCustomer(ctx, apiURL, apiKey, ecommerceCustomer)
@@ -162,7 +148,6 @@ func (s *EcommerceOrderStrategy) createEcommerceOrder(
 		}
 	}
 
-	// 3. Crear billing address si no existe
 	var billingAddressID int
 	if customer.BillingAddressID == "" {
 		billingAddress := s.createBillingAddress(billing)
@@ -180,7 +165,6 @@ func (s *EcommerceOrderStrategy) createEcommerceOrder(
 		billingAddressID, _ = strconv.Atoi(customer.BillingAddressID)
 	}
 
-	// 4. Crear shipping address si no existe
 	var shippingAddressID int
 	if customer.ShippingAddressID == "" {
 		shippingAddress := s.createShippingAddress(billing)
@@ -198,7 +182,6 @@ func (s *EcommerceOrderStrategy) createEcommerceOrder(
 		shippingAddressID, _ = strconv.Atoi(customer.ShippingAddressID)
 	}
 
-	// 5. Crear orden simple en ecommerce
 	totalAmount := float64(0)
 	for _, order := range orders {
 		totalAmount += float64(order.OfferedAmount) / 100.0
@@ -214,7 +197,6 @@ func (s *EcommerceOrderStrategy) createEcommerceOrder(
 	return nil
 }
 
-// Helper methods para crear estructuras de ecommerce
 func (s *EcommerceOrderStrategy) createEcommerceCustomer(billing *billingDomain.Billing) *ecommerceInfra.EcommerceCustomer {
 	now := time.Now()
 	customer := &ecommerceInfra.EcommerceCustomer{
@@ -338,7 +320,6 @@ func (s *EcommerceOrderStrategy) splitCustomerName(names []string) (string, stri
 	return names[0], ""
 }
 
-// GetInvoiceType retorna el tipo de facturación
 func (s *EcommerceOrderStrategy) GetInvoiceType() string {
 	return "ecommerce_order"
 }

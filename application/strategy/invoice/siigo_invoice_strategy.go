@@ -14,8 +14,6 @@ import (
 	infrastructureLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/logging"
 )
 
-// SiigoInvoiceStrategy implementa la estrategia de facturación usando Siigo
-// Se usa para items locales que necesitan facturación en el sistema Siigo
 type SiigoInvoiceStrategy struct {
 	siigoClient    siigoClient.SiigoClient
 	invoiceFactory invoiceDomain.InvoiceFactory
@@ -23,7 +21,6 @@ type SiigoInvoiceStrategy struct {
 	eventLogger    *logging.DomainEventLogger
 }
 
-// NewSiigoInvoiceStrategy crea una nueva instancia del strategy para Siigo
 func NewSiigoInvoiceStrategy(
 	siigoClient siigoClient.SiigoClient,
 	invoiceFactory invoiceDomain.InvoiceFactory,
@@ -40,7 +37,6 @@ func NewSiigoInvoiceStrategy(
 	}
 }
 
-// CreateInvoiceForOrders crea una factura en Siigo para un conjunto de ordenes
 func (s *SiigoInvoiceStrategy) CreateInvoiceForOrders(
 	ctx context.Context,
 	billingID string,
@@ -217,7 +213,6 @@ func (s *SiigoInvoiceStrategy) CreateInvoiceForOrders(
 	return invoiceResponse, nil
 }
 
-// GetInvoiceType retorna el tipo de facturación
 func (s *SiigoInvoiceStrategy) GetInvoiceType() string {
 	return "siigo"
 }

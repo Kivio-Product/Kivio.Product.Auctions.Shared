@@ -21,12 +21,12 @@ type InvoiceService interface {
 }
 
 type invoiceService struct {
-	siigoClient           siigoClient.SiigoClient
-	invoiceFactory        invoiceDomain.InvoiceFactory
-	serviceLogger         *applicationLogging.ServiceLogger
-	eventLogger           *logging.DomainEventLogger
+	siigoClient            siigoClient.SiigoClient
+	invoiceFactory         invoiceDomain.InvoiceFactory
+	serviceLogger          *applicationLogging.ServiceLogger
+	eventLogger            *logging.DomainEventLogger
 	invoiceStrategyFactory *strategyApp.InvoiceStrategyFactory
-	itemSpecRepo          itemSpecInfrastructure.ItemSpecificationRepository
+	itemSpecRepo           itemSpecInfrastructure.ItemSpecificationRepository
 }
 
 func NewInvoiceService(
@@ -81,8 +81,6 @@ func (s *invoiceService) CreateInvoiceForOrders(ctx context.Context, billingID s
 	firstOrder := orders[0]
 	posID := firstOrder.PointOfSaleId
 
-	// Determinar el source de los items consultando itemSpec
-	// Si todos son del mismo source, usar el strategy correspondiente
 	var itemSources []string
 	for _, order := range orders {
 		itemSpec, err := s.itemSpecRepo.GetById(ctx, order.ItemSpecificationId)
@@ -96,7 +94,6 @@ func (s *invoiceService) CreateInvoiceForOrders(ctx context.Context, billingID s
 		itemSources = append(itemSources, string(itemSpec.GetSource()))
 	}
 
-	// Obtener el strategy apropiado basado en las integraciones y source de items
 	invoiceStrategy, err := s.invoiceStrategyFactory.GetStrategyForOrders(ctx, posID, itemSources)
 	if err != nil {
 		s.serviceLogger.LogServiceError(ctx, "CreateInvoiceForOrders", err, map[string]interface{}{
@@ -114,7 +111,6 @@ func (s *invoiceService) CreateInvoiceForOrders(ctx context.Context, billingID s
 		"order_count":   len(orders),
 	})
 
-	// Delegar la creación de factura/orden al strategy
 	response, err := invoiceStrategy.CreateInvoiceForOrders(ctx, billingID, orders, customer, invoiceConfig, posName)
 	if err != nil {
 		s.serviceLogger.LogServiceError(ctx, "CreateInvoiceForOrders", err, map[string]interface{}{

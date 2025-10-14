@@ -160,7 +160,6 @@ type SiigoDiscount struct {
 	Value      float64 `json:"value,omitempty"`
 }
 
-// InvoiceRequest specific structures (simplified for user input)
 type InvoiceAddress struct {
 	Address    string
 	City       InvoiceCity

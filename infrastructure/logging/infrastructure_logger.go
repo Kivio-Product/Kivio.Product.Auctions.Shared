@@ -7,13 +7,11 @@ import (
 	"github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/logging"
 )
 
-// InfrastructureLogger provides logging utilities for infrastructure layer
 type InfrastructureLogger struct {
 	logger        logging.Logger
 	componentName string
 }
 
-// NewInfrastructureLogger creates a new infrastructure logger
 func NewInfrastructureLogger(loggerRepo logging.LoggerRepository, componentName string) *InfrastructureLogger {
 	serviceName := "Infrastructure-" + componentName
 	return &InfrastructureLogger{
@@ -22,7 +20,6 @@ func NewInfrastructureLogger(loggerRepo logging.LoggerRepository, componentName 
 	}
 }
 
-// LogDatabaseQuery logs database query operations
 func (i *InfrastructureLogger) LogDatabaseQuery(ctx context.Context, table, operation string, duration time.Duration, success bool, fields map[string]interface{}) {
 	if fields == nil {
 		fields = make(map[string]interface{})
@@ -42,7 +39,6 @@ func (i *InfrastructureLogger) LogDatabaseQuery(ctx context.Context, table, oper
 	}
 }
 
-// LogS3Operation logs S3 file operations
 func (i *InfrastructureLogger) LogS3Operation(ctx context.Context, operation, bucket, key string, duration time.Duration, success bool, fields map[string]interface{}) {
 	if fields == nil {
 		fields = make(map[string]interface{})
@@ -63,7 +59,6 @@ func (i *InfrastructureLogger) LogS3Operation(ctx context.Context, operation, bu
 	}
 }
 
-// LogEmailSent logs email sending operations
 func (i *InfrastructureLogger) LogEmailSent(ctx context.Context, provider, recipient string, success bool, fields map[string]interface{}) {
 	if fields == nil {
 		fields = make(map[string]interface{})
@@ -82,7 +77,6 @@ func (i *InfrastructureLogger) LogEmailSent(ctx context.Context, provider, recip
 	}
 }
 
-// LogHTTPRequest logs HTTP requests to external services
 func (i *InfrastructureLogger) LogHTTPRequest(ctx context.Context, method, url string, statusCode int, duration time.Duration, fields map[string]interface{}) {
 	if fields == nil {
 		fields = make(map[string]interface{})
@@ -104,7 +98,6 @@ func (i *InfrastructureLogger) LogHTTPRequest(ctx context.Context, method, url s
 	}
 }
 
-// LogConnectionEvent logs connection events (database, external services)
 func (i *InfrastructureLogger) LogConnectionEvent(ctx context.Context, service string, event string, success bool, fields map[string]interface{}) {
 	if fields == nil {
 		fields = make(map[string]interface{})

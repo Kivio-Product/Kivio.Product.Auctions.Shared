@@ -5,7 +5,6 @@ import (
 	"time"
 )
 
-// LogLevel represents the severity level of a log entry
 type LogLevel string
 
 const (
@@ -15,7 +14,6 @@ const (
 	ErrorLevel LogLevel = "error"
 )
 
-// LogEntry represents a structured log entry
 type LogEntry struct {
 	Level     LogLevel               `json:"level"`
 	Message   string                 `json:"message"`
@@ -25,7 +23,6 @@ type LogEntry struct {
 	Error     string                 `json:"error,omitempty"`
 }
 
-// Logger defines the interface for logging operations
 type Logger interface {
 	Debug(ctx context.Context, message string, fields map[string]interface{})
 	Info(ctx context.Context, message string, fields map[string]interface{})
@@ -34,7 +31,6 @@ type Logger interface {
 	WithService(serviceName string) Logger
 }
 
-// LoggerRepository defines the interface for managing loggers
 type LoggerRepository interface {
 	GetLogger() Logger
 	Close() error
