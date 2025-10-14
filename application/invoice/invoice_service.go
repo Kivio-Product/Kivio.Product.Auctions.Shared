@@ -81,7 +81,9 @@ func (s *invoiceService) CreateInvoiceForOrders(ctx context.Context, billingID s
 	firstOrder := orders[0]
 	posID := firstOrder.PointOfSaleId
 
+	ordersBySource := make(map[string][]*orderDomain.Order)
 	var itemSources []string
+
 	for _, order := range orders {
 		itemSpec, err := s.itemSpecRepo.GetById(ctx, order.ItemSpecificationId)
 		if err != nil {
@@ -91,42 +93,66 @@ func (s *invoiceService) CreateInvoiceForOrders(ctx context.Context, billingID s
 			})
 			return nil, fmt.Errorf("error getting itemSpec for order %s: %w", order.OrderId, err)
 		}
-		itemSources = append(itemSources, string(itemSpec.GetSource()))
+
+		source := string(itemSpec.GetSource())
+		itemSources = append(itemSources, source)
+		ordersBySource[source] = append(ordersBySource[source], order)
 	}
 
-	invoiceStrategy, err := s.invoiceStrategyFactory.GetStrategyForOrders(ctx, posID, itemSources)
+	s.serviceLogger.LogWorkflow(ctx, "InvoiceGeneration", "GroupedOrdersBySource", map[string]interface{}{
+		"billing_id":   billingID,
+		"pos_id":       posID,
+		"source_count": len(ordersBySource),
+	})
+
+	strategies, err := s.invoiceStrategyFactory.GetStrategyForOrders(ctx, posID, itemSources)
 	if err != nil {
 		s.serviceLogger.LogServiceError(ctx, "CreateInvoiceForOrders", err, map[string]interface{}{
 			"billing_id": billingID,
 			"pos_id":     posID,
-			"error":      "failed_to_get_invoice_strategy",
+			"error":      "failed_to_get_invoice_strategies",
 		})
-		return nil, fmt.Errorf("error getting invoice strategy: %w", err)
+		return nil, fmt.Errorf("error getting invoice strategies: %w", err)
 	}
 
-	s.serviceLogger.LogWorkflow(ctx, "InvoiceGeneration", "UsingStrategy", map[string]interface{}{
-		"strategy_type": invoiceStrategy.GetInvoiceType(),
-		"billing_id":    billingID,
-		"pos_id":        posID,
-		"order_count":   len(orders),
-	})
+	var lastResponse *invoiceDomain.SiigoInvoiceResponse
+	for source, sourceOrders := range ordersBySource {
+		strategy := strategies[source]
 
-	response, err := invoiceStrategy.CreateInvoiceForOrders(ctx, billingID, orders, customer, invoiceConfig, posName)
-	if err != nil {
-		s.serviceLogger.LogServiceError(ctx, "CreateInvoiceForOrders", err, map[string]interface{}{
+		s.serviceLogger.LogWorkflow(ctx, "InvoiceGeneration", "ExecutingStrategy", map[string]interface{}{
+			"strategy_type": strategy.GetInvoiceType(),
+			"source":        source,
 			"billing_id":    billingID,
-			"strategy_type": invoiceStrategy.GetInvoiceType(),
-			"error":         "strategy_execution_failed",
+			"pos_id":        posID,
+			"order_count":   len(sourceOrders),
 		})
-		return nil, fmt.Errorf("error executing invoice strategy: %w", err)
+
+		response, err := strategy.CreateInvoiceForOrders(ctx, billingID, sourceOrders, customer, invoiceConfig, posName)
+		if err != nil {
+			s.serviceLogger.LogServiceError(ctx, "CreateInvoiceForOrders", err, map[string]interface{}{
+				"billing_id":    billingID,
+				"source":        source,
+				"strategy_type": strategy.GetInvoiceType(),
+				"error":         "strategy_execution_failed",
+			})
+			return nil, fmt.Errorf("error executing invoice strategy for source '%s': %w", source, err)
+		}
+
+		lastResponse = response
+		s.serviceLogger.LogWorkflow(ctx, "InvoiceGeneration", "StrategyCompleted", map[string]interface{}{
+			"strategy_type": strategy.GetInvoiceType(),
+			"source":        source,
+			"billing_id":    billingID,
+			"success":       true,
+		})
 	}
 
 	s.serviceLogger.LogServiceEnd(ctx, "CreateInvoiceForOrders", time.Since(start), map[string]interface{}{
-		"billing_id":    billingID,
-		"strategy_type": invoiceStrategy.GetInvoiceType(),
-		"order_count":   len(orders),
-		"success":       true,
+		"billing_id":   billingID,
+		"order_count":  len(orders),
+		"source_count": len(ordersBySource),
+		"success":      true,
 	})
 
-	return response, nil
+	return lastResponse, nil
 }

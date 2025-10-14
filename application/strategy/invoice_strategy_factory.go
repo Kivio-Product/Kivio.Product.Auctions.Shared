@@ -63,17 +63,25 @@ func (f *InvoiceStrategyFactory) GetStrategy(ctx context.Context, posID string, 
 	}
 }
 
-func (f *InvoiceStrategyFactory) GetStrategyForOrders(ctx context.Context, posID string, itemSources []string) (domainStrategy.InvoiceStrategy, error) {
+func (f *InvoiceStrategyFactory) GetStrategyForOrders(ctx context.Context, posID string, itemSources []string) (map[string]domainStrategy.InvoiceStrategy, error) {
 	if len(itemSources) == 0 {
 		return nil, fmt.Errorf("no items provided to determine invoice strategy")
 	}
 
-	firstSource := itemSources[0]
+	uniqueSources := make(map[string]bool)
 	for _, source := range itemSources {
-		if source != firstSource {
-			return nil, fmt.Errorf("cannot invoice mixed sources (%s and %s) in the same billing", firstSource, source)
-		}
+		uniqueSources[source] = true
 	}
 
-	return f.GetStrategy(ctx, posID, firstSource)
+	strategies := make(map[string]domainStrategy.InvoiceStrategy)
+	for source := range uniqueSources {
+		strategy, err := f.GetStrategy(ctx, posID, source)
+		if err != nil {
+			return nil, fmt.Errorf("error getting strategy for source '%s': %w", source, err)
+		}
+		strategies[source] = strategy
+	}
+
+	fmt.Printf("[InvoiceStrategyFactory] Created %d strategies for mixed sources in POS %s\n", len(strategies), posID)
+	return strategies, nil
 }
