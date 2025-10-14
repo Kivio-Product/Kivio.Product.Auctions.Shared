@@ -47,7 +47,7 @@ func (f *OrderCreationStrategyFactory) GetStrategy(ctx context.Context, source s
 	}
 
 	switch source {
-	case "ecommerce":
+	case "kivio_ecommerce":
 		fmt.Printf("[OrderCreationFactory] Using ecommerce order creation strategy for source '%s', POS %s\n", source, posID)
 		return f.ecommerceStrategy, nil
 	default:

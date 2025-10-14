@@ -35,7 +35,7 @@ func (f *ItemSourceFactory) GetStrategy(ctx context.Context, posID string) (doma
 	}
 
 	for _, integration := range integrations {
-		if integration.Type == "ecommerce" && integration.Status == domainIntegration.Active {
+		if integration.Type == "kivio_ecommerce" && integration.Status == domainIntegration.Active {
 			fmt.Printf("[ItemSourceFactory] Found active ecommerce integration for POS %s\n", posID)
 			return f.ecommerceSource, nil
 		}
@@ -68,7 +68,7 @@ func (f *ItemSourceFactory) GetStrategyByItemSpec(ctx context.Context, source st
 	}
 
 	switch source {
-	case "ecommerce":
+	case "kivio_ecommerce":
 		return f.ecommerceSource, nil
 	default:
 		return nil, fmt.Errorf("unknown item source: %s", source)
@@ -77,7 +77,7 @@ func (f *ItemSourceFactory) GetStrategyByItemSpec(ctx context.Context, source st
 
 func (f *ItemSourceFactory) GetStrategyByIsExternalLegacy(ctx context.Context, isExternal bool, posID string) (domainStrategy.ItemSourceStrategy, error) {
 	if isExternal {
-		return f.GetStrategyByItemSpec(ctx, "ecommerce", posID)
+		return f.GetStrategyByItemSpec(ctx, "kivio_ecommerce", posID)
 	}
 	return f.localSource, nil
 }

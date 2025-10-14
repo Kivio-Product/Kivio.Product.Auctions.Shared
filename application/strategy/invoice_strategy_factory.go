@@ -51,13 +51,9 @@ func (f *InvoiceStrategyFactory) GetStrategy(ctx context.Context, posID string, 
 	}
 
 	switch source {
-	case "ecommerce":
+	case "kivio_ecommerce":
 		fmt.Printf("[InvoiceStrategyFactory] Item source is ecommerce and has active integration, using ecommerce order strategy for POS %s\n", posID)
 		return f.ecommerceStrategy, nil
-	case "shopify":
-		return nil, fmt.Errorf("shopify invoice strategy not implemented yet")
-	case "woocommerce":
-		return nil, fmt.Errorf("woocommerce invoice strategy not implemented yet")
 	default:
 		return nil, fmt.Errorf("unknown item source: %s", source)
 	}

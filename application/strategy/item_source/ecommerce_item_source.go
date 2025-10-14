@@ -79,5 +79,5 @@ func (s *EcommerceItemSource) UpdateItemStockWithPosID(ctx context.Context, item
 }
 
 func (s *EcommerceItemSource) GetSourceType() string {
-	return "ecommerce"
+	return "kivio_ecommerce"
 }

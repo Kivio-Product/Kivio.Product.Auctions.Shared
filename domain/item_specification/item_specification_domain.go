@@ -17,7 +17,7 @@ type ItemSource string
 
 const (
 	SourceLocal     ItemSource = "local"
-	SourceEcommerce ItemSource = "ecommerce"
+	SourceEcommerce ItemSource = "kivio_ecommerce"
 )
 
 type ItemSpecification struct {
