@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
 	integrationService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/integration"
+	itemSource "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/strategy/item_source"
 	domainIntegration "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/integration"
 	domainStrategy "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/strategy"
 )
@@ -12,18 +14,21 @@ import (
 type ItemSourceFactory struct {
 	integrationService integrationService.IntegrationService
 	localSource        domainStrategy.ItemSourceStrategy
-	ecommerceSource    domainStrategy.ItemSourceStrategy
+	ecommerceCredSvc   ecommerceService.EcommerceCredentialsService
+	ecommerceSvc       ecommerceService.EcommerceService
 }
 
 func NewItemSourceFactory(
 	integrationService integrationService.IntegrationService,
 	localSource domainStrategy.ItemSourceStrategy,
-	ecommerceSource domainStrategy.ItemSourceStrategy,
+	ecommerceCredSvc ecommerceService.EcommerceCredentialsService,
+	ecommerceSvc ecommerceService.EcommerceService,
 ) *ItemSourceFactory {
 	return &ItemSourceFactory{
 		integrationService: integrationService,
 		localSource:        localSource,
-		ecommerceSource:    ecommerceSource,
+		ecommerceCredSvc:   ecommerceCredSvc,
+		ecommerceSvc:       ecommerceSvc,
 	}
 }
 
@@ -37,7 +42,7 @@ func (f *ItemSourceFactory) GetStrategy(ctx context.Context, posID string) (doma
 	for _, integration := range integrations {
 		if integration.Type == "kivio_ecommerce" && integration.Status == domainIntegration.Active {
 			fmt.Printf("[ItemSourceFactory] Found active ecommerce integration for POS %s\n", posID)
-			return f.ecommerceSource, nil
+			return itemSource.NewEcommerceItemSource(f.ecommerceCredSvc, f.ecommerceSvc, posID), nil
 		}
 	}
 
@@ -69,7 +74,7 @@ func (f *ItemSourceFactory) GetStrategyByItemSpec(ctx context.Context, source st
 
 	switch source {
 	case "kivio_ecommerce":
-		return f.ecommerceSource, nil
+		return itemSource.NewEcommerceItemSource(f.ecommerceCredSvc, f.ecommerceSvc, posID), nil
 	default:
 		return nil, fmt.Errorf("unknown item source: %s", source)
 	}

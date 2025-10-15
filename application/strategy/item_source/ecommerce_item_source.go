@@ -12,20 +12,39 @@ import (
 type EcommerceItemSource struct {
 	ecommerceCredSvc ecommerceService.EcommerceCredentialsService
 	ecommerceSvc     ecommerceService.EcommerceService
+	posID            string // POS ID to use for this item source instance
 }
 
 func NewEcommerceItemSource(
 	ecommerceCredSvc ecommerceService.EcommerceCredentialsService,
 	ecommerceSvc ecommerceService.EcommerceService,
+	posID string,
 ) *EcommerceItemSource {
 	return &EcommerceItemSource{
 		ecommerceCredSvc: ecommerceCredSvc,
 		ecommerceSvc:     ecommerceSvc,
+		posID:            posID,
 	}
 }
 
 func (s *EcommerceItemSource) GetItemByID(ctx context.Context, itemID string) (*itemDomain.Item, error) {
-	return nil, fmt.Errorf("GetItemByID not fully implemented for ecommerce - use GetItemByIDWithPosID instead")
+	if s.posID == "" {
+		return nil, fmt.Errorf("GetItemByID requires posID to be set during initialization - use GetItemByIDWithPosID instead")
+	}
+
+	credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, s.posID)
+	if err != nil {
+		return nil, fmt.Errorf("error getting ecommerce credentials for POS %s: %w", s.posID, err)
+	}
+
+	cleanItemID := strings.TrimPrefix(itemID, "kivio-ecommerce~")
+
+	item, err := s.ecommerceSvc.GetItemByID(ctx, cleanItemID, credentials.ApiURL, credentials.ApiKey)
+	if err != nil {
+		return nil, fmt.Errorf("error getting ecommerce item %s: %w", cleanItemID, err)
+	}
+
+	return item, nil
 }
 
 func (s *EcommerceItemSource) GetItemByIDWithPosID(ctx context.Context, itemID string, posID string) (*itemDomain.Item, error) {
@@ -59,7 +78,23 @@ func (s *EcommerceItemSource) GetItemsByPointOfSale(ctx context.Context, posID s
 }
 
 func (s *EcommerceItemSource) UpdateItemStock(ctx context.Context, itemID string, newStock int) error {
-	return fmt.Errorf("UpdateItemStock not fully implemented for ecommerce - use UpdateItemStockWithPosID instead")
+	if s.posID == "" {
+		return fmt.Errorf("UpdateItemStock requires posID to be set during initialization - use UpdateItemStockWithPosID instead")
+	}
+
+	credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, s.posID)
+	if err != nil {
+		return fmt.Errorf("error getting ecommerce credentials for POS %s: %w", s.posID, err)
+	}
+
+	cleanItemID := strings.TrimPrefix(itemID, "kivio-ecommerce~")
+
+	err = s.ecommerceSvc.UpdateItemStock(ctx, credentials.ApiURL, credentials.ApiKey, cleanItemID, newStock)
+	if err != nil {
+		return fmt.Errorf("error updating ecommerce item stock %s: %w", cleanItemID, err)
+	}
+
+	return nil
 }
 
 func (s *EcommerceItemSource) UpdateItemStockWithPosID(ctx context.Context, itemID string, posID string, newStock int) error {
