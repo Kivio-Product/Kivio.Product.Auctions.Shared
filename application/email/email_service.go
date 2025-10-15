@@ -46,7 +46,6 @@ func (s *EmailService) NotifyOrder(ctx context.Context, state string, customerEm
 	)
 }
 
-
 func (s *EmailService) NotifyAdminApprovedOrders(ctx context.Context, adminEmail string, templateData map[string]string) error {
 	return s.NotifyAdminApprovedOrdersUseCase.Execute(ctx, adminEmail, templateData)
 }

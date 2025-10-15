@@ -32,7 +32,6 @@ func (uc *NotifyOrderUseCase) Execute(state string, customerEmail string, concat
 	return uc.notifier.SendTemplatedEmail(customerEmail, templateName, templateData)
 }
 
-
 type NotifyAdminApprovedOrdersUseCase struct {
 	notifier domain.Notifier
 }
