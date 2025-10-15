@@ -53,26 +53,19 @@ func (s *QuickOfferStrategy) ProcessApprovedOrders(
 	var itemSpecsAvailability []int64
 	var offerID string
 
+	ordersBySource := make(map[string][]*orderDomain.Order)
+
+	fmt.Printf("[QuickOffer] Processing %d orders\n", len(orders))
+
 	for _, order := range orders {
 		itemSpec, err := s.itemSpecRepo.GetById(ctx, order.ItemSpecificationId)
 		if err != nil {
-			fmt.Printf("no se encontro el itemSpec con Id: %s\n", order.ItemSpecificationId)
+			fmt.Printf("[QuickOffer] No se encontro el itemSpec con Id: %s\n", order.ItemSpecificationId)
 			continue
 		}
 
 		result.ItemNames = append(result.ItemNames, order.ExtraData)
 		result.TotalAmount += int64(order.OfferedAmount)
-
-		var item *itemDomain.Item
-		itemSourceStrategy, err := s.itemSourceFactory.GetStrategyByItemSpec(ctx, string(itemSpec.GetSource()), order.PointOfSaleId)
-		if err != nil {
-			fmt.Printf("error getting item source strategy: %v\n", err)
-		} else {
-			item, err = itemSourceStrategy.GetItemByID(ctx, itemSpec.ItemId)
-			if err != nil {
-				fmt.Printf("error getting item from %s source: %v\n", itemSourceStrategy.GetSourceType(), err)
-			}
-		}
 
 		if result.CustomerEmail == "" {
 			result.CustomerEmail = order.CustomerId
@@ -80,6 +73,19 @@ func (s *QuickOfferStrategy) ProcessApprovedOrders(
 
 		if offerID == "" {
 			offerID = order.OfferId
+		}
+
+		var item *itemDomain.Item
+		if itemSpec.GetSource() != "" {
+			itemSourceStrategy, err := s.itemSourceFactory.GetStrategyByItemSpec(ctx, string(itemSpec.GetSource()), order.PointOfSaleId)
+			if err != nil {
+				fmt.Printf("[QuickOffer] Error getting item source strategy: %v\n", err)
+			} else {
+				item, err = itemSourceStrategy.GetItemByID(ctx, itemSpec.ItemId)
+				if err != nil {
+					fmt.Printf("[QuickOffer] Error getting item from %s source: %v\n", itemSourceStrategy.GetSourceType(), err)
+				}
+			}
 		}
 
 		switch state {
@@ -92,11 +98,14 @@ func (s *QuickOfferStrategy) ProcessApprovedOrders(
 				if err != nil {
 					fmt.Printf("[QuickOffer] Cannot create external order: %v\n", err)
 				} else {
-					err = orderCreationStrategy.CreateExternalOrder(ctx, billing, orders, item, itemSpec)
+					fmt.Printf("[QuickOffer] Creating shopping cart item for order %s\n", order.OrderId)
+					err = orderCreationStrategy.CreateExternalOrder(ctx, billing, order, item, itemSpec)
 					if err != nil {
-						fmt.Printf("[QuickOffer] Error creating %s order: %v\n", orderCreationStrategy.GetOrderType(), err)
+						fmt.Printf("[QuickOffer] Error creating shopping cart item: %v\n", err)
 					} else {
-						fmt.Printf("[QuickOffer] Successfully created %s order\n", orderCreationStrategy.GetOrderType())
+						fmt.Printf("[QuickOffer] Shopping cart item created successfully\n")
+						source := string(itemSpec.GetSource())
+						ordersBySource[source] = append(ordersBySource[source], order)
 					}
 				}
 			}
@@ -107,21 +116,45 @@ func (s *QuickOfferStrategy) ProcessApprovedOrders(
 			continue
 		}
 
-		if itemSpec != nil {
-			itemSpecsAvailability = append(itemSpecsAvailability, itemSpec.Availability)
-		}
-
 		err = s.orderRepo.UpdateOrder(ctx, order)
 		if err != nil {
 			return nil, fmt.Errorf("no se pudo actualizar la orden %s: %v", order.OrderId, err)
 		}
 
-		err = s.itemSpecRepo.UpdateItemSpec(ctx, itemSpec)
-		if err != nil {
-			return nil, fmt.Errorf("no se pudo actualizar el item specification %s: %v", order.ItemSpecificationId, err)
+		if itemSpec != nil {
+			itemSpecsAvailability = append(itemSpecsAvailability, itemSpec.Availability)
+
+			err = s.itemSpecRepo.UpdateItemSpec(ctx, itemSpec)
+			if err != nil {
+				return nil, fmt.Errorf("no se pudo actualizar el item specification %s: %v", order.ItemSpecificationId, err)
+			}
 		}
 
 		result.ProcessedOrders++
+	}
+
+	if state == "Approved" && len(ordersBySource) > 0 {
+		fmt.Printf("[QuickOffer] Finalizing orders for %d sources\n", len(ordersBySource))
+
+		for source, sourceOrders := range ordersBySource {
+			if len(sourceOrders) == 0 {
+				continue
+			}
+
+			orderCreationStrategy, err := s.orderCreationFactory.GetStrategy(ctx, source, sourceOrders[0].PointOfSaleId)
+			if err != nil {
+				fmt.Printf("[QuickOffer] Cannot finalize orders for source %s: %v\n", source, err)
+				continue
+			}
+
+			fmt.Printf("[QuickOffer] Finalizing %d orders for source %s\n", len(sourceOrders), source)
+			err = orderCreationStrategy.FinalizeOrder(ctx, billing, sourceOrders)
+			if err != nil {
+				fmt.Printf("[QuickOffer] Error finalizing orders: %v\n", err)
+			} else {
+				fmt.Printf("[QuickOffer] Orders finalized successfully\n")
+			}
+		}
 	}
 
 	allZero := true

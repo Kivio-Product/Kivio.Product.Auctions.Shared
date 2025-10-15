@@ -13,9 +13,15 @@ type OrderCreationStrategy interface {
 	CreateExternalOrder(
 		ctx context.Context,
 		billing *billingDomain.Billing,
-		orders []*orderDomain.Order,
+		order *orderDomain.Order,
 		item *itemDomain.Item,
 		itemSpec *itemSpecDomain.ItemSpecification,
+	) error
+
+	FinalizeOrder(
+		ctx context.Context,
+		billing *billingDomain.Billing,
+		orders []*orderDomain.Order,
 	) error
 
 	GetOrderType() string

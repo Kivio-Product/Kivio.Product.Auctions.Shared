@@ -42,21 +42,22 @@ func NewEcommerceOrderCreationStrategy(
 func (s *EcommerceOrderCreationStrategy) CreateExternalOrder(
 	ctx context.Context,
 	billing *billingDomain.Billing,
-	orders []*orderDomain.Order,
+	order *orderDomain.Order,
 	item *itemDomain.Item,
 	itemSpec *itemSpecDomain.ItemSpecification,
 ) error {
-	if len(orders) == 0 {
-		return fmt.Errorf("no orders provided")
+	if order == nil {
+		return fmt.Errorf("no order provided")
 	}
 
-	posID := orders[0].PointOfSaleId
+	posID := order.PointOfSaleId
 	credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, posID)
 	if err != nil {
 		return fmt.Errorf("error getting ecommerce credentials for POS %s: %w", posID, err)
 	}
 
-	fmt.Printf("[EcommerceOrderCreation] Starting order creation for %d orders\n", len(orders))
+	fmt.Printf("[EcommerceOrderCreation] Starting order creation for order %s (ItemSpec: %s, Quantity: %d)\n",
+		order.OrderId, order.ItemSpecificationId, order.TotalQuantity)
 
 	customer, err := s.customerService.GetOrCreateCustomer(ctx, billing.Customer.Email)
 	if err != nil {
@@ -118,24 +119,54 @@ func (s *EcommerceOrderCreationStrategy) CreateExternalOrder(
 	productID := s.extractCleanProductID(itemSpec.ItemId)
 	fmt.Printf("[EcommerceOrderCreation] Extracted clean product ID: %d from itemSpec.ItemId: %s\n", productID, itemSpec.ItemId)
 
-	ecommerceShoppingCartItem := s.createEcommerceShoppingCartItemFromOrders(orders, customerResponse.ID, productID)
+	ecommerceShoppingCartItem := s.createEcommerceShoppingCartItem(order, customerResponse.ID, productID)
 
 	cartResponse, err := s.ecommerceSvc.CreateEcommerceShoppingCartItem(ctx, credentials.ApiURL, credentials.ApiKey, ecommerceShoppingCartItem)
 	if err != nil {
 		return fmt.Errorf("error creating shopping cart item in ecommerce: %w", err)
 	}
 
-	fmt.Printf("[EcommerceOrderCreation] Shopping cart item created with ID: %d\n", cartResponse.ID)
+	fmt.Printf("[EcommerceOrderCreation] Shopping cart item created with ID: %d (Quantity: %d)\n",
+		cartResponse.ID, order.TotalQuantity)
 
-	var billingAddressID, shippingAddressID int
-	if billingAddressResponse != nil {
-		billingAddressID = billingAddressResponse.ID
-	} else {
+	return nil
+}
+
+func (s *EcommerceOrderCreationStrategy) FinalizeOrder(
+	ctx context.Context,
+	billing *billingDomain.Billing,
+	orders []*orderDomain.Order,
+) error {
+	if len(orders) == 0 {
+		return fmt.Errorf("no orders provided for finalization")
+	}
+
+	posID := orders[0].PointOfSaleId
+	credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, posID)
+	if err != nil {
+		return fmt.Errorf("error getting ecommerce credentials for POS %s: %w", posID, err)
+	}
+
+	fmt.Printf("[EcommerceOrderFinalization] Finalizing order for %d items\n", len(orders))
+
+	customer, err := s.customerService.GetOrCreateCustomer(ctx, billing.Customer.Email)
+	if err != nil {
+		return fmt.Errorf("error getting customer: %w", err)
+	}
+
+	customerID, err := strconv.Atoi(customer.ExternalCustomerID)
+	if err != nil {
+		return fmt.Errorf("invalid external customer ID: %w", err)
+	}
+
+	var billingAddressID int
+	if customer.BillingAddressID != "" {
 		if id, err := strconv.Atoi(customer.BillingAddressID); err == nil {
 			billingAddressID = id
 		}
 	}
 
+	var shippingAddressID int
 	if customer.ShippingAddressID != "" {
 		if id, err := strconv.Atoi(customer.ShippingAddressID); err == nil {
 			shippingAddressID = id
@@ -144,68 +175,87 @@ func (s *EcommerceOrderCreationStrategy) CreateExternalOrder(
 		shippingAddressID = billingAddressID
 	}
 
-	ecommerceOrder := s.createEcommerceOrderFromOrders(orders, customerResponse.ID, item, billingAddressID, shippingAddressID)
+	totalAmount := float64(0)
+	for _, order := range orders {
+		totalAmount += float64(order.OfferedAmount)
+	}
+
+	now := time.Now()
+	ecommerceOrder := &ecommerceInfra.EcommerceSimpleOrder{
+		StoreID:                 1,
+		PaymentMethodSystemName: "Payments.CashOnDelivery",
+		CustomerCurrencyCode:    "COP",
+		CurrencyRate:            1,
+		OrderTax:                0,
+		OrderTotal:              totalAmount,
+		PaidDateUTC:             now,
+		CreatedOnUTC:            now,
+		CustomerID:              customerID,
+		BillingAddress:          &ecommerceInfra.EcommerceSimpleAddress{ID: billingAddressID},
+		ShippingAddress:         &ecommerceInfra.EcommerceSimpleAddress{ID: shippingAddressID},
+	}
 
 	orderResponse, err := s.ecommerceSvc.CreateEcommerceSimpleOrder(ctx, credentials.ApiURL, credentials.ApiKey, ecommerceOrder)
 	if err != nil {
 		return fmt.Errorf("error creating order in ecommerce: %w", err)
 	}
 
-	fmt.Printf("[EcommerceOrderCreation] Order created successfully with ID: %d, Order Items: %d, First Item ID: %d\n",
-		orderResponse.ID, orderResponse.OrderItemsCount, orderResponse.OrderItemID)
+	fmt.Printf("[EcommerceOrderFinalization] Order created successfully with ID: %d, Order Items: %d\n",
+		orderResponse.ID, orderResponse.OrderItemsCount)
 
-	if orderResponse.OrderItemID > 0 && itemSpec != nil && len(orderResponse.OrderItems) > 0 {
-		unitPriceInclTax := float64(itemSpec.Amount)
+	if len(orderResponse.OrderItems) > 0 && len(orderResponse.OrderItems) == len(orders) {
+		fmt.Printf("[EcommerceOrderFinalization] Updating prices for %d order items\n", len(orderResponse.OrderItems))
 
-		firstOrderItem := orderResponse.OrderItems[0]
-		originalUnitPriceInclTax := firstOrderItem.UnitPriceInclTax
-		originalUnitPriceExclTax := firstOrderItem.UnitPriceExclTax
+		for i, orderItem := range orderResponse.OrderItems {
+			correspondingOrder := orders[i]
 
-		fmt.Printf("[EcommerceOrderCreation] Original order item prices - InclTax: %.2f, ExclTax: %.2f\n",
-			originalUnitPriceInclTax, originalUnitPriceExclTax)
+			itemSpec, err := s.itemSpecRepo.GetById(ctx, correspondingOrder.ItemSpecificationId)
+			if err != nil {
+				fmt.Printf("[EcommerceOrderFinalization] WARNING: Could not get itemSpec for order %s: %v\n", correspondingOrder.OrderId, err)
+				continue
+			}
 
-		totalQuantity := 0
-		for _, order := range orders {
-			totalQuantity += order.TotalQuantity
+			unitPriceInclTax := float64(itemSpec.Amount)
+			originalUnitPriceInclTax := orderItem.UnitPriceInclTax
+			originalUnitPriceExclTax := orderItem.UnitPriceExclTax
+
+			fmt.Printf("[EcommerceOrderFinalization] [Item %d] Original prices - InclTax: %.2f, ExclTax: %.2f, Quantity: %d\n",
+				i, originalUnitPriceInclTax, originalUnitPriceExclTax, correspondingOrder.TotalQuantity)
+
+			priceCalc, err := billingHelpers.CalculateOrderItemPrices(
+				unitPriceInclTax,
+				originalUnitPriceInclTax,
+				originalUnitPriceExclTax,
+				correspondingOrder.TotalQuantity,
+			)
+			if err != nil {
+				fmt.Printf("[EcommerceOrderFinalization] ERROR: Failed to calculate prices for item %d: %v\n", i, err)
+				continue
+			}
+
+			fmt.Printf("[EcommerceOrderFinalization] [Item %d] Calculated prices - UnitPriceInclTax: %.2f, UnitPriceExclTax: %.2f, PriceInclTax: %.2f, PriceExclTax: %.2f\n",
+				i, priceCalc.UnitPriceInclTax, priceCalc.UnitPriceExclTax, priceCalc.PriceInclTax, priceCalc.PriceExclTax)
+
+			orderItemUpdate := &ecommerceInfra.EcommerceOrderItem{
+				Quantity:         correspondingOrder.TotalQuantity,
+				UnitPriceInclTax: priceCalc.UnitPriceInclTax,
+				UnitPriceExclTax: priceCalc.UnitPriceExclTax,
+				PriceInclTax:     priceCalc.PriceInclTax,
+				PriceExclTax:     priceCalc.PriceExclTax,
+			}
+
+			err = s.ecommerceSvc.UpdateOrderItemPrice(ctx, credentials.ApiURL, credentials.ApiKey, orderResponse.ID, orderItem.ID, orderItemUpdate)
+			if err != nil {
+				fmt.Printf("[EcommerceOrderFinalization] WARNING: Failed to update order item %d (ID: %d): %v\n", i, orderItem.ID, err)
+			} else {
+				fmt.Printf("[EcommerceOrderFinalization] Order item %d (ID: %d) price updated successfully\n", i, orderItem.ID)
+			}
 		}
-
-		fmt.Printf("[EcommerceOrderCreation] Calculating prices with: UnitPriceInclTax=%.2f, Quantity=%d\n",
-			unitPriceInclTax, totalQuantity)
-
-		priceCalc, err := billingHelpers.CalculateOrderItemPrices(
-			unitPriceInclTax,
-			originalUnitPriceInclTax,
-			originalUnitPriceExclTax,
-			totalQuantity,
-		)
-		if err != nil {
-			fmt.Printf("[EcommerceOrderCreation] ERROR: Failed to calculate prices: %v\n", err)
-			return fmt.Errorf("failed to calculate order item prices: %w", err)
-		}
-
-		fmt.Printf("[EcommerceOrderCreation] Calculated prices - UnitPriceInclTax: %.2f, UnitPriceExclTax: %.2f, PriceInclTax: %.2f, PriceExclTax: %.2f\n",
-			priceCalc.UnitPriceInclTax, priceCalc.UnitPriceExclTax, priceCalc.PriceInclTax, priceCalc.PriceExclTax)
-
-		orderItem := &ecommerceInfra.EcommerceOrderItem{
-			Quantity:         totalQuantity,
-			UnitPriceInclTax: priceCalc.UnitPriceInclTax,
-			UnitPriceExclTax: priceCalc.UnitPriceExclTax,
-			PriceInclTax:     priceCalc.PriceInclTax,
-			PriceExclTax:     priceCalc.PriceExclTax,
-		}
-
-		fmt.Printf("[EcommerceOrderCreation] Calling UpdateOrderItemPrice with OrderID: %d, ItemID: %d\n", orderResponse.ID, orderResponse.OrderItemID)
-
-		err = s.ecommerceSvc.UpdateOrderItemPrice(ctx, credentials.ApiURL, credentials.ApiKey, orderResponse.ID, orderResponse.OrderItemID, orderItem)
-		if err != nil {
-			fmt.Printf("[EcommerceOrderCreation] WARNING: Failed to update order item price for order %d, item %d: %v\n", orderResponse.ID, orderResponse.OrderItemID, err)
-		} else {
-			fmt.Printf("[EcommerceOrderCreation] Order item price updated successfully for order %d, item %d\n", orderResponse.ID, orderResponse.OrderItemID)
-		}
-	} else if orderResponse.OrderItemID == 0 {
-		fmt.Printf("[EcommerceOrderCreation] WARNING: Order created but no order item ID found in response. Cannot update price.\n")
 	} else if len(orderResponse.OrderItems) == 0 {
-		fmt.Printf("[EcommerceOrderCreation] WARNING: Order created but no order item details in response. Cannot calculate tax rate.\n")
+		fmt.Printf("[EcommerceOrderFinalization] WARNING: Order created but no order item details in response. Cannot calculate tax rate.\n")
+	} else {
+		fmt.Printf("[EcommerceOrderFinalization] WARNING: Mismatch between order items (%d) and orders (%d)\n",
+			len(orderResponse.OrderItems), len(orders))
 	}
 
 	return nil
@@ -360,11 +410,11 @@ func (s *EcommerceOrderCreationStrategy) createEcommerceShippingAddressFromBilli
 	return address
 }
 
-func (s *EcommerceOrderCreationStrategy) createEcommerceShoppingCartItemFromOrders(orders []*orderDomain.Order, customerID int, productID int) *ecommerceInfra.EcommerceShoppingCartItem {
+func (s *EcommerceOrderCreationStrategy) createEcommerceShoppingCartItem(order *orderDomain.Order, customerID int, productID int) *ecommerceInfra.EcommerceShoppingCartItem {
 	now := time.Now()
 
 	cartItem := &ecommerceInfra.EcommerceShoppingCartItem{
-		Quantity:         1,
+		Quantity:         order.TotalQuantity,
 		CreatedOnUTC:     now,
 		ShoppingCartType: "ShoppingCart",
 		ProductID:        productID,
@@ -372,30 +422,4 @@ func (s *EcommerceOrderCreationStrategy) createEcommerceShoppingCartItemFromOrde
 	}
 
 	return cartItem
-}
-
-func (s *EcommerceOrderCreationStrategy) createEcommerceOrderFromOrders(orders []*orderDomain.Order, customerID int, item *itemDomain.Item, billingAddressID, shippingAddressID int) *ecommerceInfra.EcommerceSimpleOrder {
-	now := time.Now()
-	totalAmount := float64(0)
-
-	for _, order := range orders {
-		itemAmount := float64(order.OfferedAmount)
-		totalAmount += itemAmount
-	}
-
-	order := &ecommerceInfra.EcommerceSimpleOrder{
-		StoreID:                 1,
-		PaymentMethodSystemName: "Payments.CashOnDelivery",
-		CustomerCurrencyCode:    "COP",
-		CurrencyRate:            1,
-		OrderTax:                0,
-		OrderTotal:              totalAmount,
-		PaidDateUTC:             now,
-		CreatedOnUTC:            now,
-		CustomerID:              customerID,
-		BillingAddress:          &ecommerceInfra.EcommerceSimpleAddress{ID: billingAddressID},
-		ShippingAddress:         &ecommerceInfra.EcommerceSimpleAddress{ID: shippingAddressID},
-	}
-
-	return order
 }
