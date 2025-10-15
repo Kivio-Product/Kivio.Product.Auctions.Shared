@@ -38,6 +38,7 @@ func (s *EcommerceItemSource) GetItemByID(ctx context.Context, itemID string) (*
 	}
 
 	cleanItemID := strings.TrimPrefix(itemID, "kivio-ecommerce~")
+	cleanItemID = strings.TrimPrefix(cleanItemID, "kivio-ecommerce∼")
 
 	item, err := s.ecommerceSvc.GetItemByID(ctx, cleanItemID, credentials.ApiURL, credentials.ApiKey)
 	if err != nil {
@@ -54,6 +55,7 @@ func (s *EcommerceItemSource) GetItemByIDWithPosID(ctx context.Context, itemID s
 	}
 
 	cleanItemID := strings.TrimPrefix(itemID, "kivio-ecommerce~")
+	cleanItemID = strings.TrimPrefix(cleanItemID, "kivio-ecommerce∼")
 
 	item, err := s.ecommerceSvc.GetItemByID(ctx, cleanItemID, credentials.ApiURL, credentials.ApiKey)
 	if err != nil {
@@ -88,6 +90,7 @@ func (s *EcommerceItemSource) UpdateItemStock(ctx context.Context, itemID string
 	}
 
 	cleanItemID := strings.TrimPrefix(itemID, "kivio-ecommerce~")
+	cleanItemID = strings.TrimPrefix(cleanItemID, "kivio-ecommerce∼")
 
 	err = s.ecommerceSvc.UpdateItemStock(ctx, credentials.ApiURL, credentials.ApiKey, cleanItemID, newStock)
 	if err != nil {
@@ -104,6 +107,7 @@ func (s *EcommerceItemSource) UpdateItemStockWithPosID(ctx context.Context, item
 	}
 
 	cleanItemID := strings.TrimPrefix(itemID, "kivio-ecommerce~")
+	cleanItemID = strings.TrimPrefix(cleanItemID, "kivio-ecommerce∼")
 
 	err = s.ecommerceSvc.UpdateItemStock(ctx, credentials.ApiURL, credentials.ApiKey, cleanItemID, newStock)
 	if err != nil {

@@ -191,12 +191,15 @@ func (s *EcommerceOrderCreationStrategy) extractCleanProductID(itemID string) in
 
 	if strings.HasPrefix(itemID, "kivio-ecommerce~") {
 		cleanID = strings.TrimPrefix(itemID, "kivio-ecommerce~")
+	} else if strings.HasPrefix(itemID, "kivio-ecommerce∼") {
+		cleanID = strings.TrimPrefix(itemID, "kivio-ecommerce∼")
 	}
 
 	if id, err := strconv.Atoi(cleanID); err == nil {
 		return id
 	}
 
+	fmt.Printf("[EcommerceOrderCreation] WARNING: Failed to convert cleanID '%s' to int from original itemID '%s'\n", cleanID, itemID)
 	return 0
 }
 
