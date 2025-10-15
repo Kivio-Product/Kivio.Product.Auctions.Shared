@@ -350,7 +350,7 @@ func (s *EcommerceOrderCreationStrategy) createEcommerceOrderFromOrders(orders [
 	totalAmount := float64(0)
 
 	for _, order := range orders {
-		itemAmount := float64(order.OfferedAmount) / 100.0
+		itemAmount := float64(order.OfferedAmount)
 		totalAmount += itemAmount
 	}
 
