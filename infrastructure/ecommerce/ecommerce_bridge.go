@@ -188,12 +188,20 @@ type EcommerceOrderRequest struct {
 	Order EcommerceOrder `json:"order"`
 }
 
+type EcommerceOrderItemResponse struct {
+	ID               int     `json:"id"`
+	ProductID        int     `json:"product_id"`
+	UnitPriceInclTax float64 `json:"unit_price_incl_tax"`
+	UnitPriceExclTax float64 `json:"unit_price_excl_tax"`
+}
+
 type EcommerceOrderResponse struct {
-	ID              int    `json:"id"`
-	OrderItemID     int    `json:"order_item_id"`
-	OrderItemsCount int    `json:"order_items_count"`
-	Success         bool   `json:"success"`
-	Message         string `json:"message"`
+	ID              int                          `json:"id"`
+	OrderItemID     int                          `json:"order_item_id"`
+	OrderItemsCount int                          `json:"order_items_count"`
+	OrderItems      []EcommerceOrderItemResponse `json:"order_items"`
+	Success         bool                         `json:"success"`
+	Message         string                       `json:"message"`
 }
 
 type EcommerceSimpleAddress struct {
@@ -505,8 +513,10 @@ func (b *EcommerceBridge) CreateEcommerceOrder(ctx context.Context, apiUrl, apiK
 	}
 
 	type OrderItemResponse struct {
-		ID        int `json:"id"`
-		ProductID int `json:"product_id"`
+		ID               int     `json:"id"`
+		ProductID        int     `json:"product_id"`
+		UnitPriceInclTax float64 `json:"unit_price_incl_tax"`
+		UnitPriceExclTax float64 `json:"unit_price_excl_tax"`
 	}
 
 	type OrderResponse struct {
@@ -532,15 +542,31 @@ func (b *EcommerceBridge) CreateEcommerceOrder(ctx context.Context, apiUrl, apiK
 
 	orderID := response.Orders[0].ID
 	var firstOrderItemID int
+	var orderItems []EcommerceOrderItemResponse
+
 	if len(response.Orders[0].OrderItems) > 0 {
 		firstOrderItemID = response.Orders[0].OrderItems[0].ID
+
+		for _, item := range response.Orders[0].OrderItems {
+			orderItems = append(orderItems, EcommerceOrderItemResponse{
+				ID:               item.ID,
+				ProductID:        item.ProductID,
+				UnitPriceInclTax: item.UnitPriceInclTax,
+				UnitPriceExclTax: item.UnitPriceExclTax,
+			})
+		}
+
+		fmt.Printf("[ECOMMERCE] SUCCESS: Order created with ID: %d, First Order Item ID: %d, UnitPriceInclTax: %.2f, UnitPriceExclTax: %.2f\n",
+			orderID, firstOrderItemID, orderItems[0].UnitPriceInclTax, orderItems[0].UnitPriceExclTax)
+	} else {
+		fmt.Printf("[ECOMMERCE] SUCCESS: Order created with ID: %d, no order items found\n", orderID)
 	}
 
-	fmt.Printf("[ECOMMERCE] SUCCESS: Order created with ID: %d, First Order Item ID: %d\n", orderID, firstOrderItemID)
 	return &EcommerceOrderResponse{
 		ID:              orderID,
 		OrderItemID:     firstOrderItemID,
 		OrderItemsCount: len(response.Orders[0].OrderItems),
+		OrderItems:      orderItems,
 		Success:         true,
 		Message:         "Order created successfully",
 	}, nil
@@ -566,8 +592,10 @@ func (b *EcommerceBridge) CreateEcommerceSimpleOrder(ctx context.Context, apiUrl
 	}
 
 	type OrderItemResponse struct {
-		ID        int `json:"id"`
-		ProductID int `json:"product_id"`
+		ID               int     `json:"id"`
+		ProductID        int     `json:"product_id"`
+		UnitPriceInclTax float64 `json:"unit_price_incl_tax"`
+		UnitPriceExclTax float64 `json:"unit_price_excl_tax"`
 	}
 
 	type OrderResponse struct {
@@ -593,17 +621,33 @@ func (b *EcommerceBridge) CreateEcommerceSimpleOrder(ctx context.Context, apiUrl
 
 	orderID := response.Orders[0].ID
 	var firstOrderItemID int
+	var orderItems []EcommerceOrderItemResponse
+
 	if len(response.Orders[0].OrderItems) > 0 {
 		firstOrderItemID = response.Orders[0].OrderItems[0].ID
+
+		for _, item := range response.Orders[0].OrderItems {
+			orderItems = append(orderItems, EcommerceOrderItemResponse{
+				ID:               item.ID,
+				ProductID:        item.ProductID,
+				UnitPriceInclTax: item.UnitPriceInclTax,
+				UnitPriceExclTax: item.UnitPriceExclTax,
+			})
+		}
+
+		fmt.Printf("[ECOMMERCE] SUCCESS: Simple order created with ID: %d, First Order Item ID: %d, UnitPriceInclTax: %.2f, UnitPriceExclTax: %.2f\n",
+			orderID, firstOrderItemID, orderItems[0].UnitPriceInclTax, orderItems[0].UnitPriceExclTax)
+	} else {
+		fmt.Printf("[ECOMMERCE] SUCCESS: Simple order created with ID: %d, no order items found\n", orderID)
 	}
 
-	fmt.Printf("[ECOMMERCE] SUCCESS: Simple order created with ID: %d, First Order Item ID: %d\n", orderID, firstOrderItemID)
 	return &EcommerceOrderResponse{
-		ID:           orderID,
-		OrderItemID:  firstOrderItemID,
-		Success:      true,
-		Message:      "Simple order created successfully",
+		ID:              orderID,
+		OrderItemID:     firstOrderItemID,
+		Success:         true,
+		Message:         "Simple order created successfully",
 		OrderItemsCount: len(response.Orders[0].OrderItems),
+		OrderItems:      orderItems,
 	}, nil
 }
 

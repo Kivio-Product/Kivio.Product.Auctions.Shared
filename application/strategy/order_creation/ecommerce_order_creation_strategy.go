@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	billingHelpers "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/billing/helpers"
 	customerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/customer"
 	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
 	billingDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/billing"
@@ -153,18 +154,44 @@ func (s *EcommerceOrderCreationStrategy) CreateExternalOrder(
 	fmt.Printf("[EcommerceOrderCreation] Order created successfully with ID: %d, Order Items: %d, First Item ID: %d\n",
 		orderResponse.ID, orderResponse.OrderItemsCount, orderResponse.OrderItemID)
 
-	if orderResponse.OrderItemID > 0 && itemSpec != nil {
-		priceInCents := float64(itemSpec.Amount)
-		priceInUnits := priceInCents / 100.0
+	if orderResponse.OrderItemID > 0 && itemSpec != nil && len(orderResponse.OrderItems) > 0 {
+		unitPriceInclTax := float64(itemSpec.Amount)
 
-		fmt.Printf("[EcommerceOrderCreation] Updating order item price with value from itemSpec: %.2f (from %d cents)\n", priceInUnits, itemSpec.Amount)
+		firstOrderItem := orderResponse.OrderItems[0]
+		originalUnitPriceInclTax := firstOrderItem.UnitPriceInclTax
+		originalUnitPriceExclTax := firstOrderItem.UnitPriceExclTax
+
+		fmt.Printf("[EcommerceOrderCreation] Original order item prices - InclTax: %.2f, ExclTax: %.2f\n",
+			originalUnitPriceInclTax, originalUnitPriceExclTax)
+
+		totalQuantity := 0
+		for _, order := range orders {
+			totalQuantity += order.TotalQuantity
+		}
+
+		fmt.Printf("[EcommerceOrderCreation] Calculating prices with: UnitPriceInclTax=%.2f, Quantity=%d\n",
+			unitPriceInclTax, totalQuantity)
+
+		priceCalc, err := billingHelpers.CalculateOrderItemPrices(
+			unitPriceInclTax,
+			originalUnitPriceInclTax,
+			originalUnitPriceExclTax,
+			totalQuantity,
+		)
+		if err != nil {
+			fmt.Printf("[EcommerceOrderCreation] ERROR: Failed to calculate prices: %v\n", err)
+			return fmt.Errorf("failed to calculate order item prices: %w", err)
+		}
+
+		fmt.Printf("[EcommerceOrderCreation] Calculated prices - UnitPriceInclTax: %.2f, UnitPriceExclTax: %.2f, PriceInclTax: %.2f, PriceExclTax: %.2f\n",
+			priceCalc.UnitPriceInclTax, priceCalc.UnitPriceExclTax, priceCalc.PriceInclTax, priceCalc.PriceExclTax)
 
 		orderItem := &ecommerceInfra.EcommerceOrderItem{
-			Quantity:         1,
-			UnitPriceInclTax: priceInUnits,
-			UnitPriceExclTax: priceInUnits,
-			PriceInclTax:     priceInUnits,
-			PriceExclTax:     priceInUnits,
+			Quantity:         totalQuantity,
+			UnitPriceInclTax: priceCalc.UnitPriceInclTax,
+			UnitPriceExclTax: priceCalc.UnitPriceExclTax,
+			PriceInclTax:     priceCalc.PriceInclTax,
+			PriceExclTax:     priceCalc.PriceExclTax,
 		}
 
 		fmt.Printf("[EcommerceOrderCreation] Calling UpdateOrderItemPrice with OrderID: %d, ItemID: %d\n", orderResponse.ID, orderResponse.OrderItemID)
@@ -177,6 +204,8 @@ func (s *EcommerceOrderCreationStrategy) CreateExternalOrder(
 		}
 	} else if orderResponse.OrderItemID == 0 {
 		fmt.Printf("[EcommerceOrderCreation] WARNING: Order created but no order item ID found in response. Cannot update price.\n")
+	} else if len(orderResponse.OrderItems) == 0 {
+		fmt.Printf("[EcommerceOrderCreation] WARNING: Order created but no order item details in response. Cannot calculate tax rate.\n")
 	}
 
 	return nil
