@@ -100,11 +100,18 @@ func (s *OfferProcessingService) ProcessOffer(ctx context.Context, offerId strin
 	var allWinners []*orderDomain.Order
 	var allLosers []*orderDomain.Order
 
+	fmt.Printf("\n========== PROCESANDO OFFER: %s ==========\n", offerId)
+	fmt.Printf("Total ItemSpecs a procesar: %d\n", len(groupedOrders))
+
 	for itemSpecId, ordersGroup := range groupedOrders {
 		pendingOrders := s.filterPendingOrders(ordersGroup)
 		if len(pendingOrders) == 0 {
+			fmt.Printf("ItemSpec %s: No tiene órdenes pendientes, saltando...\n", itemSpecId)
 			continue
 		}
+
+		fmt.Printf("\n--- Procesando ItemSpec: %s ---\n", itemSpecId)
+		fmt.Printf("Órdenes pendientes para este ItemSpec: %d\n", len(pendingOrders))
 
 		winners, losers, err := s.processItemSpecOrders(ctx, itemSpecId, pendingOrders, offer.PosId)
 		if err != nil {
@@ -118,6 +125,26 @@ func (s *OfferProcessingService) ProcessOffer(ctx context.Context, offerId strin
 		allWinners = append(allWinners, winners...)
 		allLosers = append(allLosers, losers...)
 	}
+
+	fmt.Printf("\n========== RESUMEN FINAL OFFER: %s ==========\n", offerId)
+	fmt.Printf("TOTAL GANADORAS: %d órdenes\n", len(allWinners))
+	if len(allWinners) > 0 {
+		fmt.Println("Detalle de órdenes GANADORAS:")
+		for i, winner := range allWinners {
+			fmt.Printf("  %d. OrderId: %s | Customer: %s | ItemSpec: %s | Amount: %d | Quantity: %d\n",
+				i+1, winner.OrderId, winner.CustomerId, winner.ItemSpecificationId, winner.OfferedAmount, winner.TotalQuantity)
+		}
+	}
+
+	fmt.Printf("\nTOTAL PERDEDORAS: %d órdenes\n", len(allLosers))
+	if len(allLosers) > 0 {
+		fmt.Println("Detalle de órdenes PERDEDORAS:")
+		for i, loser := range allLosers {
+			fmt.Printf("  %d. OrderId: %s | Customer: %s | ItemSpec: %s | Amount: %d | Quantity: %d\n",
+				i+1, loser.OrderId, loser.CustomerId, loser.ItemSpecificationId, loser.OfferedAmount, loser.TotalQuantity)
+		}
+	}
+	fmt.Println("=============================================\n")
 
 	successfulPaymentCustomers := s.processPaymentsByCustomer(ctx, allWinners)
 
@@ -172,10 +199,15 @@ func (s *OfferProcessingService) filterPendingOrders(orders []*orderDomain.Order
 }
 
 func (s *OfferProcessingService) processItemSpecOrders(ctx context.Context, itemSpecId string, orders []*orderDomain.Order, posId string) ([]*orderDomain.Order, []*orderDomain.Order, error) {
+	fmt.Printf("\n>>> processItemSpecOrders - ItemSpecId: %s <<<\n", itemSpecId)
+
 	itemSpec, err := s.itemSpecService.GetById(ctx, itemSpecId)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error fetching item specification %s: %v", itemSpecId, err)
 	}
+
+	fmt.Printf("ItemSpec recuperado - ItemId: %s | IsExternal: %v | Availability inicial en DB: %d\n",
+		itemSpec.ItemId, itemSpec.IsExternal, itemSpec.Availability)
 
 	availability := 0
 
@@ -199,6 +231,7 @@ func (s *OfferProcessingService) processItemSpecOrders(ctx context.Context, item
 			var extResp externalProductResponse
 			if err := json.Unmarshal(itemRaw, &extResp); err == nil && len(extResp.Products) > 0 {
 				availability = int(extResp.Products[0].StockQuantity)
+				fmt.Printf("Availability obtenido de sistema externo: %d\n", availability)
 			} else {
 				fmt.Printf("Error parsing external item response or no products found for %s\n", itemSpec.ItemId)
 				availability = 0
@@ -206,22 +239,36 @@ func (s *OfferProcessingService) processItemSpecOrders(ctx context.Context, item
 		}
 	} else {
 		availability = int(itemSpec.Availability)
+		fmt.Printf("Usando Availability local: %d\n", availability)
 	}
 
 	sort.Slice(orders, func(i, j int) bool {
 		return orders[i].OfferedAmount > orders[j].OfferedAmount
 	})
 
+	fmt.Printf("\nProcesando %d órdenes pendientes (ordenadas por OfferedAmount DESC):\n", len(orders))
+	for i, order := range orders {
+		fmt.Printf("  %d. OrderId: %s | Customer: %s | OfferedAmount: %d | Quantity: %d\n",
+			i+1, order.OrderId, order.CustomerId, order.OfferedAmount, order.TotalQuantity)
+	}
+
 	var winners, losers []*orderDomain.Order
 	totalQuantityAllocated := 0
+	fmt.Printf("\nDistribuyendo disponibilidad (%d unidades disponibles):\n", availability)
 	for _, order := range orders {
 		if totalQuantityAllocated+order.TotalQuantity <= availability {
 			winners = append(winners, order)
 			totalQuantityAllocated += order.TotalQuantity
+			fmt.Printf("  ✓ GANADORA - OrderId: %s | Quantity: %d | Total asignado hasta ahora: %d/%d\n",
+				order.OrderId, order.TotalQuantity, totalQuantityAllocated, availability)
 		} else {
 			losers = append(losers, order)
+			fmt.Printf("  ✗ PERDEDORA - OrderId: %s | Quantity: %d | Excede disponibilidad (necesitaría: %d, solo quedan: %d)\n",
+				order.OrderId, order.TotalQuantity, totalQuantityAllocated+order.TotalQuantity, availability-totalQuantityAllocated)
 		}
 	}
+
+	fmt.Printf("\nResultado: %d GANADORAS, %d PERDEDORAS\n", len(winners), len(losers))
 
 	for _, winner := range winners {
 		input := orderDomain.OrderInput{
@@ -260,21 +307,56 @@ func (s *OfferProcessingService) processItemSpecOrders(ctx context.Context, item
 		totalQuantityToReduce += winner.TotalQuantity
 	}
 
+	fmt.Printf("\n=== ACTUALIZANDO AVAILABILITY ===\n")
+	fmt.Printf("Availability actual: %d\n", availability)
+	fmt.Printf("Total quantity a reducir (ganadoras): %d\n", totalQuantityToReduce)
+
 	if itemSpec.IsExternal {
 		if totalQuantityToReduce > 0 {
 			newStock := availability - totalQuantityToReduce
+			fmt.Printf("Calculando nuevo stock EXTERNO: %d - %d = %d\n", availability, totalQuantityToReduce, newStock)
+			fmt.Printf("⚠️  ALERTA: newStock = %d %s\n", newStock, func() string {
+				if newStock < 0 {
+					return "(NEGATIVO - POSIBLE ERROR)"
+				}
+				return "(OK)"
+			}())
 			err := s.updateExternalItemStock(ctx, posId, itemSpec.ItemId, newStock)
 			if err != nil {
-				fmt.Printf("Error updating external stock for item %s: %v\n", itemSpec.ItemId, err)
+				fmt.Printf("❌ Error updating external stock for item %s: %v\n", itemSpec.ItemId, err)
+			} else {
+				fmt.Printf("✓ Stock externo actualizado exitosamente a %d\n", newStock)
 			}
 		}
 	} else {
 		newAvailability := availability - totalQuantityToReduce
+		fmt.Printf("Calculando nuevo availability LOCAL: %d - %d = %d\n", availability, totalQuantityToReduce, newAvailability)
+		fmt.Printf("⚠️  ALERTA: newAvailability = %d %s\n", newAvailability, func() string {
+			if newAvailability < 0 {
+				return "(NEGATIVO - POSIBLE ERROR)"
+			}
+			return "(OK)"
+		}())
+
+		fmt.Printf("Ejecutando itemSpecService.Update con:\n")
+		fmt.Printf("  - ItemSpecId: %s\n", itemSpec.Id)
+		fmt.Printf("  - Currency: %s\n", itemSpec.Currency)
+		fmt.Printf("  - OfferId: %s\n", itemSpec.OfferId)
+		fmt.Printf("  - ItemId: %s\n", itemSpec.ItemId)
+		fmt.Printf("  - PointOfSaleId: %s\n", itemSpec.PointOfSaleId)
+		fmt.Printf("  - Amount: %d\n", itemSpec.Amount)
+		fmt.Printf("  - NEW Availability: %d (era %d)\n", newAvailability, itemSpec.Availability)
+		fmt.Printf("  - ExpireAt: %v\n", itemSpec.ExpireAt)
+
 		err := s.itemSpecService.Update(ctx, itemSpec.Id, itemSpec.Currency, itemSpec.OfferId, itemSpec.ItemId, itemSpec.PointOfSaleId, itemSpec.Amount, int64(newAvailability), itemSpec.ExpireAt)
 		if err != nil {
-			fmt.Printf("Error updating item spec availability %s: %v\n", itemSpecId, err)
+			fmt.Printf("❌ Error updating item spec availability %s: %v\n", itemSpecId, err)
+		} else {
+			fmt.Printf("✓ Availability actualizado exitosamente de %d a %d\n", itemSpec.Availability, newAvailability)
 		}
 	}
+
+	fmt.Printf("=================================\n\n")
 
 	return winners, losers, nil
 }
