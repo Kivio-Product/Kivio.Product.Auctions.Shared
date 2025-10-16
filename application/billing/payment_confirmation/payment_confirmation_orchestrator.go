@@ -4,34 +4,36 @@ import (
 	"context"
 	"fmt"
 
-	"time"
-
 	billingHelpers "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/billing/helpers"
-	invoiceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/invoice"
-	billingDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/billing"
+	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
 	orderDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 	domainStrategy "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/strategy"
 )
 
-// PaymentConfirmationOrchestrator coordina el flujo completo de confirmación de pago
 type PaymentConfirmationOrchestrator struct {
-	billingHelper      *billingHelpers.BillingHelper
-	orderHelper        *billingHelpers.OrderHelper
-	notificationHelper *billingHelpers.NotificationHelper
-	invoiceService     invoiceService.InvoiceService
+	billingHelper          *billingHelpers.BillingHelper
+	orderHelper            *billingHelpers.OrderHelper
+	notificationHelper     *billingHelpers.NotificationHelper
+	offerService           offerService.IOfferService
+	quickOfferStrategy     domainStrategy.OfferProcessingStrategy
+	regularAuctionStrategy domainStrategy.OfferProcessingStrategy
 }
 
 func NewPaymentConfirmationOrchestrator(
 	billingHelper *billingHelpers.BillingHelper,
 	orderHelper *billingHelpers.OrderHelper,
 	notificationHelper *billingHelpers.NotificationHelper,
-	invoiceService invoiceService.InvoiceService,
+	offerService offerService.IOfferService,
+	quickOfferStrategy domainStrategy.OfferProcessingStrategy,
+	regularAuctionStrategy domainStrategy.OfferProcessingStrategy,
 ) *PaymentConfirmationOrchestrator {
 	return &PaymentConfirmationOrchestrator{
-		billingHelper:      billingHelper,
-		orderHelper:        orderHelper,
-		notificationHelper: notificationHelper,
-		invoiceService:     invoiceService,
+		billingHelper:          billingHelper,
+		orderHelper:            orderHelper,
+		notificationHelper:     notificationHelper,
+		offerService:           offerService,
+		quickOfferStrategy:     quickOfferStrategy,
+		regularAuctionStrategy: regularAuctionStrategy,
 	}
 }
 
@@ -41,7 +43,6 @@ func (o *PaymentConfirmationOrchestrator) ExecutePaymentConfirmation(
 	state string,
 	paymentMethod string,
 	transactionID string,
-	offerProcessingStrategy domainStrategy.OfferProcessingStrategy,
 ) error {
 
 	billing, err := o.billingHelper.GetAndValidateBilling(ctx, billingID)
@@ -62,6 +63,9 @@ func (o *PaymentConfirmationOrchestrator) ExecutePaymentConfirmation(
 	posID, posName := o.orderHelper.GetPOSName(ctx, validOrders)
 	fmt.Printf("Processing orders for POS: %s (%s)\n", posID, posName)
 
+	offerProcessingStrategy := o.getStrategyForOrders(ctx, validOrders)
+	fmt.Printf("[PaymentConfirmation] Using strategy: %s\n", offerProcessingStrategy.GetOfferType())
+
 	result, err := offerProcessingStrategy.ProcessApprovedOrders(ctx, validOrders, billing, state)
 	if err != nil {
 		return fmt.Errorf("error processing orders with %s strategy: %w", offerProcessingStrategy.GetOfferType(), err)
@@ -69,50 +73,39 @@ func (o *PaymentConfirmationOrchestrator) ExecutePaymentConfirmation(
 
 	fmt.Printf("[PaymentConfirmation] Processed %d orders with strategy: %s\n", result.ProcessedOrders, offerProcessingStrategy.GetOfferType())
 
-	o.notificationHelper.SendOrderNotification(
+	o.notificationHelper.SendOrderNotificationGroupedByState(
 		ctx,
-		state,
-		result.CustomerEmail,
-		result.TotalAmount,
-		result.ItemNames,
+		validOrders,
 		posName,
 	)
-
-	if state == "Approved" && len(validOrders) > 0 {
-		go o.createInvoiceForApprovedPayment(ctx, billingID, validOrders, posName, billing)
-	}
 
 	fmt.Println("Facturación actualizada correctamente")
 	return nil
 }
 
-func (o *PaymentConfirmationOrchestrator) createInvoiceForApprovedPayment(
-	ctx context.Context,
-	billingID string,
-	orders []*orderDomain.Order,
-	posName string,
-	billing *billingDomain.Billing,
-) {
+func (o *PaymentConfirmationOrchestrator) getStrategyForOrders(ctx context.Context, orders []*orderDomain.Order) domainStrategy.OfferProcessingStrategy {
 	if len(orders) == 0 {
-		fmt.Printf("No orders provided for invoice creation for billing %s\n", billingID)
-		return
+		fmt.Printf("[PaymentConfirmation] No orders found - using Quick Offer strategy as default\n")
+		return o.quickOfferStrategy
 	}
 
-	if billing.Customer == nil || billing.InvoiceConfig == nil {
-		fmt.Printf("Missing customer or invoice config for billing %s\n", billingID)
-		return
+	offerID := orders[0].OfferId
+	if offerID == "" {
+		fmt.Printf("[PaymentConfirmation] No OfferId found - using Quick Offer strategy\n")
+		return o.quickOfferStrategy
 	}
 
-	invoiceCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-
-	fmt.Printf("DEBUG: Creating invoice with new context for billing %s\n", billingID)
-
-	_, err := o.invoiceService.CreateInvoiceForOrders(invoiceCtx, billingID, orders, billing.Customer, billing.InvoiceConfig, posName)
+	offer, err := o.offerService.GetOfferById(ctx, offerID)
 	if err != nil {
-		fmt.Printf("Error creating invoice for billing %s: %v\n", billingID, err)
-		return
+		fmt.Printf("[PaymentConfirmation] Error getting offer %s: %v - using Quick Offer strategy\n", offerID, err)
+		return o.quickOfferStrategy
 	}
 
-	fmt.Printf("Invoice created successfully for billing %s with %d orders\n", billingID, len(orders))
+	if offer.Type == "Regular auction" {
+		fmt.Printf("[PaymentConfirmation] Offer %s is Regular Auction - using Regular Auction strategy\n", offerID)
+		return o.regularAuctionStrategy
+	}
+
+	fmt.Printf("[PaymentConfirmation] Offer %s is %s - using Quick Offer strategy\n", offerID, offer.Type)
+	return o.quickOfferStrategy
 }

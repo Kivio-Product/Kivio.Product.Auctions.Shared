@@ -522,21 +522,6 @@ func (s *OfferProcessingService) createInvoiceForSuccessfulPayment(ctx context.C
 		fmt.Printf("Missing customer or invoice config for billing %s (customer %s)\n", billingReference, customerId)
 		return
 	}
-
-	posId := orders[0].PointOfSaleId
-	pos, err := s.posService.GetPosById(ctx, posId)
-	if err != nil {
-		fmt.Printf("Error getting POS info for invoice creation (customer %s): %v\n", customerId, err)
-		return
-	}
-
-	_, err = s.invoiceService.CreateInvoiceForOrders(ctx, billingReference, orders, billing.Customer, billing.InvoiceConfig, pos.Name)
-	if err != nil {
-		fmt.Printf("Error creating invoice for customer %s: %v\n", customerId, err)
-		return
-	}
-
-	fmt.Printf("Invoice created successfully for customer %s with %d orders using billing %s\n", customerId, len(orders), billingReference)
 }
 
 func joinStrings(strs []string, sep string) string {

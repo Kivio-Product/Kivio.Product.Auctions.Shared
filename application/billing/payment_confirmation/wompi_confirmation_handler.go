@@ -12,21 +12,17 @@ import (
 	"strings"
 
 	paymentDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/payment"
-	domainStrategy "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/strategy"
 )
 
 type WompiConfirmationHandler struct {
-	orchestrator  *PaymentConfirmationOrchestrator
-	offerStrategy domainStrategy.OfferProcessingStrategy
+	orchestrator *PaymentConfirmationOrchestrator
 }
 
 func NewWompiConfirmationHandler(
 	orchestrator *PaymentConfirmationOrchestrator,
-	offerStrategy domainStrategy.OfferProcessingStrategy,
 ) *WompiConfirmationHandler {
 	return &WompiConfirmationHandler{
-		orchestrator:  orchestrator,
-		offerStrategy: offerStrategy,
+		orchestrator: orchestrator,
 	}
 }
 
@@ -61,7 +57,6 @@ func (h *WompiConfirmationHandler) HandleConfirmation(
 		state,
 		tx.PaymentMethod,
 		tx.ID,
-		h.offerStrategy,
 	)
 }
 

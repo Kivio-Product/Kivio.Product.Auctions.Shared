@@ -11,25 +11,18 @@ import (
 	"strings"
 
 	paymentDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/payment"
-	domainStrategy "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/strategy"
 )
 
 // PayUConfirmationHandler maneja la confirmación de pagos de PayU
 type PayUConfirmationHandler struct {
-	orchestrator           *PaymentConfirmationOrchestrator
-	quickOfferStrategy     domainStrategy.OfferProcessingStrategy
-	regularAuctionStrategy domainStrategy.OfferProcessingStrategy
+	orchestrator *PaymentConfirmationOrchestrator
 }
 
 func NewPayUConfirmationHandler(
 	orchestrator *PaymentConfirmationOrchestrator,
-	quickOfferStrategy domainStrategy.OfferProcessingStrategy,
-	regularAuctionStrategy domainStrategy.OfferProcessingStrategy,
 ) *PayUConfirmationHandler {
 	return &PayUConfirmationHandler{
-		orchestrator:           orchestrator,
-		quickOfferStrategy:     quickOfferStrategy,
-		regularAuctionStrategy: regularAuctionStrategy,
+		orchestrator: orchestrator,
 	}
 }
 
@@ -59,22 +52,12 @@ func (h *PayUConfirmationHandler) HandleConfirmation(
 	state := h.mapPayUState(res.StatePol)
 	fmt.Printf("Estado de la transacción: %d -> %s\n", res.StatePol, state)
 
-	var offerStrategy domainStrategy.OfferProcessingStrategy
-	if res.Extra1 == "Quick offer" {
-		offerStrategy = h.quickOfferStrategy
-	} else if res.Extra1 == "Regular auction" {
-		offerStrategy = h.regularAuctionStrategy
-	} else {
-		return fmt.Errorf("unknown offer type: %s", res.Extra1)
-	}
-
 	return h.orchestrator.ExecutePaymentConfirmation(
 		ctx,
 		res.ReferenceSale,
 		state,
 		res.PaymentMethod,
 		res.TransactionId,
-		offerStrategy,
 	)
 }
 
