@@ -87,15 +87,18 @@ var (
 	StateClosed  = "Closed"
 )
 
+// GenerateCreatedState sets the order state to "Created" and returns the modified order
 func GenerateCreatedState(order *Order) *Order {
 	order.State = StateCreated
 	return order
 }
 
+// IsMultipleItems checks if the order contains multiple items
 func (o *Order) IsMultipleItems() bool {
 	return len(o.Items) > 0
 }
 
+// CalculateTotalAmount calculates the total amount for the order, handling both single and multiple item orders
 func (o *Order) CalculateTotalAmount() int64 {
 	if !o.IsMultipleItems() {
 		return o.OfferedAmount
@@ -108,6 +111,7 @@ func (o *Order) CalculateTotalAmount() int64 {
 	return total
 }
 
+// GetItemCount returns the total number of items in the order
 func (o *Order) GetItemCount() int {
 	if !o.IsMultipleItems() {
 		return 1
@@ -120,6 +124,7 @@ func (o *Order) GetItemCount() int {
 	return count
 }
 
+// Update modifies the order properties with new values, validating required fields
 func (o *Order) Update(customerId, externalId, itemSpecificationId, state string, offeredAmount int64, isWinner bool) error {
 	if customerId == "" {
 		return errors.New("El customerId no puede estar vacío")

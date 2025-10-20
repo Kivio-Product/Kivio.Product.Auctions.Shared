@@ -13,10 +13,12 @@ type OrderFactory interface {
 
 type DefaultOrderFactory struct{}
 
+// NewOrderFactory creates a new instance of the default order factory
 func NewOrderFactory() OrderFactory {
 	return &DefaultOrderFactory{}
 }
 
+// CreateOrder creates a new order instance with the provided details, validating required fields
 func (f *DefaultOrderFactory) CreateOrder(customerId, externalId, itemSpecificationId, offerId, pointOfSaleId, billingId, extraData string, offeredAmount int64, quantity int) (*Order, error) {
 
 	if customerId == "" {
@@ -57,6 +59,7 @@ func (f *DefaultOrderFactory) CreateOrder(customerId, externalId, itemSpecificat
 	}, nil
 }
 
+// generateUUID generates a new UUID string for order identification
 func generateUUID() string {
 	return uuid.New().String()
 }
