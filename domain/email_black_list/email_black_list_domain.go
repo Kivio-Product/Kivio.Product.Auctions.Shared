@@ -7,5 +7,5 @@ package domain
 // performing other system operations. It serves as a simple blocking mechanism
 // for email-based access control.
 type EmailBlackList struct {
-	Email string // The email address that is blacklisted
+	Email string
 }
