@@ -130,6 +130,29 @@ type WompiNequiTokenResponse struct {
 	} `json:"data"`
 }
 
+// GenerateWompiSignature generates a SHA256 signature for Wompi transaction integrity verification
+// 
+// This function creates a cryptographic signature to ensure transaction integrity and prevent
+// tampering in Wompi payment processing. It follows Wompi's specific signature generation
+// algorithm using SHA256 hashing of concatenated transaction parameters.
+//
+// Parameters:
+//   - req: Signature request containing transaction details and integrity secret
+//
+// Returns:
+//   - *WompiSignatureResponse: Response containing the generated signature and transaction details
+//   - error: Returns error if signature generation fails due to invalid parameters
+//
+// Side Effects:
+//   - None (pure function)
+//
+// Technical Details:
+//   - Uses SHA256 hashing algorithm for signature generation
+//   - Concatenates parameters in order: reference + amount + currency + expiration + secret
+//   - Expiration time is formatted as RFC3339 timestamp if provided
+//   - Returns hex-encoded signature string
+//   - Validates all required parameters (reference, amount, currency, secret)
+//   - Amount must be greater than zero
 func GenerateWompiSignature(req WompiSignatureRequest) (*WompiSignatureResponse, error) {
 	if req.Reference == "" {
 		return nil, fmt.Errorf("la referencia no puede estar vacía")
