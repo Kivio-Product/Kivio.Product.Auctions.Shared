@@ -12,10 +12,12 @@ type ItemFactory interface {
 
 type DefaultItemFactory struct{}
 
+// NewItemFactory creates a new instance of the default item factory
 func NewItemFactory() ItemFactory {
 	return &DefaultItemFactory{}
 }
 
+// CreateItem creates a new item instance with the provided details, validating required fields
 func (f *DefaultItemFactory) CreateItem(name, description, externalId, pointOfSaleId, url string) (*Item, error) {
 
 	if name == "" {
@@ -37,6 +39,7 @@ func (f *DefaultItemFactory) CreateItem(name, description, externalId, pointOfSa
 	}, nil
 }
 
+// generateUUID generates a new UUID string for item identification
 func generateUUID() string {
 	return uuid.New().String()
 }

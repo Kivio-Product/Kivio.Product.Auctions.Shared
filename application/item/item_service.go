@@ -36,6 +36,7 @@ type itemService struct {
 	ecommerceSvc          ecommerceService.EcommerceService
 }
 
+// NewItemService creates a new instance of ItemService with all required dependencies
 func NewItemService(
 	repo itemInfrastructure.ItemRepository,
 	itemFactory domain.ItemFactory,
@@ -58,6 +59,7 @@ func NewItemService(
 	}
 }
 
+// CreateItem creates a new item with the provided details and saves it to the repository
 func (s *itemService) CreateItem(ctx context.Context, name, description, externalId, pointOfSaleId, url string) (*domain.Item, error) {
 	item, err := s.itemFactory.CreateItem(name, description, externalId, pointOfSaleId, url)
 
@@ -74,6 +76,7 @@ func (s *itemService) CreateItem(ctx context.Context, name, description, externa
 	return item, nil
 }
 
+// GetItems retrieves all items from the repository
 func (s *itemService) GetItems() ([]domain.Item, error) {
 	items, err := s.repo.GetAllItems()
 	if err != nil {
@@ -82,6 +85,7 @@ func (s *itemService) GetItems() ([]domain.Item, error) {
 	return items, nil
 }
 
+// GetItemsByUserId retrieves all items associated with a specific user ID
 func (s *itemService) GetItemsByUserId(ctx context.Context, id string) ([]domain.Item, error) {
 	items, err := s.repo.GetItemsByUserID(id)
 	if err != nil {
@@ -90,6 +94,7 @@ func (s *itemService) GetItemsByUserId(ctx context.Context, id string) ([]domain
 	return items, nil
 }
 
+// GetItemById retrieves a specific item by its ID from the repository
 func (s *itemService) GetItemById(ctx context.Context, id string) (*domain.Item, error) {
 	items, err := s.repo.GetItemById(ctx, id)
 	if err != nil {
@@ -98,6 +103,7 @@ func (s *itemService) GetItemById(ctx context.Context, id string) (*domain.Item,
 	return items, nil
 }
 
+// GetItemBySpecId retrieves an item by its specification ID, handling both local and external items
 func (s *itemService) GetItemBySpecId(ctx context.Context, id string) (*domain.Item, error) {
 	var item *domain.Item
 
@@ -127,6 +133,7 @@ func (s *itemService) GetItemBySpecId(ctx context.Context, id string) (*domain.I
 	return item, nil
 }
 
+// GetItemsByPosId retrieves all items associated with a specific point of sale ID with optional filters
 func (s *itemService) GetItemsByPosId(ctx context.Context, id string, filters map[string]string) ([]domain.Item, error) {
 	items, err := s.repo.GetItemsByPosId(id, filters)
 	if err != nil {
@@ -140,6 +147,7 @@ func (s *itemService) GetItemsByPosId(ctx context.Context, id string, filters ma
 	return items, nil
 }
 
+// UpdateItem updates an existing item with new details and saves the changes
 func (s *itemService) UpdateItem(ctx context.Context, id, name, description, externalId, pointOfSaleId, url string) error {
 	item, err := s.repo.GetItemById(ctx, id)
 	err = item.Update(name, description, externalId, pointOfSaleId, url)
@@ -149,6 +157,7 @@ func (s *itemService) UpdateItem(ctx context.Context, id, name, description, ext
 	return s.repo.SaveItem(ctx, item)
 }
 
+// DeleteItemById deletes an item by its ID, but only if it has no active offers associated with it
 func (s *itemService) DeleteItemById(ctx context.Context, id string) error {
 	item, err := s.repo.GetItemById(ctx, id)
 	if err != nil {
