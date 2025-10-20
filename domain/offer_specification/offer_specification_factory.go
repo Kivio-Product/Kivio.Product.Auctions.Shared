@@ -11,10 +11,12 @@ type OfferSpecificationFactory interface {
 
 type DefaultOfferSpecificationFactory struct{}
 
+// NewOfferSpecificationFactory creates a new instance of the default offer specification factory
 func NewOfferSpecificationFactory() OfferSpecificationFactory {
 	return &DefaultOfferSpecificationFactory{}
 }
 
+// CreateOfferSpecification creates a new offer specification instance with the provided details, validating required fields
 func (f *DefaultOfferSpecificationFactory) CreateOfferSpecification(externalID, offerID string) (*OfferSpecification, error) {
 	if externalID == "" {
 		return nil, fmt.Errorf("ExternalID cannot be empty")
