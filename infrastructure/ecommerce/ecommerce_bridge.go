@@ -226,6 +226,28 @@ type EcommerceSimpleOrderRequest struct {
 	Order EcommerceSimpleOrder `json:"order"`
 }
 
+type EcommerceStore struct {
+	Name      string `json:"name"`
+	URL       string `json:"url"`
+	SSLEnabled bool  `json:"ssl_enabled"`
+	ID        int    `json:"id"`
+}
+
+type EcommerceStoresResponse struct {
+	Stores []EcommerceStore `json:"stores"`
+}
+
+type EcommerceOrderUpdate struct {
+	OrderTotal              float64 `json:"order_total"`
+	OrderSubtotalInclTax    float64 `json:"order_subtotal_incl_tax"`
+	OrderSubtotalExclTax    float64 `json:"order_subtotal_excl_tax"`
+}
+
+type EcommerceOrderUpdateRequest struct {
+	ObjectPropertyNameValuePairs map[string]interface{} `json:"ObjectPropertyNameValuePairs"`
+	Order                        EcommerceOrderUpdate   `json:"order"`
+}
+
 type EcommerceBridge struct {
 	client ecommerceClient.EcommerceService
 }
@@ -246,6 +268,7 @@ type EcommerceService interface {
 	GetApiKey(ctx context.Context, username, password, tokenUrl string) (string, error)
 	UpdateItemStock(ctx context.Context, apiUrl, apiKey, itemId string, newStock int) error
 	GetAllItemsRaw(ctx context.Context, apiUrl, apiKey string) ([]byte, error)
+	GetStores(ctx context.Context, apiUrl, apiKey string) (*EcommerceStoresResponse, error)
 	CreateEcommerceCustomer(ctx context.Context, apiUrl, apiKey string, customer *EcommerceCustomer) (*EcommerceCustomerResponse, error)
 	CreateEcommerceBillingAddress(ctx context.Context, apiUrl, apiKey string, customerID int, address *EcommerceAddress) (*EcommerceBillingAddressResponse, error)
 	CreateEcommerceShippingAddress(ctx context.Context, apiUrl, apiKey string, customerID int, address *EcommerceAddress) (*EcommerceShippingAddressResponse, error)
@@ -253,6 +276,7 @@ type EcommerceService interface {
 	CreateEcommerceOrder(ctx context.Context, apiUrl, apiKey string, order *EcommerceOrder) (*EcommerceOrderResponse, error)
 	CreateEcommerceSimpleOrder(ctx context.Context, apiUrl, apiKey string, order *EcommerceSimpleOrder) (*EcommerceOrderResponse, error)
 	UpdateOrderItemPrice(ctx context.Context, apiUrl, apiKey string, orderID, itemID int, orderItem *EcommerceOrderItem) error
+	UpdateOrder(ctx context.Context, apiUrl, apiKey string, orderID int, orderUpdate *EcommerceOrderUpdate) error
 }
 
 func (b *EcommerceBridge) GetItems(ctx context.Context, apiUrl, apiKey string, page, limit int) ([]itemDomain.Item, error) {
@@ -677,6 +701,50 @@ func (b *EcommerceBridge) UpdateOrderItemPrice(ctx context.Context, apiUrl, apiK
 	}
 
 	fmt.Printf("[ECOMMERCE] SUCCESS: Order item price updated\n")
+	return nil
+}
+
+func (b *EcommerceBridge) GetStores(ctx context.Context, apiUrl, apiKey string) (*EcommerceStoresResponse, error) {
+	fmt.Printf("[ECOMMERCE] Getting stores from %s\n", apiUrl)
+
+	respBody, err := b.client.GetStores(ctx, apiUrl, apiKey)
+	if err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to get stores: %v\n", err)
+		return nil, fmt.Errorf("failed to get stores: %w", err)
+	}
+
+	var response EcommerceStoresResponse
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to unmarshal stores response: %v\n", err)
+		return nil, fmt.Errorf("failed to unmarshal stores response: %w", err)
+	}
+
+	fmt.Printf("[ECOMMERCE] SUCCESS: Retrieved %d stores\n", len(response.Stores))
+	return &response, nil
+}
+
+func (b *EcommerceBridge) UpdateOrder(ctx context.Context, apiUrl, apiKey string, orderID int, orderUpdate *EcommerceOrderUpdate) error {
+	fmt.Printf("[ECOMMERCE] Updating order %d - Total: %.2f, SubtotalInclTax: %.2f, SubtotalExclTax: %.2f\n",
+		orderID, orderUpdate.OrderTotal, orderUpdate.OrderSubtotalInclTax, orderUpdate.OrderSubtotalExclTax)
+
+	updateRequest := EcommerceOrderUpdateRequest{
+		ObjectPropertyNameValuePairs: map[string]interface{}{},
+		Order:                        *orderUpdate,
+	}
+
+	orderData, err := json.Marshal(updateRequest)
+	if err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to marshal order update data: %v\n", err)
+		return fmt.Errorf("failed to marshal order update data: %w", err)
+	}
+
+	err = b.client.UpdateOrder(ctx, apiUrl, apiKey, orderID, orderData)
+	if err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to update order: %v\n", err)
+		return fmt.Errorf("failed to update order: %w", err)
+	}
+
+	fmt.Printf("[ECOMMERCE] SUCCESS: Order updated\n")
 	return nil
 }
 
