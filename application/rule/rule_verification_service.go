@@ -13,6 +13,7 @@ import (
 	itemSpecService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/item_specification"
 	applicationLogging "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/logging"
 	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
+	strategyApplication "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/strategy"
 	itemSpecificationDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item_specification"
 	"github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/logging"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/rule"
@@ -29,15 +30,16 @@ type RuleVerificationService interface {
 }
 
 type ruleVerificationService struct {
-	ruleRepo         infrastructure.RuleRepository
-	offerRepo        offerInfrastructure.IOfferRepository
-	offerSvc         offerService.IOfferService
-	offerClient      offerClient.OfferClient
-	itemSpecSvc      itemSpecService.ItemSpecificationService
-	ecommerceSvc     ecommerceService.EcommerceService
-	ecommerceCredSvc ecommerceService.EcommerceCredentialsService
-	serviceLogger    *applicationLogging.ServiceLogger
-	eventLogger      *logging.DomainEventLogger
+	ruleRepo          infrastructure.RuleRepository
+	offerRepo         offerInfrastructure.IOfferRepository
+	offerSvc          offerService.IOfferService
+	offerClient       offerClient.OfferClient
+	itemSpecSvc       itemSpecService.ItemSpecificationService
+	ecommerceSvc      ecommerceService.EcommerceService
+	ecommerceCredSvc  ecommerceService.EcommerceCredentialsService
+	itemSourceFactory *strategyApplication.ItemSourceFactory
+	serviceLogger     *applicationLogging.ServiceLogger
+	eventLogger       *logging.DomainEventLogger
 }
 
 func NewRuleVerificationService(
@@ -48,21 +50,23 @@ func NewRuleVerificationService(
 	itemSpecSvc itemSpecService.ItemSpecificationService,
 	ecommerceSvc ecommerceService.EcommerceService,
 	ecommerceCredSvc ecommerceService.EcommerceCredentialsService,
+	itemSourceFactory *strategyApplication.ItemSourceFactory,
 ) RuleVerificationService {
 	loggerRepo := infrastructureLogging.GetLoggerRepository()
 	serviceLogger := applicationLogging.NewServiceLogger(loggerRepo, "RuleVerificationService")
 	eventLogger := logging.NewDomainEventLogger(loggerRepo.GetLogger())
 
 	return &ruleVerificationService{
-		ruleRepo:         ruleRepo,
-		offerRepo:        offerRepo,
-		offerSvc:         offerSvc,
-		offerClient:      offerClient,
-		itemSpecSvc:      itemSpecSvc,
-		ecommerceSvc:     ecommerceSvc,
-		ecommerceCredSvc: ecommerceCredSvc,
-		serviceLogger:    serviceLogger,
-		eventLogger:      eventLogger,
+		ruleRepo:          ruleRepo,
+		offerRepo:         offerRepo,
+		offerSvc:          offerSvc,
+		offerClient:       offerClient,
+		itemSpecSvc:       itemSpecSvc,
+		ecommerceSvc:      ecommerceSvc,
+		ecommerceCredSvc:  ecommerceCredSvc,
+		itemSourceFactory: itemSourceFactory,
+		serviceLogger:     serviceLogger,
+		eventLogger:       eventLogger,
 	}
 }
 
@@ -167,23 +171,6 @@ func (s *ruleVerificationService) ProcessRules(ctx context.Context, offerId stri
 		hasActiveRule bool
 	)
 
-	var ecommerceItems map[string]interface{}
-	if len(rules) > 0 {
-		credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, rules[0].PosId)
-		if err != nil {
-			fmt.Printf("Advertencia: Error al obtener credenciales de e-commerce para POS %s: %v\n", rules[0].PosId, err)
-		} else {
-			rawData, err := s.ecommerceSvc.GetAllItemsRaw(ctx, credentials.ApiURL, credentials.ApiKey)
-			if err != nil {
-				fmt.Printf("Advertencia: Error al obtener datos de e-commerce para POS %s: %v\n", rules[0].PosId, err)
-			} else {
-				if err := json.Unmarshal(rawData, &ecommerceItems); err != nil {
-					fmt.Printf("Advertencia: Error al parsear datos de e-commerce para POS %s: %v\n", rules[0].PosId, err)
-				}
-			}
-		}
-	}
-
 	semaphore := make(chan struct{}, 5)
 
 	for i := range rules {
@@ -193,7 +180,7 @@ func (s *ruleVerificationService) ProcessRules(ctx context.Context, offerId stri
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
-			if err := s.processRule(ctx, rule, &hasActiveRule, ecommerceItems); err != nil {
+			if err := s.processRule(ctx, rule, &hasActiveRule); err != nil {
 				fmt.Printf("Error al procesar la regla %s para la oferta %s: %v\n", rule.RuleId, offerId, err)
 			}
 		}(&rules[i])
@@ -211,7 +198,7 @@ func (s *ruleVerificationService) ProcessRules(ctx context.Context, offerId stri
 	return hasActiveRule, nil
 }
 
-func (s *ruleVerificationService) processRule(ctx context.Context, rule *domain.Rule, hasActiveRule *bool, ecommerceItems map[string]interface{}) error {
+func (s *ruleVerificationService) processRule(ctx context.Context, rule *domain.Rule, hasActiveRule *bool) error {
 	var mu sync.Mutex
 	oldState := rule.State
 
@@ -236,7 +223,7 @@ func (s *ruleVerificationService) processRule(ctx context.Context, rule *domain.
 		return fmt.Errorf("fallo al obtener especificaciones de artículo para la oferta %s y POS %s: %w", rule.OfferId, rule.PosId, err)
 	}
 
-	isActive := s.evaluateRuleSpecifications(specifications, itemSpecs, rule.ItemSpecificationId, ecommerceItems)
+	isActive := s.evaluateRuleSpecifications(ctx, specifications, itemSpecs, rule.ItemSpecificationId, rule.PosId)
 	rule.State = getRuleState(isActive)
 
 	if err := s.ruleRepo.SaveRule(ctx, rule); err != nil {
@@ -273,16 +260,17 @@ func (s *ruleVerificationService) processRule(ctx context.Context, rule *domain.
 }
 
 func (s *ruleVerificationService) evaluateRuleSpecifications(
+	ctx context.Context,
 	specifications []ruleSpecDomain.RuleSpecification,
 	itemSpecs []itemSpecificationDomain.ItemSpecification,
 	itemSpecId string,
-	ecommerceItems map[string]interface{},
+	posId string,
 ) bool {
 	for _, spec := range specifications {
 		if spec.Parameter == "offerType" {
 			continue
 		}
-		if s.verifySpecification(spec, itemSpecs, itemSpecId, ecommerceItems) {
+		if s.verifySpecification(ctx, spec, itemSpecs, itemSpecId, posId) {
 			return true
 		}
 	}
@@ -290,10 +278,11 @@ func (s *ruleVerificationService) evaluateRuleSpecifications(
 }
 
 func (s *ruleVerificationService) verifySpecification(
+	ctx context.Context,
 	spec ruleSpecDomain.RuleSpecification,
 	itemSpecs []itemSpecificationDomain.ItemSpecification,
 	itemSpecId string,
-	ecommerceItems map[string]interface{},
+	posId string,
 ) bool {
 	var matchingSpec *itemSpecificationDomain.ItemSpecification
 	for _, itemSpec := range itemSpecs {
@@ -303,10 +292,11 @@ func (s *ruleVerificationService) verifySpecification(
 		}
 	}
 
-	switch spec.Parameter {
-	case "current date":
+	if spec.Parameter == "current date" {
 		return verifyDateSpecification(spec)
-	case "availability":
+	}
+
+	if spec.Parameter == "availability" {
 		if matchingSpec == nil {
 			fmt.Printf("No se encontró especificación de artículo coincidente para el ID: %s\n", itemSpecId)
 			return false
@@ -345,32 +335,22 @@ func (s *ruleVerificationService) verifySpecification(
 		return false
 	}
 
-	itemId := strings.TrimPrefix(matchingSpec.ItemId, "kivio-ecommerce∼")
-	itemIdInt, err := strconv.Atoi(itemId)
+	source := string(matchingSpec.GetSource())
+	strategy, err := s.itemSourceFactory.GetStrategyByItemSpec(ctx, source, posId)
 	if err != nil {
-		fmt.Printf("Error al convertir itemId '%s' a int: %v\n", itemId, err)
+		fmt.Printf("Error al obtener estrategia para la fuente '%s' y POS %s: %v\n", source, posId, err)
 		return false
 	}
 
-	products, ok := ecommerceItems["products"].([]interface{})
-	if !ok {
-		fmt.Printf("Los datos de e-commerce no contienen un array 'products' o no están en el formato esperado.\n")
+	item, err := strategy.GetItemByID(ctx, matchingSpec.ItemId)
+	if err != nil {
+		fmt.Printf("Error al obtener item %s usando estrategia: %v\n", matchingSpec.ItemId, err)
 		return false
 	}
 
-	var matchingItem map[string]interface{}
-	for _, product := range products {
-		if productMap, ok := product.(map[string]interface{}); ok {
-			if id, ok := productMap["id"].(float64); ok && int(id) == itemIdInt {
-				matchingItem = productMap
-				break
-			}
-		}
-	}
-
-	if matchingItem == nil {
-		fmt.Printf("No se encontró artículo de e-commerce coincidente para el ID: %d (original: %s). Eliminando especificación del artículo.\n", itemIdInt, matchingSpec.ItemId)
-		if err := s.itemSpecSvc.Delete(context.Background(), matchingSpec.Id); err != nil {
+	if item == nil {
+		fmt.Printf("No se encontró artículo para el ID: %s. Eliminando especificación del artículo.\n", matchingSpec.ItemId)
+		if err := s.itemSpecSvc.Delete(ctx, matchingSpec.Id); err != nil {
 			fmt.Printf("Error al eliminar la especificación del artículo %s: %v\n", matchingSpec.Id, err)
 		} else {
 			fmt.Printf("Especificación del artículo %s eliminada exitosamente.\n", matchingSpec.Id)
@@ -378,52 +358,87 @@ func (s *ruleVerificationService) verifySpecification(
 		return false
 	}
 
-	switch spec.Parameter {
-	case "StockQuantity":
-		if stock, ok := matchingItem["stock_quantity"].(float64); ok {
-			return verifyNumericValue(stock, spec)
-		}
-		fmt.Printf("StockQuantity no encontrado o no es float64 para el artículo %d.\n", itemIdInt)
-	case "Price", "OldPrice":
-		if price, ok := matchingItem["price"].(float64); ok {
-			return verifyNumericValue(price, spec)
-		}
-		fmt.Printf("Precio no encontrado o no es float64 para el artículo %d.\n", itemIdInt)
-	case "Published", "VisibleIndividually", "IsFreeShipping":
-		if published, ok := matchingItem["published"].(bool); ok {
-			return verifyBooleanValue(published, spec)
-		}
-		fmt.Printf("%s no encontrado o no es bool para el artículo %d.\n", spec.Parameter, itemIdInt)
-	case "AvailableStartDate", "AvailableEndDate":
-		var dateStr string
-		var ok bool
-
-		if spec.Parameter == "AvailableStartDate" {
-			dateStr, ok = matchingItem["available_start_date_time_utc"].(string)
-		} else {
-			dateStr, ok = matchingItem["available_end_date_time_utc"].(string)
+	if matchingSpec.GetSource() == itemSpecificationDomain.SourceEcommerce {
+		credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, posId)
+		if err != nil {
+			fmt.Printf("Error al obtener credenciales de e-commerce para POS %s: %v\n", posId, err)
+			return false
 		}
 
-		if ok {
-			if !strings.HasSuffix(dateStr, "Z") {
-				dateStr += "Z"
-			}
-			date, err := time.Parse(time.RFC3339, dateStr)
-			if err != nil {
-				fmt.Printf("Error al parsear la cadena de fecha '%s' (RFC3339) para el artículo %d: %v\n", dateStr, itemIdInt, err)
-				return false
-			}
-			return verifyDateValue(date, spec)
+		cleanItemID := strings.TrimPrefix(matchingSpec.ItemId, "kivio-ecommerce∼")
+		itemRaw, err := s.ecommerceSvc.GetItemByIDRaw(ctx, cleanItemID, credentials.ApiURL, credentials.ApiKey)
+		if err != nil {
+			fmt.Printf("Error al obtener datos raw del item %s: %v\n", cleanItemID, err)
+			return false
 		}
-		fmt.Printf("Fecha disponible no encontrada o no es cadena (available_start_date_time_utc o available_end_date_time_utc) para el artículo %d.\n", itemIdInt)
-	case "Tags":
-		if tags, ok := matchingItem["tags"].([]interface{}); ok {
-			tagStr := strings.Join(interfaceSliceToStringSlice(tags), ",")
-			return verifyCategoryValue(tagStr, spec)
+
+		if itemRaw == nil {
+			fmt.Printf("No se encontraron datos raw para el item %s\n", cleanItemID)
+			return false
 		}
-		fmt.Printf("Tags no encontrados o no son un array de interfaces para el artículo %d.\n", itemIdInt)
-	default:
-		fmt.Printf("Parámetro desconocido o no manejado '%s' para el artículo %d.\n", spec.Parameter, itemIdInt)
+
+		var extResp struct {
+			Products []map[string]interface{} `json:"products"`
+		}
+		if err := json.Unmarshal(itemRaw, &extResp); err != nil {
+			fmt.Printf("Error al parsear respuesta JSON para item %s: %v\n", cleanItemID, err)
+			return false
+		}
+
+		if len(extResp.Products) == 0 {
+			fmt.Printf("No se encontraron productos en la respuesta para item %s\n", cleanItemID)
+			return false
+		}
+
+		matchingItem := extResp.Products[0]
+
+		switch spec.Parameter {
+		case "StockQuantity":
+			if stock, ok := matchingItem["stock_quantity"].(float64); ok {
+				return verifyNumericValue(stock, spec)
+			}
+			fmt.Printf("StockQuantity no encontrado o no es float64 para el artículo %s.\n", cleanItemID)
+		case "Price", "OldPrice":
+			if price, ok := matchingItem["price"].(float64); ok {
+				return verifyNumericValue(price, spec)
+			}
+			fmt.Printf("Precio no encontrado o no es float64 para el artículo %s.\n", cleanItemID)
+		case "Published", "VisibleIndividually", "IsFreeShipping":
+			if published, ok := matchingItem["published"].(bool); ok {
+				return verifyBooleanValue(published, spec)
+			}
+			fmt.Printf("%s no encontrado o no es bool para el artículo %s.\n", spec.Parameter, cleanItemID)
+		case "AvailableStartDate", "AvailableEndDate":
+			var dateStr string
+			var ok bool
+
+			if spec.Parameter == "AvailableStartDate" {
+				dateStr, ok = matchingItem["available_start_date_time_utc"].(string)
+			} else {
+				dateStr, ok = matchingItem["available_end_date_time_utc"].(string)
+			}
+
+			if ok {
+				if !strings.HasSuffix(dateStr, "Z") {
+					dateStr += "Z"
+				}
+				date, err := time.Parse(time.RFC3339, dateStr)
+				if err != nil {
+					fmt.Printf("Error al parsear la cadena de fecha '%s' (RFC3339) para el artículo %s: %v\n", dateStr, cleanItemID, err)
+					return false
+				}
+				return verifyDateValue(date, spec)
+			}
+			fmt.Printf("Fecha disponible no encontrada o no es cadena (available_start_date_time_utc o available_end_date_time_utc) para el artículo %s.\n", cleanItemID)
+		case "Tags":
+			if tags, ok := matchingItem["tags"].([]interface{}); ok {
+				tagStr := strings.Join(interfaceSliceToStringSlice(tags), ",")
+				return verifyCategoryValue(tagStr, spec)
+			}
+			fmt.Printf("Tags no encontrados o no son un array de interfaces para el artículo %s.\n", cleanItemID)
+		default:
+			fmt.Printf("Parámetro desconocido o no manejado '%s' para el artículo %s.\n", spec.Parameter, cleanItemID)
+		}
 	}
 
 	return false
