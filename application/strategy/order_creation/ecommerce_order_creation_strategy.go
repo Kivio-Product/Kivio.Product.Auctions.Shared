@@ -270,13 +270,11 @@ func (s *EcommerceOrderCreationStrategy) FinalizeOrder(
 				fmt.Printf("[EcommerceOrderFinalization] WARNING: Failed to update order item %d (ID: %d): %v\n", i, orderItem.ID, err)
 			} else {
 				fmt.Printf("[EcommerceOrderFinalization] Order item %d (ID: %d) price updated successfully\n", i, orderItem.ID)
-				// Accumulate totals from successfully updated items
 				orderTotalInclTax += priceCalc.PriceInclTax
 				orderTotalExclTax += priceCalc.PriceExclTax
 			}
 		}
 
-		// Update order totals with calculated values from all items
 		fmt.Printf("[EcommerceOrderFinalization] Updating order totals - Total: %.2f, SubtotalInclTax: %.2f, SubtotalExclTax: %.2f\n",
 			orderTotalInclTax, orderTotalInclTax, orderTotalExclTax)
 
@@ -284,6 +282,10 @@ func (s *EcommerceOrderCreationStrategy) FinalizeOrder(
 			OrderTotal:           orderTotalInclTax,
 			OrderSubtotalInclTax: orderTotalInclTax,
 			OrderSubtotalExclTax: orderTotalExclTax,
+			ID:                   orderResponse.ID,
+			CustomerID:           customerID,
+			BillingAddress:       &ecommerceInfra.EcommerceSimpleAddress{ID: billingAddressID},
+			ShippingAddress:      &ecommerceInfra.EcommerceSimpleAddress{ID: shippingAddressID},
 		}
 
 		err = s.ecommerceSvc.UpdateOrder(ctx, credentials.ApiURL, credentials.ApiKey, orderResponse.ID, orderUpdate)

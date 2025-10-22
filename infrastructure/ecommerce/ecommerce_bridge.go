@@ -238,9 +238,13 @@ type EcommerceStoresResponse struct {
 }
 
 type EcommerceOrderUpdate struct {
-	OrderTotal              float64 `json:"order_total"`
-	OrderSubtotalInclTax    float64 `json:"order_subtotal_incl_tax"`
-	OrderSubtotalExclTax    float64 `json:"order_subtotal_excl_tax"`
+	OrderTotal              float64                 `json:"order_total"`
+	OrderSubtotalInclTax    float64                 `json:"order_subtotal_incl_tax"`
+	OrderSubtotalExclTax    float64                 `json:"order_subtotal_excl_tax"`
+	ID                      int                     `json:"id"`
+	CustomerID              int                     `json:"customer_id"`
+	BillingAddress          *EcommerceSimpleAddress `json:"billing_address"`
+	ShippingAddress         *EcommerceSimpleAddress `json:"shipping_address"`
 }
 
 type EcommerceOrderUpdateRequest struct {
