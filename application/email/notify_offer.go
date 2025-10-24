@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	blackListService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email_black_list"
 	application "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/file_storage"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/repository"
+	"github.com/golang-jwt/jwt"
 )
 
 type NotifyOfferUseCase struct {
@@ -81,7 +83,52 @@ func (uc *NotifyOfferUseCase) Execute(ctx context.Context, auctionURL, unsubscri
 		}
 	}
 
-	expirationDate := time.Now().Add(24 * time.Hour).Format("02 de enero de 2006")
+	u, err := url.Parse(auctionURL)
+	if err != nil {
+		log.Fatal("URL inválida:", err)
+	}
+	query := u.Query()
+	tokenString := query.Get("token")
+
+	if tokenString == "" {
+		fmt.Printf("Token is missing")
+	}
+
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method %v", token.Header["alg"])
+		}
+		return []byte("JWT_SECRET"), nil
+	})
+
+	if err != nil {
+		fmt.Printf("Invalid token")
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok || !token.Valid {
+		fmt.Printf("Invalid token")
+	}
+
+	expFloat, ok := claims["exp"].(float64)
+	if !ok {
+		fmt.Printf("exp no encontrado")
+	}
+
+	expiration := time.Unix(int64(expFloat), 0)
+
+	monthNames := []string{
+		"enero", "febrero", "marzo", "abril", "mayo", "junio",
+		"julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+	}
+	expirationDate := fmt.Sprintf("%02d de %s de %d, %02d:%02d",
+		expiration.Day(),
+		strings.ToLower(monthNames[int(expiration.Month())-1]),
+		expiration.Year(),
+		expiration.Hour(),
+		expiration.Minute(),
+	)
+
 	for email := range emailSet {
 		finalURL := addCustomerIdParam(auctionURL, email)
 		finalUnsubscribeUrl := addCustomerIdParam(unsubscribeUrl, email)
