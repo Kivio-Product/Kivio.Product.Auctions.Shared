@@ -227,10 +227,10 @@ type EcommerceSimpleOrderRequest struct {
 }
 
 type EcommerceStore struct {
-	Name      string `json:"name"`
-	URL       string `json:"url"`
-	SSLEnabled bool  `json:"ssl_enabled"`
-	ID        int    `json:"id"`
+	Name       string `json:"name"`
+	URL        string `json:"url"`
+	SSLEnabled bool   `json:"ssl_enabled"`
+	ID         int    `json:"id"`
 }
 
 type EcommerceStoresResponse struct {
@@ -238,13 +238,13 @@ type EcommerceStoresResponse struct {
 }
 
 type EcommerceOrderUpdate struct {
-	OrderTotal              float64                 `json:"order_total"`
-	OrderSubtotalInclTax    float64                 `json:"order_subtotal_incl_tax"`
-	OrderSubtotalExclTax    float64                 `json:"order_subtotal_excl_tax"`
-	ID                      int                     `json:"id"`
-	CustomerID              int                     `json:"customer_id"`
-	BillingAddress          *EcommerceSimpleAddress `json:"billing_address"`
-	ShippingAddress         *EcommerceSimpleAddress `json:"shipping_address"`
+	OrderTotal           float64                 `json:"order_total"`
+	OrderSubtotalInclTax float64                 `json:"order_subtotal_incl_tax"`
+	OrderSubtotalExclTax float64                 `json:"order_subtotal_excl_tax"`
+	ID                   int                     `json:"id"`
+	CustomerID           int                     `json:"customer_id"`
+	BillingAddress       *EcommerceSimpleAddress `json:"billing_address"`
+	ShippingAddress      *EcommerceSimpleAddress `json:"shipping_address"`
 }
 
 type EcommerceOrderUpdateRequest struct {
@@ -262,10 +262,17 @@ func NewEcommerceBridge() *EcommerceBridge {
 	}
 }
 
+type ItemWithDetails struct {
+	itemDomain.Item
+	Availability int     `json:"availability"`
+	Price        float64 `json:"price"`
+}
+
 type EcommerceService interface {
 	GetItems(ctx context.Context, apiUrl, apiKey string, page, limit int) ([]itemDomain.Item, error)
 	GetItemsRaw(ctx context.Context, apiUrl, apiKey string, page, limit int, publishedStatus bool) ([]byte, error)
 	GetItemByID(ctx context.Context, id, apiUrl, apiKey string) (*itemDomain.Item, error)
+	GetItemByIDWithDetails(ctx context.Context, id, apiUrl, apiKey string) (*ItemWithDetails, error)
 	GetItemByIDRaw(ctx context.Context, id, apiUrl, apiKey string) ([]byte, error)
 	GetCustomers(ctx context.Context, apiUrl, apiKey string) ([]customerDomain.Customer, error)
 	GetCustomerByID(ctx context.Context, id, apiUrl, apiKey string) (*customerDomain.Customer, error)
@@ -322,6 +329,27 @@ func (b *EcommerceBridge) GetItemByID(ctx context.Context, id, apiUrl, apiKey st
 		PointOfSaleId: item.PointOfSaleId,
 		Url:           item.Url,
 		Source:        item.Source,
+	}, nil
+}
+
+func (b *EcommerceBridge) GetItemByIDWithDetails(ctx context.Context, id, apiUrl, apiKey string) (*ItemWithDetails, error) {
+	itemDetails, err := b.client.GetItemByIDWithDetails(ctx, id, apiUrl, apiKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ItemWithDetails{
+		Item: itemDomain.Item{
+			ItemId:        itemDetails.Item.ItemId,
+			Name:          itemDetails.Item.Name,
+			Description:   itemDetails.Item.Description,
+			ExternalId:    itemDetails.Item.ExternalId,
+			PointOfSaleId: itemDetails.Item.PointOfSaleId,
+			Url:           itemDetails.Item.Url,
+			Source:        itemDetails.Item.Source,
+		},
+		Availability: itemDetails.Availability,
+		Price:        itemDetails.Price,
 	}, nil
 }
 
