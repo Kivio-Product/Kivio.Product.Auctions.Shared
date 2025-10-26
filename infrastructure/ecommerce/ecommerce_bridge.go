@@ -252,6 +252,22 @@ type EcommerceOrderUpdateRequest struct {
 	Order                        EcommerceOrderUpdate   `json:"order"`
 }
 
+type ItemVerificationDetail struct {
+	ItemID   string  `json:"item_id"`
+	Price    float64 `json:"price"`
+	IsValid  bool    `json:"is_valid"`
+	ItemName string  `json:"item_name"`
+}
+
+type OrderVerificationResult struct {
+	IsValid      bool                     `json:"is_valid"`
+	TotalItems   int                      `json:"total_items"`
+	ValidItems   int                      `json:"valid_items"`
+	InvalidItems int                      `json:"invalid_items"`
+	Details      []ItemVerificationDetail `json:"details"`
+	MinPrice     float64                  `json:"min_price"`
+}
+
 type EcommerceBridge struct {
 	client ecommerceClient.EcommerceService
 }
@@ -288,6 +304,7 @@ type EcommerceService interface {
 	CreateEcommerceSimpleOrder(ctx context.Context, apiUrl, apiKey string, order *EcommerceSimpleOrder) (*EcommerceOrderResponse, error)
 	UpdateOrderItemPrice(ctx context.Context, apiUrl, apiKey string, orderID, itemID int, orderItem *EcommerceOrderItem) error
 	UpdateOrder(ctx context.Context, apiUrl, apiKey string, orderID int, orderUpdate *EcommerceOrderUpdate) error
+	VerifyOrderTotal(ctx context.Context, itemIDs []string, apiUrl, apiKey string, minPrice float64) (*OrderVerificationResult, error)
 }
 
 func (b *EcommerceBridge) GetItems(ctx context.Context, apiUrl, apiKey string, page, limit int) ([]itemDomain.Item, error) {
@@ -778,6 +795,49 @@ func (b *EcommerceBridge) UpdateOrder(ctx context.Context, apiUrl, apiKey string
 
 	fmt.Printf("[ECOMMERCE] SUCCESS: Order updated\n")
 	return nil
+}
+
+func (b *EcommerceBridge) VerifyOrderTotal(ctx context.Context, itemIDs []string, apiUrl, apiKey string, minPrice float64) (*OrderVerificationResult, error) {
+	fmt.Printf("[ECOMMERCE] Verifying order total for %d items with minimum price: %.2f\n", len(itemIDs), minPrice)
+
+	result := &OrderVerificationResult{
+		IsValid:      true,
+		TotalItems:   len(itemIDs),
+		ValidItems:   0,
+		InvalidItems: 0,
+		Details:      make([]ItemVerificationDetail, 0, len(itemIDs)),
+		MinPrice:     minPrice,
+	}
+
+	for _, itemID := range itemIDs {
+		itemDetails, err := b.GetItemByIDWithDetails(ctx, itemID, apiUrl, apiKey)
+		if err != nil {
+			fmt.Printf("[ECOMMERCE] ERROR: Failed to get item details for ID %s: %v\n", itemID, err)
+			return nil, fmt.Errorf("failed to get item details for ID %s: %w", itemID, err)
+		}
+
+		isValid := itemDetails.Price > minPrice
+		detail := ItemVerificationDetail{
+			ItemID:   itemID,
+			Price:    itemDetails.Price,
+			IsValid:  isValid,
+			ItemName: itemDetails.Name,
+		}
+
+		result.Details = append(result.Details, detail)
+
+		if isValid {
+			result.ValidItems++
+			fmt.Printf("[ECOMMERCE] Item %s (%s) - Price: %.2f - VALID\n", itemID, itemDetails.Name, itemDetails.Price)
+		} else {
+			result.InvalidItems++
+			result.IsValid = false
+			fmt.Printf("[ECOMMERCE] Item %s (%s) - Price: %.2f - INVALID (below minimum %.2f)\n", itemID, itemDetails.Name, itemDetails.Price, minPrice)
+		}
+	}
+
+	fmt.Printf("[ECOMMERCE] Verification complete - Valid: %d, Invalid: %d, Overall: %v\n", result.ValidItems, result.InvalidItems, result.IsValid)
+	return result, nil
 }
 
 func NewEcommerceService() EcommerceService {
