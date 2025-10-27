@@ -116,6 +116,8 @@ func (uc *NotifyOfferUseCase) Execute(ctx context.Context, auctionURL, unsubscri
 	}
 
 	expiration := time.Unix(int64(expFloat), 0)
+	location, _ := time.LoadLocation("America/Bogota")
+	expiration = expiration.In(location)
 
 	monthNames := []string{
 		"enero", "febrero", "marzo", "abril", "mayo", "junio",
