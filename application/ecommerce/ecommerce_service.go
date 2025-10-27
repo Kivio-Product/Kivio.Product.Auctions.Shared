@@ -28,7 +28,7 @@ type EcommerceService interface {
 	CreateEcommerceSimpleOrder(ctx context.Context, apiUrl, apiKey string, order *ecommerceBridge.EcommerceSimpleOrder) (*ecommerceBridge.EcommerceOrderResponse, error)
 	UpdateOrderItemPrice(ctx context.Context, apiUrl, apiKey string, orderID, itemID int, orderItem *ecommerceBridge.EcommerceOrderItem) error
 	UpdateOrder(ctx context.Context, apiUrl, apiKey string, orderID int, orderUpdate *ecommerceBridge.EcommerceOrderUpdate) error
-	VerifyOrderTotal(ctx context.Context, itemIDs []string, apiUrl, apiKey string, minPrice float64) (*ecommerceBridge.OrderVerificationResult, error)
+	VerifyOrderTotal(ctx context.Context, items []ecommerceBridge.ItemQuantity, apiUrl, apiKey string, minTotal float64) (*ecommerceBridge.OrderVerificationResult, error)
 }
 
 func NewEcommerceService() EcommerceService {

@@ -252,20 +252,25 @@ type EcommerceOrderUpdateRequest struct {
 	Order                        EcommerceOrderUpdate   `json:"order"`
 }
 
+type ItemQuantity struct {
+	ItemID   string `json:"item_id"`
+	Quantity int    `json:"quantity"`
+}
+
 type ItemVerificationDetail struct {
 	ItemID   string  `json:"item_id"`
 	Price    float64 `json:"price"`
-	IsValid  bool    `json:"is_valid"`
+	Quantity int     `json:"quantity"`
+	Subtotal float64 `json:"subtotal"`
 	ItemName string  `json:"item_name"`
 }
 
 type OrderVerificationResult struct {
 	IsValid      bool                     `json:"is_valid"`
 	TotalItems   int                      `json:"total_items"`
-	ValidItems   int                      `json:"valid_items"`
-	InvalidItems int                      `json:"invalid_items"`
+	GrandTotal   float64                  `json:"grand_total"`
 	Details      []ItemVerificationDetail `json:"details"`
-	MinPrice     float64                  `json:"min_price"`
+	MinTotal     float64                  `json:"min_total"`
 }
 
 type EcommerceBridge struct {
@@ -304,7 +309,7 @@ type EcommerceService interface {
 	CreateEcommerceSimpleOrder(ctx context.Context, apiUrl, apiKey string, order *EcommerceSimpleOrder) (*EcommerceOrderResponse, error)
 	UpdateOrderItemPrice(ctx context.Context, apiUrl, apiKey string, orderID, itemID int, orderItem *EcommerceOrderItem) error
 	UpdateOrder(ctx context.Context, apiUrl, apiKey string, orderID int, orderUpdate *EcommerceOrderUpdate) error
-	VerifyOrderTotal(ctx context.Context, itemIDs []string, apiUrl, apiKey string, minPrice float64) (*OrderVerificationResult, error)
+	VerifyOrderTotal(ctx context.Context, items []ItemQuantity, apiUrl, apiKey string, minTotal float64) (*OrderVerificationResult, error)
 }
 
 func (b *EcommerceBridge) GetItems(ctx context.Context, apiUrl, apiKey string, page, limit int) ([]itemDomain.Item, error) {
@@ -797,46 +802,48 @@ func (b *EcommerceBridge) UpdateOrder(ctx context.Context, apiUrl, apiKey string
 	return nil
 }
 
-func (b *EcommerceBridge) VerifyOrderTotal(ctx context.Context, itemIDs []string, apiUrl, apiKey string, minPrice float64) (*OrderVerificationResult, error) {
-	fmt.Printf("[ECOMMERCE] Verifying order total for %d items with minimum price: %.2f\n", len(itemIDs), minPrice)
+func (b *EcommerceBridge) VerifyOrderTotal(ctx context.Context, items []ItemQuantity, apiUrl, apiKey string, minTotal float64) (*OrderVerificationResult, error) {
+	fmt.Printf("[ECOMMERCE] Verifying order total for %d items with minimum total: %.2f\n", len(items), minTotal)
 
 	result := &OrderVerificationResult{
-		IsValid:      true,
-		TotalItems:   len(itemIDs),
-		ValidItems:   0,
-		InvalidItems: 0,
-		Details:      make([]ItemVerificationDetail, 0, len(itemIDs)),
-		MinPrice:     minPrice,
+		IsValid:    false,
+		TotalItems: len(items),
+		GrandTotal: 0,
+		Details:    make([]ItemVerificationDetail, 0, len(items)),
+		MinTotal:   minTotal,
 	}
 
-	for _, itemID := range itemIDs {
-		itemDetails, err := b.GetItemByIDWithDetails(ctx, itemID, apiUrl, apiKey)
+	for _, item := range items {
+		itemDetails, err := b.GetItemByIDWithDetails(ctx, item.ItemID, apiUrl, apiKey)
 		if err != nil {
-			fmt.Printf("[ECOMMERCE] ERROR: Failed to get item details for ID %s: %v\n", itemID, err)
-			return nil, fmt.Errorf("failed to get item details for ID %s: %w", itemID, err)
+			fmt.Printf("[ECOMMERCE] ERROR: Failed to get item details for ID %s: %v\n", item.ItemID, err)
+			return nil, fmt.Errorf("failed to get item details for ID %s: %w", item.ItemID, err)
 		}
 
-		isValid := itemDetails.Price > minPrice
+		subtotal := itemDetails.Price * float64(item.Quantity)
 		detail := ItemVerificationDetail{
-			ItemID:   itemID,
+			ItemID:   item.ItemID,
 			Price:    itemDetails.Price,
-			IsValid:  isValid,
+			Quantity: item.Quantity,
+			Subtotal: subtotal,
 			ItemName: itemDetails.Name,
 		}
 
 		result.Details = append(result.Details, detail)
+		result.GrandTotal += subtotal
 
-		if isValid {
-			result.ValidItems++
-			fmt.Printf("[ECOMMERCE] Item %s (%s) - Price: %.2f - VALID\n", itemID, itemDetails.Name, itemDetails.Price)
-		} else {
-			result.InvalidItems++
-			result.IsValid = false
-			fmt.Printf("[ECOMMERCE] Item %s (%s) - Price: %.2f - INVALID (below minimum %.2f)\n", itemID, itemDetails.Name, itemDetails.Price, minPrice)
-		}
+		fmt.Printf("[ECOMMERCE] Item %s (%s) - Price: %.2f × Quantity: %d = Subtotal: %.2f\n",
+			item.ItemID, itemDetails.Name, itemDetails.Price, item.Quantity, subtotal)
 	}
 
-	fmt.Printf("[ECOMMERCE] Verification complete - Valid: %d, Invalid: %d, Overall: %v\n", result.ValidItems, result.InvalidItems, result.IsValid)
+	result.IsValid = result.GrandTotal > minTotal
+
+	if result.IsValid {
+		fmt.Printf("[ECOMMERCE] Verification PASSED - Grand Total: %.2f (minimum: %.2f)\n", result.GrandTotal, minTotal)
+	} else {
+		fmt.Printf("[ECOMMERCE] Verification FAILED - Grand Total: %.2f (minimum: %.2f)\n", result.GrandTotal, minTotal)
+	}
+
 	return result, nil
 }
 
