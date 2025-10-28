@@ -230,13 +230,7 @@ func (s *EcommerceOrderCreationStrategy) FinalizeOrder(
 		for i, orderItem := range orderResponse.OrderItems {
 			correspondingOrder := orders[i]
 
-			itemSpec, err := s.itemSpecRepo.GetById(ctx, correspondingOrder.ItemSpecificationId)
-			if err != nil {
-				fmt.Printf("[EcommerceOrderFinalization] WARNING: Could not get itemSpec for order %s: %v\n", correspondingOrder.OrderId, err)
-				continue
-			}
-
-			unitPriceInclTax := float64(itemSpec.Amount)
+			unitPriceInclTax := float64(correspondingOrder.OfferedAmount) / float64(correspondingOrder.TotalQuantity)
 			originalUnitPriceInclTax := orderItem.UnitPriceInclTax
 			originalUnitPriceExclTax := orderItem.UnitPriceExclTax
 
