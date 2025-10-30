@@ -40,6 +40,7 @@ func (h *NotificationHelper) SendOrderNotification(
 			strings.Join(itemNames, ", "),
 			posName,
 			"",
+			"",
 		)
 		if err != nil {
 			fmt.Printf("No se pudo enviar el correo: %s\n", err)
@@ -101,14 +102,18 @@ func (h *NotificationHelper) sendNotificationForOrders(
 
 	var itemNames []string
 	var totalAmount int64
+	var siigoInvoiceURL string
 
 	for _, order := range orders {
 		itemNames = append(itemNames, order.ExtraData)
 		totalAmount += int64(order.OfferedAmount)
+		if siigoInvoiceURL == "" && order.SiigoInvoicePublicURL != "" {
+			siigoInvoiceURL = order.SiigoInvoicePublicURL
+		}
 	}
 
-	fmt.Printf("[NotificationHelper] Sending %s notification to %s for %d items (total: %d)\n",
-		state, customerEmail, len(itemNames), totalAmount)
+	fmt.Printf("[NotificationHelper] Sending %s notification to %s for %d items (total: %d, invoice URL: %s)\n",
+		state, customerEmail, len(itemNames), totalAmount, siigoInvoiceURL)
 
 	go func() {
 		err := h.emailService.NotifyOrder(
@@ -119,6 +124,7 @@ func (h *NotificationHelper) sendNotificationForOrders(
 			strings.Join(itemNames, ", "),
 			posName,
 			"",
+			siigoInvoiceURL,
 		)
 		if err != nil {
 			fmt.Printf("No se pudo enviar el correo de estado %s a %s: %s\n", state, customerEmail, err)

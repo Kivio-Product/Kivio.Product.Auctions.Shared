@@ -109,11 +109,14 @@ func (s *RegularAuctionStrategy) ProcessApprovedOrders(
 			}
 
 			fmt.Printf("[RegularAuction] Finalizing %d orders for source %s\n", len(sourceOrders), source)
-			err = orderCreationStrategy.FinalizeOrder(ctx, billing, sourceOrders)
+			invoiceURL, err := orderCreationStrategy.FinalizeOrder(ctx, billing, sourceOrders)
 			if err != nil {
 				fmt.Printf("[RegularAuction] Error finalizing orders: %v\n", err)
 			} else {
-				fmt.Printf("[RegularAuction] Orders finalized successfully\n")
+				fmt.Printf("[RegularAuction] Orders finalized successfully with invoice URL: %s\n", invoiceURL)
+				for _, order := range sourceOrders {
+					order.SiigoInvoicePublicURL = invoiceURL
+				}
 			}
 		}
 	}

@@ -196,12 +196,13 @@ type EcommerceOrderItemResponse struct {
 }
 
 type EcommerceOrderResponse struct {
-	ID              int                          `json:"id"`
-	OrderItemID     int                          `json:"order_item_id"`
-	OrderItemsCount int                          `json:"order_items_count"`
-	OrderItems      []EcommerceOrderItemResponse `json:"order_items"`
-	Success         bool                         `json:"success"`
-	Message         string                       `json:"message"`
+	ID                     int                          `json:"id"`
+	OrderItemID            int                          `json:"order_item_id"`
+	OrderItemsCount        int                          `json:"order_items_count"`
+	OrderItems             []EcommerceOrderItemResponse `json:"order_items"`
+	SiigoInvoicePublicURL  string                       `json:"siigo_invoice_public_url"`
+	Success                bool                         `json:"success"`
+	Message                string                       `json:"message"`
 }
 
 type EcommerceSimpleAddress struct {
@@ -677,8 +678,9 @@ func (b *EcommerceBridge) CreateEcommerceSimpleOrder(ctx context.Context, apiUrl
 	}
 
 	type OrderResponse struct {
-		ID         int                 `json:"id"`
-		OrderItems []OrderItemResponse `json:"order_items"`
+		ID                    int                 `json:"id"`
+		OrderItems            []OrderItemResponse `json:"order_items"`
+		SiigoInvoicePublicURL string              `json:"siigo_invoice_public_url"`
 	}
 
 	type SimpleOrderCreationResponse struct {
@@ -720,12 +722,13 @@ func (b *EcommerceBridge) CreateEcommerceSimpleOrder(ctx context.Context, apiUrl
 	}
 
 	return &EcommerceOrderResponse{
-		ID:              orderID,
-		OrderItemID:     firstOrderItemID,
-		Success:         true,
-		Message:         "Simple order created successfully",
-		OrderItemsCount: len(response.Orders[0].OrderItems),
-		OrderItems:      orderItems,
+		ID:                    orderID,
+		OrderItemID:           firstOrderItemID,
+		Success:               true,
+		Message:               "Simple order created successfully",
+		OrderItemsCount:       len(response.Orders[0].OrderItems),
+		OrderItems:            orderItems,
+		SiigoInvoicePublicURL: response.Orders[0].SiigoInvoicePublicURL,
 	}, nil
 }
 

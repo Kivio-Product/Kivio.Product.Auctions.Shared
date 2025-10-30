@@ -148,11 +148,14 @@ func (s *QuickOfferStrategy) ProcessApprovedOrders(
 			}
 
 			fmt.Printf("[QuickOffer] Finalizing %d orders for source %s\n", len(sourceOrders), source)
-			err = orderCreationStrategy.FinalizeOrder(ctx, billing, sourceOrders)
+			invoiceURL, err := orderCreationStrategy.FinalizeOrder(ctx, billing, sourceOrders)
 			if err != nil {
 				fmt.Printf("[QuickOffer] Error finalizing orders: %v\n", err)
 			} else {
-				fmt.Printf("[QuickOffer] Orders finalized successfully\n")
+				fmt.Printf("[QuickOffer] Orders finalized successfully with invoice URL: %s\n", invoiceURL)
+				for _, order := range sourceOrders {
+					order.SiigoInvoicePublicURL = invoiceURL
+				}
 			}
 		}
 	}

@@ -14,22 +14,23 @@ type OrderItem struct {
 }
 
 type Order struct {
-	OrderId             string
-	OfferId             string
-	OfferedAmount       int64
-	CreatedAt           time.Time
-	CustomerId          string
-	ExternalId          string
-	BillingId           string
-	ItemSpecificationId string
-	Items               []OrderItem `json:"items,omitempty"`
-	ExtraData           string
-	State               string
-	SortKey             string
-	PointOfSaleId       string
-	WompiIdPayment      string
-	IsWinner            bool
-	TotalQuantity       int
+	OrderId               string
+	OfferId               string
+	OfferedAmount         int64
+	CreatedAt             time.Time
+	CustomerId            string
+	ExternalId            string
+	BillingId             string
+	ItemSpecificationId   string
+	Items                 []OrderItem `json:"items,omitempty"`
+	ExtraData             string
+	State                 string
+	SortKey               string
+	PointOfSaleId         string
+	WompiIdPayment        string
+	IsWinner              bool
+	TotalQuantity         int
+	SiigoInvoicePublicURL string
 }
 
 type OrderDetail struct {
