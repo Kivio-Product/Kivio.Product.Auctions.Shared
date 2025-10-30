@@ -105,7 +105,8 @@ func (h *NotificationHelper) sendNotificationForOrders(
 	var siigoInvoiceURL string
 
 	for _, order := range orders {
-		itemNames = append(itemNames, order.ExtraData)
+		itemInfo := fmt.Sprintf("%s %d UND", order.ExtraData, order.TotalQuantity)
+		itemNames = append(itemNames, itemInfo)
 		totalAmount += int64(order.OfferedAmount)
 		if siigoInvoiceURL == "" && order.SiigoInvoicePublicURL != "" {
 			siigoInvoiceURL = order.SiigoInvoicePublicURL
