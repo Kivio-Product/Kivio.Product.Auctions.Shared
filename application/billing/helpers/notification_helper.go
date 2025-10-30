@@ -103,7 +103,8 @@ func (h *NotificationHelper) sendNotificationForOrders(
 	var totalAmount int64
 
 	for _, order := range orders {
-		itemNames = append(itemNames, order.ExtraData)
+		itemInfo := fmt.Sprintf("%s %d UND", order.ExtraData, order.TotalQuantity)
+		itemNames = append(itemNames, itemInfo)
 		totalAmount += int64(order.OfferedAmount)
 	}
 
