@@ -196,13 +196,13 @@ type EcommerceOrderItemResponse struct {
 }
 
 type EcommerceOrderResponse struct {
-	ID                     int                          `json:"id"`
-	OrderItemID            int                          `json:"order_item_id"`
-	OrderItemsCount        int                          `json:"order_items_count"`
-	OrderItems             []EcommerceOrderItemResponse `json:"order_items"`
-	SiigoInvoicePublicURL  string                       `json:"siigo_invoice_public_url"`
-	Success                bool                         `json:"success"`
-	Message                string                       `json:"message"`
+	ID                    int                          `json:"id"`
+	OrderItemID           int                          `json:"order_item_id"`
+	OrderItemsCount       int                          `json:"order_items_count"`
+	OrderItems            []EcommerceOrderItemResponse `json:"order_items"`
+	SiigoInvoicePublicURL string                       `json:"siigo_invoice_public_url"`
+	Success               bool                         `json:"success"`
+	Message               string                       `json:"message"`
 }
 
 type EcommerceSimpleAddress struct {
@@ -267,11 +267,11 @@ type ItemVerificationDetail struct {
 }
 
 type OrderVerificationResult struct {
-	IsValid      bool                     `json:"is_valid"`
-	TotalItems   int                      `json:"total_items"`
-	GrandTotal   float64                  `json:"grand_total"`
-	Details      []ItemVerificationDetail `json:"details"`
-	MinTotal     float64                  `json:"min_total"`
+	IsValid    bool                     `json:"is_valid"`
+	TotalItems int                      `json:"total_items"`
+	GrandTotal float64                  `json:"grand_total"`
+	Details    []ItemVerificationDetail `json:"details"`
+	MinTotal   float64                  `json:"min_total"`
 }
 
 type EcommerceBridge struct {
@@ -292,6 +292,7 @@ type ItemWithDetails struct {
 
 type EcommerceService interface {
 	GetItems(ctx context.Context, apiUrl, apiKey string, page, limit int) ([]itemDomain.Item, error)
+	GetItemsWithLastItem(ctx context.Context, apiUrl, apiKey string, lastItemID string, limit int) ([]itemDomain.Item, string, error)
 	GetItemsRaw(ctx context.Context, apiUrl, apiKey string, page, limit int, publishedStatus bool) ([]byte, error)
 	GetItemByID(ctx context.Context, id, apiUrl, apiKey string) (*itemDomain.Item, error)
 	GetItemByIDWithDetails(ctx context.Context, id, apiUrl, apiKey string) (*ItemWithDetails, error)
@@ -332,6 +333,27 @@ func (b *EcommerceBridge) GetItems(ctx context.Context, apiUrl, apiKey string, p
 		}
 	}
 	return result, nil
+}
+
+func (b *EcommerceBridge) GetItemsWithLastItem(ctx context.Context, apiUrl, apiKey string, lastItemID string, limit int) ([]itemDomain.Item, string, error) {
+	items, nextItemID, err := b.client.GetItemsWithLastItem(ctx, apiUrl, apiKey, lastItemID, limit)
+	if err != nil {
+		return nil, "", err
+	}
+
+	result := make([]itemDomain.Item, len(items))
+	for i, item := range items {
+		result[i] = itemDomain.Item{
+			ItemId:        item.ItemId,
+			Name:          item.Name,
+			Description:   item.Description,
+			ExternalId:    item.ExternalId,
+			PointOfSaleId: item.PointOfSaleId,
+			Url:           item.Url,
+			Source:        item.Source,
+		}
+	}
+	return result, nextItemID, nil
 }
 
 func (b *EcommerceBridge) GetItemsRaw(ctx context.Context, apiUrl, apiKey string, page, limit int, publishedStatus bool) ([]byte, error) {

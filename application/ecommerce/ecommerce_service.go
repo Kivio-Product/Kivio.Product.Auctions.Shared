@@ -10,6 +10,7 @@ import (
 
 type EcommerceService interface {
 	GetItems(ctx context.Context, apiUrl, apiKey string, page, limit int) ([]itemDomain.Item, error)
+	GetItemsWithLastItem(ctx context.Context, apiUrl, apiKey string, lastItemID string, limit int) ([]itemDomain.Item, string, error)
 	GetItemsRaw(ctx context.Context, apiUrl, apiKey string, page, limit int, publishedStatus bool) ([]byte, error)
 	GetItemByID(ctx context.Context, id, apiUrl, apiKey string) (*itemDomain.Item, error)
 	GetItemByIDWithDetails(ctx context.Context, id, apiUrl, apiKey string) (*ecommerceBridge.ItemWithDetails, error)
