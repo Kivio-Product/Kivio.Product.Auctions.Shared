@@ -108,7 +108,6 @@ func (s *OfferService) SendOfferEmail(ctx context.Context, auctionURL, unsubscri
 		})
 		return err
 	}
-
 	pos, err := s.pointOfSaleRespository.GetPosById(ctx, offer.PosId)
 	if err != nil {
 		s.serviceLogger.LogServiceError(ctx, "SendOfferEmail", err, map[string]interface{}{

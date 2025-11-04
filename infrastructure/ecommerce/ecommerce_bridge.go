@@ -309,6 +309,7 @@ type EcommerceService interface {
 	CreateEcommerceShoppingCartItem(ctx context.Context, apiUrl, apiKey string, cartItem *EcommerceShoppingCartItem) (*EcommerceShoppingCartItemResponse, error)
 	CreateEcommerceOrder(ctx context.Context, apiUrl, apiKey string, order *EcommerceOrder) (*EcommerceOrderResponse, error)
 	CreateEcommerceSimpleOrder(ctx context.Context, apiUrl, apiKey string, order *EcommerceSimpleOrder) (*EcommerceOrderResponse, error)
+	CountEcommerceItems(ctx context.Context, apiUrl, apiKey string) (int64, error)
 	UpdateOrderItemPrice(ctx context.Context, apiUrl, apiKey string, orderID, itemID int, orderItem *EcommerceOrderItem) error
 	UpdateOrder(ctx context.Context, apiUrl, apiKey string, orderID int, orderUpdate *EcommerceOrderUpdate) error
 	VerifyOrderTotal(ctx context.Context, items []ItemQuantity, apiUrl, apiKey string, minTotal float64) (*OrderVerificationResult, error)
@@ -333,6 +334,15 @@ func (b *EcommerceBridge) GetItems(ctx context.Context, apiUrl, apiKey string, p
 		}
 	}
 	return result, nil
+}
+
+func (b *EcommerceBridge) CountEcommerceItems(ctx context.Context, apiUrl, apiKey string) (int64, error) {
+	total, err := b.client.CountEcommerceItems(ctx, apiUrl, apiKey)
+	if err != nil {
+		return 0, err
+	}
+
+	return total, nil
 }
 
 func (b *EcommerceBridge) GetItemsWithLastItem(ctx context.Context, apiUrl, apiKey string, lastItemID string, limit int) ([]itemDomain.Item, string, error) {
