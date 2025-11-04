@@ -27,7 +27,7 @@ func (s *LocalItemSource) GetItemByID(ctx context.Context, itemID string) (*item
 }
 
 func (s *LocalItemSource) GetItemsByPointOfSale(ctx context.Context, posID string) ([]itemDomain.Item, error) {
-	items, err := s.itemRepo.GetItemsByPosId(posID, nil)
+	items, _, err := s.itemRepo.GetItemsByPosId(posID, nil)
 	if err != nil {
 		return nil, fmt.Errorf("error getting local items for POS %s: %w", posID, err)
 	}
