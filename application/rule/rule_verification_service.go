@@ -270,11 +270,11 @@ func (s *ruleVerificationService) evaluateRuleSpecifications(
 		if spec.Parameter == "offerType" {
 			continue
 		}
-		if s.verifySpecification(ctx, spec, itemSpecs, itemSpecId, posId) {
-			return true
+		if !s.verifySpecification(ctx, spec, itemSpecs, itemSpecId, posId) {
+			return false
 		}
 	}
-	return false
+	return true
 }
 
 func (s *ruleVerificationService) verifySpecification(
