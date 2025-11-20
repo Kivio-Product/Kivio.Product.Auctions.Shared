@@ -154,3 +154,27 @@ func (c *WompiClient) CreateNequiToken(phoneNumber, acceptanceToken, acceptanceP
 	}
 	return &result, nil
 }
+
+func (c *WompiClient) GetNequiTokenStatus(tokenID string) (*domain.WompiNequiTokenResponse, error) {
+	url := fmt.Sprintf("%s/tokens/nequi/%s", c.BaseURL, tokenID)
+	httpReq, _ := http.NewRequest("GET", url, nil)
+	httpReq.Header.Set("Authorization", "Bearer "+c.PublicKey)
+
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var errBody bytes.Buffer
+		errBody.ReadFrom(resp.Body)
+		return nil, fmt.Errorf("error en /tokens/nequi/%s: status %d, body: %s", tokenID, resp.StatusCode, errBody.String())
+	}
+
+	var result domain.WompiNequiTokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
