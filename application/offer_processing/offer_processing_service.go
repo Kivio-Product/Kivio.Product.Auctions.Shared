@@ -150,6 +150,27 @@ func (s *OfferProcessingService) ProcessOffer(ctx context.Context, offerId strin
 
 	fmt.Println("SuccessfulPaymentCustomers", successfulPaymentCustomers)
 
+	winnersByCustomer := make(map[string][]*orderDomain.Order)
+	var losersWithoutBillingApproved []*orderDomain.Order
+
+	for _, winner := range allWinners {
+		winnersByCustomer[winner.CustomerId] = append(winnersByCustomer[winner.CustomerId], winner)
+	}
+
+	for _, loser := range allLosers{
+		winners, exists := winnersByCustomer[loser.CustomerId]
+		if !exists || len(winners) == 0 {
+			losersWithoutBillingApproved = append(losersWithoutBillingApproved, loser)
+		}
+	}
+
+	err = s.sendEmailsGroupedByCustomer(ctx, losersWithoutBillingApproved, "Rejected", offer.PosId)
+	if err != nil {
+		fmt.Printf("Error sending emails for offer %s: %v\n", offerId, err)
+	}
+
+	s.updateBillingState(ctx, losersWithoutBillingApproved, "Rejected")
+
 	err = s.closeOffer(ctx, offer)
 	if err != nil {
 		return &processingDomain.ProcessOfferResponse{
@@ -409,19 +430,13 @@ func (s *OfferProcessingService) sendEmailsGroupedByCustomer(ctx context.Context
 	for customerId, customerOrders := range groupedByCustomer {
 		itemCounts := make(map[string]int)
 		var totalOfferedAmount int64
+		var itemNames []string
 
 		for _, order := range customerOrders {
+			itemInfo := fmt.Sprintf("%s %d UND", order.ExtraData, order.TotalQuantity)
+			itemNames = append(itemNames, itemInfo)
 			itemCounts[order.ExtraData] += order.TotalQuantity
 			totalOfferedAmount += order.OfferedAmount
-		}
-
-		var itemNames []string
-		for itemName, totalQuantity := range itemCounts {
-			if totalQuantity > 1 {
-				itemNames = append(itemNames, fmt.Sprintf("%s x%d unds", itemName, totalQuantity))
-			} else {
-				itemNames = append(itemNames, itemName)
-			}
 		}
 
 		notification := processingDomain.EmailNotification{
@@ -431,6 +446,7 @@ func (s *OfferProcessingService) sendEmailsGroupedByCustomer(ctx context.Context
 			ConcatenatedNames: joinStrings(itemNames, ", "),
 			PointOfSaleId:     pos.Name,
 		}
+		fmt.Println("ITEMnAMES CONCATENATED", itemNames)
 
 		err := s.sendEmailNotification(ctx, notification)
 		if err != nil {
