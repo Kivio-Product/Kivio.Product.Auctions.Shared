@@ -299,6 +299,7 @@ type EcommerceService interface {
 	GetItemByIDRaw(ctx context.Context, id, apiUrl, apiKey string) ([]byte, error)
 	GetCustomers(ctx context.Context, apiUrl, apiKey string) ([]customerDomain.Customer, error)
 	GetCustomerByID(ctx context.Context, id, apiUrl, apiKey string) (*customerDomain.Customer, error)
+	GetCustomerEmails(ctx context.Context, apiUrl, apiKey string) ([]string, error)
 	GetApiKey(ctx context.Context, username, password, tokenUrl string) (string, error)
 	UpdateItemStock(ctx context.Context, apiUrl, apiKey, itemId string, newStock int) error
 	GetAllItemsRaw(ctx context.Context, apiUrl, apiKey string) ([]byte, error)
@@ -413,13 +414,51 @@ func (b *EcommerceBridge) GetItemByIDRaw(ctx context.Context, id, apiUrl, apiKey
 }
 
 func (b *EcommerceBridge) GetCustomers(ctx context.Context, apiUrl, apiKey string) ([]customerDomain.Customer, error) {
-	// TODO: Implement customer mapping when needed
-	return nil, fmt.Errorf("GetCustomers not implemented - customer domain structure changed")
+	customers, err := b.client.GetCustomers(ctx, apiUrl, apiKey)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]customerDomain.Customer, len(customers))
+	for i, c := range customers {
+		result[i] = customerDomain.Customer{
+			Email: c.Email,
+		}
+	}
+	return result, nil
 }
 
 func (b *EcommerceBridge) GetCustomerByID(ctx context.Context, id, apiUrl, apiKey string) (*customerDomain.Customer, error) {
-	// TODO: Implement customer mapping when needed
 	return nil, fmt.Errorf("GetCustomerByID not implemented - customer domain structure changed")
+}
+
+func (b *EcommerceBridge) GetCustomerEmails(ctx context.Context, apiUrl, apiKey string) ([]string, error) {
+	emailSet := make(map[string]struct{})
+
+	customers, err := b.client.GetCustomers(ctx, apiUrl, apiKey)
+	if err == nil {
+		for _, c := range customers {
+			if c.Email != "" {
+				emailSet[c.Email] = struct{}{}
+			}
+		}
+	}
+
+	orderEmails, err := b.client.GetOrderEmails(ctx, apiUrl, apiKey)
+	if err == nil {
+		for _, email := range orderEmails {
+			if email != "" {
+				emailSet[email] = struct{}{}
+			}
+		}
+	}
+
+	emails := make([]string, 0, len(emailSet))
+	for email := range emailSet {
+		emails = append(emails, email)
+	}
+
+	return emails, nil
 }
 
 func (b *EcommerceBridge) GetApiKey(ctx context.Context, username, password, tokenUrl string) (string, error) {

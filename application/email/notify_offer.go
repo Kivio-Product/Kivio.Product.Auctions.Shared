@@ -69,10 +69,10 @@ func (uc *NotifyOfferUseCase) Execute(ctx context.Context, auctionURL, unsubscri
 	} else {
 		credentials, err := uc.ecommerceCredentialsSvc.GetCredentials(ctx, posID)
 		if err == nil {
-			customers, err := uc.ecommerceService.GetCustomers(credentials.Context, credentials.ApiURL, credentials.ApiKey)
+			emails, err := uc.ecommerceService.GetCustomerEmails(credentials.Context, credentials.ApiURL, credentials.ApiKey)
 			if err == nil {
-				for _, customer := range customers {
-					email := strings.TrimSpace(customer.Email)
+				for _, email := range emails {
+					email = strings.TrimSpace(email)
 					if email != "" {
 						if _, exists := blackListEmails[email]; !exists {
 							emailSet[email] = struct{}{}
