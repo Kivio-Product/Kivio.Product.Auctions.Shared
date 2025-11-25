@@ -52,6 +52,7 @@ func (h *NotificationHelper) SendOrderNotificationGroupedByState(
 	ctx context.Context,
 	orders []*orderDomain.Order,
 	posName string,
+	paymentState string,
 ) {
 	if len(orders) == 0 {
 		return
@@ -62,22 +63,28 @@ func (h *NotificationHelper) SendOrderNotificationGroupedByState(
 		ordersByCustomer[order.CustomerId] = append(ordersByCustomer[order.CustomerId], order)
 	}
 
-	fmt.Printf("[NotificationHelper] Sending notifications for %d customers\n", len(ordersByCustomer))
+	fmt.Printf("[NotificationHelper] Sending notifications for %d customers with paymentState=%s\n", len(ordersByCustomer), paymentState)
 
 	for customerID, customerOrders := range ordersByCustomer {
 		approvedOrders := []*orderDomain.Order{}
 		rejectedOrders := []*orderDomain.Order{}
 
-		for _, order := range customerOrders {
-			if order.State == "Approved" {
-				approvedOrders = append(approvedOrders, order)
-			} else if order.State == "Rejected" {
-				rejectedOrders = append(rejectedOrders, order)
+		if paymentState == "Rejected" {
+			rejectedOrders = customerOrders
+			fmt.Printf("[NotificationHelper] Customer %s - PaymentState is Rejected, treating all %d orders as Rejected\n",
+				customerID, len(customerOrders))
+		} else {
+			for _, order := range customerOrders {
+				if order.State == "Approved" {
+					approvedOrders = append(approvedOrders, order)
+				} else if order.State == "Rejected" {
+					rejectedOrders = append(rejectedOrders, order)
+				}
 			}
-		}
 
-		fmt.Printf("[NotificationHelper] Customer %s - Approved: %d, Rejected: %d\n",
-			customerID, len(approvedOrders), len(rejectedOrders))
+			fmt.Printf("[NotificationHelper] Customer %s - Approved: %d, Rejected: %d\n",
+				customerID, len(approvedOrders), len(rejectedOrders))
+		}
 
 		if len(approvedOrders) > 0 {
 			h.sendNotificationForOrders(ctx, customerID, approvedOrders, "Approved", posName)

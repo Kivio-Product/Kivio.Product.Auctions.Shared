@@ -77,6 +77,7 @@ func (o *PaymentConfirmationOrchestrator) ExecutePaymentConfirmation(
 		ctx,
 		validOrders,
 		posName,
+		state,
 	)
 
 	fmt.Println("Facturación actualizada correctamente")
