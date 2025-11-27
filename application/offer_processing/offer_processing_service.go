@@ -157,7 +157,7 @@ func (s *OfferProcessingService) ProcessOffer(ctx context.Context, offerId strin
 		winnersByCustomer[winner.CustomerId] = append(winnersByCustomer[winner.CustomerId], winner)
 	}
 
-	for _, loser := range allLosers{
+	for _, loser := range allLosers {
 		winners, exists := winnersByCustomer[loser.CustomerId]
 		if !exists || len(winners) == 0 {
 			losersWithoutBillingApproved = append(losersWithoutBillingApproved, loser)
@@ -323,61 +323,9 @@ func (s *OfferProcessingService) processItemSpecOrders(ctx context.Context, item
 		}
 	}
 
-	totalQuantityToReduce := 0
-	for _, winner := range winners {
-		totalQuantityToReduce += winner.TotalQuantity
-	}
-
-	fmt.Printf("\n=== ACTUALIZANDO AVAILABILITY ===\n")
-	fmt.Printf("Availability actual: %d\n", availability)
-	fmt.Printf("Total quantity a reducir (ganadoras): %d\n", totalQuantityToReduce)
-
-	if itemSpec.IsExternal {
-		if totalQuantityToReduce > 0 {
-			newStock := availability - totalQuantityToReduce
-			fmt.Printf("Calculando nuevo stock EXTERNO: %d - %d = %d\n", availability, totalQuantityToReduce, newStock)
-			fmt.Printf("⚠️  ALERTA: newStock = %d %s\n", newStock, func() string {
-				if newStock < 0 {
-					return "(NEGATIVO - POSIBLE ERROR)"
-				}
-				return "(OK)"
-			}())
-			err := s.updateExternalItemStock(ctx, posId, itemSpec.ItemId, newStock)
-			if err != nil {
-				fmt.Printf("❌ Error updating external stock for item %s: %v\n", itemSpec.ItemId, err)
-			} else {
-				fmt.Printf("✓ Stock externo actualizado exitosamente a %d\n", newStock)
-			}
-		}
-	} else {
-		newAvailability := availability - totalQuantityToReduce
-		fmt.Printf("Calculando nuevo availability LOCAL: %d - %d = %d\n", availability, totalQuantityToReduce, newAvailability)
-		fmt.Printf("⚠️  ALERTA: newAvailability = %d %s\n", newAvailability, func() string {
-			if newAvailability < 0 {
-				return "(NEGATIVO - POSIBLE ERROR)"
-			}
-			return "(OK)"
-		}())
-
-		fmt.Printf("Ejecutando itemSpecService.Update con:\n")
-		fmt.Printf("  - ItemSpecId: %s\n", itemSpec.Id)
-		fmt.Printf("  - Currency: %s\n", itemSpec.Currency)
-		fmt.Printf("  - OfferId: %s\n", itemSpec.OfferId)
-		fmt.Printf("  - ItemId: %s\n", itemSpec.ItemId)
-		fmt.Printf("  - PointOfSaleId: %s\n", itemSpec.PointOfSaleId)
-		fmt.Printf("  - Amount: %d\n", itemSpec.Amount)
-		fmt.Printf("  - NEW Availability: %d (era %d)\n", newAvailability, itemSpec.Availability)
-		fmt.Printf("  - ExpireAt: %v\n", itemSpec.ExpireAt)
-
-		err := s.itemSpecService.Update(ctx, itemSpec.Id, itemSpec.Currency, itemSpec.OfferId, itemSpec.ItemId, itemSpec.PointOfSaleId, itemSpec.Amount, int64(newAvailability), itemSpec.ExpireAt)
-		if err != nil {
-			fmt.Printf("❌ Error updating item spec availability %s: %v\n", itemSpecId, err)
-		} else {
-			fmt.Printf("✓ Availability actualizado exitosamente de %d a %d\n", itemSpec.Availability, newAvailability)
-		}
-	}
-
-	fmt.Printf("=================================\n\n")
+	fmt.Printf("\n=== WINNER/LOSER DETERMINATION COMPLETE ===\n")
+	fmt.Printf("Winners: %d | Losers: %d\n", len(winners), len(losers))
+	fmt.Printf("===========================================\n\n")
 
 	return winners, losers, nil
 }
