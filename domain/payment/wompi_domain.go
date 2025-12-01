@@ -130,6 +130,29 @@ type WompiNequiTokenResponse struct {
 	} `json:"data"`
 }
 
+type WompiTransactionStatusResponse struct {
+	Data struct {
+		ID                string      `json:"id"`
+		CreatedAt         string      `json:"created_at"`
+		FinalizedAt       string      `json:"finalized_at,omitempty"`
+		AmountInCents     int64       `json:"amount_in_cents"`
+		Reference         string      `json:"reference"`
+		CustomerEmail     string      `json:"customer_email"`
+		Currency          string      `json:"currency"`
+		PaymentMethodType string      `json:"payment_method_type"`
+		PaymentMethod     string      `json:"payment_method"`
+		Status            string      `json:"status"` // APPROVED, DECLINED, PENDING, VOIDED, ERROR
+		StatusMessage     string      `json:"status_message,omitempty"`
+		BillingData       interface{} `json:"billing_data,omitempty"`
+		ShippingAddress   interface{} `json:"shipping_address,omitempty"`
+		RedirectURL       string      `json:"redirect_url,omitempty"`
+		PaymentSourceID   int64       `json:"payment_source_id,omitempty"`
+		PaymentLinkID     string      `json:"payment_link_id,omitempty"`
+		CustomerData      interface{} `json:"customer_data,omitempty"`
+		BillingAddress    interface{} `json:"billing_address,omitempty"`
+	} `json:"data"`
+}
+
 func GenerateWompiSignature(req WompiSignatureRequest) (*WompiSignatureResponse, error) {
 	if req.Reference == "" {
 		return nil, fmt.Errorf("la referencia no puede estar vacía")
