@@ -307,6 +307,7 @@ type EcommerceService interface {
 	CreateEcommerceCustomer(ctx context.Context, apiUrl, apiKey string, customer *EcommerceCustomer) (*EcommerceCustomerResponse, error)
 	CreateEcommerceBillingAddress(ctx context.Context, apiUrl, apiKey string, customerID int, address *EcommerceAddress) (*EcommerceBillingAddressResponse, error)
 	CreateEcommerceShippingAddress(ctx context.Context, apiUrl, apiKey string, customerID int, address *EcommerceAddress) (*EcommerceShippingAddressResponse, error)
+	DeleteEcommerceShoppingCart(ctx context.Context, apiUrl, apiKey string, customerID int) error
 	CreateEcommerceShoppingCartItem(ctx context.Context, apiUrl, apiKey string, cartItem *EcommerceShoppingCartItem) (*EcommerceShoppingCartItemResponse, error)
 	CreateEcommerceOrder(ctx context.Context, apiUrl, apiKey string, order *EcommerceOrder) (*EcommerceOrderResponse, error)
 	CreateEcommerceSimpleOrder(ctx context.Context, apiUrl, apiKey string, order *EcommerceSimpleOrder) (*EcommerceOrderResponse, error)
@@ -604,6 +605,19 @@ func (b *EcommerceBridge) CreateEcommerceShippingAddress(ctx context.Context, ap
 		Success: true,
 		Message: "Shipping address created successfully",
 	}, nil
+}
+
+func (b *EcommerceBridge) DeleteEcommerceShoppingCart(ctx context.Context, apiUrl, apiKey string, customerID int) error {
+	fmt.Printf("[ECOMMERCE] Deleting shopping cart for customer %d\n", customerID)
+
+	err := b.client.DeleteEcommerceShoppingCart(ctx, apiUrl, apiKey, customerID)
+	if err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to delete shopping cart: %v\n", err)
+		return fmt.Errorf("failed to delete shopping cart: %w", err)
+	}
+
+	fmt.Printf("[ECOMMERCE] SUCCESS: Shopping cart deleted for customer %d\n", customerID)
+	return nil
 }
 
 func (b *EcommerceBridge) CreateEcommerceShoppingCartItem(ctx context.Context, apiUrl, apiKey string, cartItem *EcommerceShoppingCartItem) (*EcommerceShoppingCartItemResponse, error) {

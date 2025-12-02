@@ -25,6 +25,7 @@ type EcommerceService interface {
 	CreateEcommerceCustomer(ctx context.Context, apiUrl, apiKey string, customer *ecommerceBridge.EcommerceCustomer) (*ecommerceBridge.EcommerceCustomerResponse, error)
 	CreateEcommerceBillingAddress(ctx context.Context, apiUrl, apiKey string, customerID int, address *ecommerceBridge.EcommerceAddress) (*ecommerceBridge.EcommerceBillingAddressResponse, error)
 	CreateEcommerceShippingAddress(ctx context.Context, apiUrl, apiKey string, customerID int, address *ecommerceBridge.EcommerceAddress) (*ecommerceBridge.EcommerceShippingAddressResponse, error)
+	DeleteEcommerceShoppingCart(ctx context.Context, apiUrl, apiKey string, customerID int) error
 	CreateEcommerceShoppingCartItem(ctx context.Context, apiUrl, apiKey string, cartItem *ecommerceBridge.EcommerceShoppingCartItem) (*ecommerceBridge.EcommerceShoppingCartItemResponse, error)
 	CreateEcommerceOrder(ctx context.Context, apiUrl, apiKey string, order *ecommerceBridge.EcommerceOrder) (*ecommerceBridge.EcommerceOrderResponse, error)
 	CreateEcommerceSimpleOrder(ctx context.Context, apiUrl, apiKey string, order *ecommerceBridge.EcommerceSimpleOrder) (*ecommerceBridge.EcommerceOrderResponse, error)

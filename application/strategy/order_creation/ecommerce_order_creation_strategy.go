@@ -119,6 +119,12 @@ func (s *EcommerceOrderCreationStrategy) CreateExternalOrder(
 	productID := s.extractCleanProductID(itemSpec.ItemId)
 	fmt.Printf("[EcommerceOrderCreation] Extracted clean product ID: %d from itemSpec.ItemId: %s\n", productID, itemSpec.ItemId)
 
+	fmt.Printf("[EcommerceOrderCreation] Deleting existing shopping cart for customer %d\n", customerResponse.ID)
+	err = s.ecommerceSvc.DeleteEcommerceShoppingCart(ctx, credentials.ApiURL, credentials.ApiKey, customerResponse.ID)
+	if err != nil {
+		fmt.Printf("[EcommerceOrderCreation] WARNING: Failed to delete shopping cart: %v (continuing anyway)\n", err)
+	}
+
 	ecommerceShoppingCartItem := s.createEcommerceShoppingCartItem(order, customerResponse.ID, productID)
 
 	cartResponse, err := s.ecommerceSvc.CreateEcommerceShoppingCartItem(ctx, credentials.ApiURL, credentials.ApiKey, ecommerceShoppingCartItem)
