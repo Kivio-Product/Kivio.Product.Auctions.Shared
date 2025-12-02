@@ -3,7 +3,7 @@ module github.com/Kivio-Product/Kivio.Product.Auctions.Shared
 go 1.23.3
 
 require (
-	github.com/Kivio-Product/Kivio.Product.Auctions.EcommerceClient v0.1.7
+	github.com/Kivio-Product/Kivio.Product.Auctions.EcommerceClient v0.1.8
 	github.com/aws/aws-sdk-go v1.55.7
 	github.com/google/uuid v1.6.0
 	github.com/jung-kurt/gofpdf v1.16.2
