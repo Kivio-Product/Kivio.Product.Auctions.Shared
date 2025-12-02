@@ -10,6 +10,7 @@ type Item struct {
 	PointOfSaleId string
 	Url           string
 	Source        string
+	StockQuantity int64
 }
 
 func (o *Item) Update(name, description, externalId, pointOfSaleId, url string) error {

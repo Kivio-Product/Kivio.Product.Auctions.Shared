@@ -363,6 +363,7 @@ func (b *EcommerceBridge) GetItemsWithLastItem(ctx context.Context, apiUrl, apiK
 			PointOfSaleId: item.PointOfSaleId,
 			Url:           item.Url,
 			Source:        item.Source,
+			StockQuantity: item.StockQuantity,
 		}
 	}
 	return result, nextItemID, nil
