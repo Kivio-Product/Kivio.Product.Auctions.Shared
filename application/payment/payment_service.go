@@ -175,17 +175,109 @@ func (s *paymentService) ProcessPaymentForCustomer(ctx context.Context, orders [
 		return fmt.Errorf("error creating Wompi transaction for customer %s with total amount %d: %w", customerId, totalAmountCents, err)
 	}
 
-	s.eventLogger.LogPaymentProcessed(ctx, fmt.Sprintf("%d", transactionResp.Data.ID), orders[0].OrderId, transactionResp.Data.Status, float64(totalAmountCents)/100)
+	transactionID := transactionResp.Data.ID
+	initialStatus := transactionResp.Data.Status
 
-	s.serviceLogger.LogServiceEnd(ctx, "ProcessPaymentForCustomer", time.Since(start), map[string]interface{}{
+	fmt.Printf("[Payment] Transaction created: ID=%s, Initial Status=%s\n", transactionID, initialStatus)
+
+	if initialStatus == "APPROVED" {
+		fmt.Printf("[Payment] ✓ Payment APPROVED immediately for customer %s (Transaction: %s)\n", customerId, transactionID)
+		s.eventLogger.LogPaymentProcessed(ctx, transactionID, orders[0].OrderId, initialStatus, float64(totalAmountCents)/100)
+		s.serviceLogger.LogServiceEnd(ctx, "ProcessPaymentForCustomer", time.Since(start), map[string]interface{}{
+			"customer_id":        customerId,
+			"order_count":        len(orders),
+			"total_amount_cents": totalAmountCents,
+			"billing_reference":  billingReference,
+			"transaction_id":     transactionID,
+			"transaction_status": initialStatus,
+			"success":            true,
+		})
+		return nil
+	}
+
+	if initialStatus == "DECLINED" || initialStatus == "VOIDED" || initialStatus == "ERROR" {
+		err := fmt.Errorf("payment %s for customer %s (status: %s)", initialStatus, customerId, initialStatus)
+		fmt.Printf("[Payment] ✗ Payment FAILED for customer %s: %s (Transaction: %s)\n", customerId, initialStatus, transactionID)
+		s.eventLogger.LogPaymentProcessed(ctx, transactionID, orders[0].OrderId, initialStatus, float64(totalAmountCents)/100)
+		s.serviceLogger.LogServiceError(ctx, "ProcessPaymentForCustomer", err, map[string]interface{}{
+			"customer_id":        customerId,
+			"transaction_id":     transactionID,
+			"transaction_status": initialStatus,
+			"error":              "payment_declined",
+		})
+		return err
+	}
+
+	if initialStatus == "PENDING" {
+		fmt.Printf("[Payment] Payment PENDING for customer %s, querying status... (Transaction: %s)\n", customerId, transactionID)
+
+		maxRetries := 3
+		retryDelay := 2 * time.Second
+		finalStatus := initialStatus
+
+		for i := 0; i < maxRetries; i++ {
+			time.Sleep(retryDelay)
+
+			statusResp, err := s.wompiService.GetTransactionStatus(ctx, transactionID)
+			if err != nil {
+				fmt.Printf("[Payment] Warning: Could not query transaction status (attempt %d/%d): %v\n", i+1, maxRetries, err)
+				continue
+			}
+
+			finalStatus = statusResp.Data.Status
+			fmt.Printf("[Payment] Transaction status check %d/%d: %s\n", i+1, maxRetries, finalStatus)
+
+			if finalStatus == "APPROVED" {
+				fmt.Printf("[Payment] ✓ Payment APPROVED after polling for customer %s (Transaction: %s)\n", customerId, transactionID)
+				s.eventLogger.LogPaymentProcessed(ctx, transactionID, orders[0].OrderId, finalStatus, float64(totalAmountCents)/100)
+				s.serviceLogger.LogServiceEnd(ctx, "ProcessPaymentForCustomer", time.Since(start), map[string]interface{}{
+					"customer_id":        customerId,
+					"order_count":        len(orders),
+					"total_amount_cents": totalAmountCents,
+					"billing_reference":  billingReference,
+					"transaction_id":     transactionID,
+					"transaction_status": finalStatus,
+					"polling_attempts":   i + 1,
+					"success":            true,
+				})
+				return nil
+			}
+
+			if finalStatus == "DECLINED" || finalStatus == "VOIDED" || finalStatus == "ERROR" {
+				err := fmt.Errorf("payment %s for customer %s after polling (status: %s)", finalStatus, customerId, finalStatus)
+				fmt.Printf("[Payment] ✗ Payment FAILED after polling for customer %s: %s (Transaction: %s)\n", customerId, finalStatus, transactionID)
+				s.eventLogger.LogPaymentProcessed(ctx, transactionID, orders[0].OrderId, finalStatus, float64(totalAmountCents)/100)
+				s.serviceLogger.LogServiceError(ctx, "ProcessPaymentForCustomer", err, map[string]interface{}{
+					"customer_id":        customerId,
+					"transaction_id":     transactionID,
+					"transaction_status": finalStatus,
+					"polling_attempts":   i + 1,
+					"error":              "payment_declined_after_polling",
+				})
+				return err
+			}
+		}
+
+		err := fmt.Errorf("payment still PENDING for customer %s after %d retries", customerId, maxRetries)
+		fmt.Printf("[Payment] ✗ Payment timeout for customer %s (still PENDING after %d retries, Transaction: %s)\n", customerId, maxRetries, transactionID)
+		s.eventLogger.LogPaymentProcessed(ctx, transactionID, orders[0].OrderId, finalStatus, float64(totalAmountCents)/100)
+		s.serviceLogger.LogServiceError(ctx, "ProcessPaymentForCustomer", err, map[string]interface{}{
+			"customer_id":        customerId,
+			"transaction_id":     transactionID,
+			"transaction_status": finalStatus,
+			"polling_attempts":   maxRetries,
+			"error":              "payment_timeout",
+		})
+		return err
+	}
+
+	err = fmt.Errorf("unknown payment status '%s' for customer %s", initialStatus, customerId)
+	fmt.Printf("[Payment] ✗ Unknown payment status for customer %s: %s (Transaction: %s)\n", customerId, initialStatus, transactionID)
+	s.serviceLogger.LogServiceError(ctx, "ProcessPaymentForCustomer", err, map[string]interface{}{
 		"customer_id":        customerId,
-		"order_count":        len(orders),
-		"total_amount_cents": totalAmountCents,
-		"billing_reference":  billingReference,
-		"transaction_id":     transactionResp.Data.ID,
-		"transaction_status": transactionResp.Data.Status,
-		"success":            true,
+		"transaction_id":     transactionID,
+		"transaction_status": initialStatus,
+		"error":              "unknown_status",
 	})
-
-	return nil
+	return err
 }
