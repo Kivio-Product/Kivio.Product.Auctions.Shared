@@ -155,6 +155,13 @@ func (s *QuickOfferStrategy) ProcessApprovedOrders(
 				fmt.Printf("[QuickOffer] Orders finalized successfully with invoice URL: %s\n", invoiceURL)
 				for _, order := range sourceOrders {
 					order.SiigoInvoicePublicURL = invoiceURL
+
+					err := s.orderRepo.UpdateOrder(ctx, order)
+					if err != nil {
+						fmt.Printf("[QuickOffer] ERROR: Failed to save order %s with invoice URL: %v\n", order.OrderId, err)
+					} else {
+						fmt.Printf("[QuickOffer] Order %s saved successfully with invoice URL\n", order.OrderId)
+					}
 				}
 			}
 		}

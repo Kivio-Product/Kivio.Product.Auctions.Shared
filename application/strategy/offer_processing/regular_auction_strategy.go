@@ -14,10 +14,12 @@ import (
 	orderDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 	domainStrategy "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/strategy"
 	itemSpecInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item_specification"
+	orderInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/order"
 )
 
 type RegularAuctionStrategy struct {
 	itemSpecRepo         itemSpecInfrastructure.ItemSpecificationRepository
+	orderRepo            orderInfrastructure.OrderRepository
 	itemSourceFactory    *strategyApp.ItemSourceFactory
 	orderCreationFactory *strategyApp.OrderCreationStrategyFactory
 	ecommerceService     ecommerceService.EcommerceService
@@ -26,6 +28,7 @@ type RegularAuctionStrategy struct {
 
 func NewRegularAuctionStrategy(
 	itemSpecRepo itemSpecInfrastructure.ItemSpecificationRepository,
+	orderRepo orderInfrastructure.OrderRepository,
 	itemSourceFactory *strategyApp.ItemSourceFactory,
 	orderCreationFactory *strategyApp.OrderCreationStrategyFactory,
 	ecommerceService ecommerceService.EcommerceService,
@@ -33,6 +36,7 @@ func NewRegularAuctionStrategy(
 ) *RegularAuctionStrategy {
 	return &RegularAuctionStrategy{
 		itemSpecRepo:         itemSpecRepo,
+		orderRepo:            orderRepo,
 		itemSourceFactory:    itemSourceFactory,
 		orderCreationFactory: orderCreationFactory,
 		ecommerceService:     ecommerceService,
@@ -136,6 +140,13 @@ func (s *RegularAuctionStrategy) ProcessApprovedOrders(
 				fmt.Printf("[RegularAuction] Orders finalized successfully with invoice URL: %s\n", invoiceURL)
 				for _, order := range sourceOrders {
 					order.SiigoInvoicePublicURL = invoiceURL
+
+					err := s.orderRepo.UpdateOrder(ctx, order)
+					if err != nil {
+						fmt.Printf("[RegularAuction] ERROR: Failed to save order %s with invoice URL: %v\n", order.OrderId, err)
+					} else {
+						fmt.Printf("[RegularAuction] Order %s saved successfully with invoice URL\n", order.OrderId)
+					}
 				}
 			}
 		}
