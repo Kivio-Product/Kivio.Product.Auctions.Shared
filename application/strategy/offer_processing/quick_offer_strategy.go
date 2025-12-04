@@ -3,6 +3,8 @@ package offer_processing
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"os"
 
 	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
 	strategyApp "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/strategy"
@@ -10,6 +12,7 @@ import (
 	itemDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
 	orderDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 	domainStrategy "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/strategy"
+	billingInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/billing"
 	itemSpecInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item_specification"
 	orderInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/order"
 )
@@ -17,6 +20,7 @@ import (
 type QuickOfferStrategy struct {
 	itemSpecRepo         itemSpecInfrastructure.ItemSpecificationRepository
 	orderRepo            orderInfrastructure.OrderRepository
+	billingRepo          billingInfrastructure.BillingRepository
 	itemSourceFactory    *strategyApp.ItemSourceFactory
 	orderCreationFactory *strategyApp.OrderCreationStrategyFactory
 	offerService         offerService.IOfferService
@@ -25,6 +29,7 @@ type QuickOfferStrategy struct {
 func NewQuickOfferStrategy(
 	itemSpecRepo itemSpecInfrastructure.ItemSpecificationRepository,
 	orderRepo orderInfrastructure.OrderRepository,
+	billingRepo billingInfrastructure.BillingRepository,
 	itemSourceFactory *strategyApp.ItemSourceFactory,
 	orderCreationFactory *strategyApp.OrderCreationStrategyFactory,
 	offerService offerService.IOfferService,
@@ -32,6 +37,7 @@ func NewQuickOfferStrategy(
 	return &QuickOfferStrategy{
 		itemSpecRepo:         itemSpecRepo,
 		orderRepo:            orderRepo,
+		billingRepo:          billingRepo,
 		itemSourceFactory:    itemSourceFactory,
 		orderCreationFactory: orderCreationFactory,
 		offerService:         offerService,
@@ -153,6 +159,10 @@ func (s *QuickOfferStrategy) ProcessApprovedOrders(
 				fmt.Printf("[QuickOffer] Error finalizing orders: %v\n", err)
 			} else {
 				fmt.Printf("[QuickOffer] Orders finalized successfully with invoice URL: %s\n", invoiceURL)
+
+				fullInvoiceURL := s.constructSiigoInvoiceURL(invoiceURL, billing.Id)
+				fmt.Printf("[QuickOffer] Constructed full Siigo invoice URL: %s\n", fullInvoiceURL)
+
 				for _, order := range sourceOrders {
 					order.SiigoInvoicePublicURL = invoiceURL
 
@@ -162,6 +172,14 @@ func (s *QuickOfferStrategy) ProcessApprovedOrders(
 					} else {
 						fmt.Printf("[QuickOffer] Order %s saved successfully with invoice URL\n", order.OrderId)
 					}
+				}
+
+				billing.SiigoInvoiceURL = fullInvoiceURL
+				err = s.billingRepo.UpdateBilling(ctx, billing)
+				if err != nil {
+					fmt.Printf("[QuickOffer] ERROR: Failed to save billing %s with Siigo invoice URL: %v\n", billing.Id, err)
+				} else {
+					fmt.Printf("[QuickOffer] Billing %s saved successfully with Siigo invoice URL\n", billing.Id)
 				}
 			}
 		}
@@ -189,4 +207,24 @@ func (s *QuickOfferStrategy) ProcessApprovedOrders(
 
 func (s *QuickOfferStrategy) GetOfferType() string {
 	return "quick_offer"
+}
+
+func (s *QuickOfferStrategy) constructSiigoInvoiceURL(invoiceURL string, billingID string) string {
+	if invoiceURL == "" || invoiceURL == "null" {
+		fmt.Printf("[QuickOffer] Invoice URL is null or empty, returning empty string\n")
+		return ""
+	}
+
+	auctionsEnv := os.Getenv("AUCTIONS_ENV")
+	if auctionsEnv == "" {
+		fmt.Printf("[QuickOffer] WARNING: AUCTIONS_ENV not set, using invoiceURL as-is\n")
+		return invoiceURL
+	}
+
+	fullURL := fmt.Sprintf("%s/auctions/invoice-wait?invoiceUrl=%s&billingId=%s",
+		auctionsEnv,
+		url.QueryEscape(invoiceURL),
+		url.QueryEscape(billingID))
+
+	return fullURL
 }

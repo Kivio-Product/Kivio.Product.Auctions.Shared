@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"os"
 	"strings"
 
 	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
@@ -13,6 +15,7 @@ import (
 	itemSpecDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item_specification"
 	orderDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 	domainStrategy "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/strategy"
+	billingInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/billing"
 	itemSpecInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/item_specification"
 	orderInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/order"
 )
@@ -20,6 +23,7 @@ import (
 type RegularAuctionStrategy struct {
 	itemSpecRepo         itemSpecInfrastructure.ItemSpecificationRepository
 	orderRepo            orderInfrastructure.OrderRepository
+	billingRepo          billingInfrastructure.BillingRepository
 	itemSourceFactory    *strategyApp.ItemSourceFactory
 	orderCreationFactory *strategyApp.OrderCreationStrategyFactory
 	ecommerceService     ecommerceService.EcommerceService
@@ -29,6 +33,7 @@ type RegularAuctionStrategy struct {
 func NewRegularAuctionStrategy(
 	itemSpecRepo itemSpecInfrastructure.ItemSpecificationRepository,
 	orderRepo orderInfrastructure.OrderRepository,
+	billingRepo billingInfrastructure.BillingRepository,
 	itemSourceFactory *strategyApp.ItemSourceFactory,
 	orderCreationFactory *strategyApp.OrderCreationStrategyFactory,
 	ecommerceService ecommerceService.EcommerceService,
@@ -37,6 +42,7 @@ func NewRegularAuctionStrategy(
 	return &RegularAuctionStrategy{
 		itemSpecRepo:         itemSpecRepo,
 		orderRepo:            orderRepo,
+		billingRepo:          billingRepo,
 		itemSourceFactory:    itemSourceFactory,
 		orderCreationFactory: orderCreationFactory,
 		ecommerceService:     ecommerceService,
@@ -138,6 +144,10 @@ func (s *RegularAuctionStrategy) ProcessApprovedOrders(
 				fmt.Printf("[RegularAuction] Error finalizing orders: %v\n", err)
 			} else {
 				fmt.Printf("[RegularAuction] Orders finalized successfully with invoice URL: %s\n", invoiceURL)
+
+				fullInvoiceURL := s.constructSiigoInvoiceURL(invoiceURL, billing.Id)
+				fmt.Printf("[RegularAuction] Constructed full Siigo invoice URL: %s\n", fullInvoiceURL)
+
 				for _, order := range sourceOrders {
 					order.SiigoInvoicePublicURL = invoiceURL
 
@@ -147,6 +157,14 @@ func (s *RegularAuctionStrategy) ProcessApprovedOrders(
 					} else {
 						fmt.Printf("[RegularAuction] Order %s saved successfully with invoice URL\n", order.OrderId)
 					}
+				}
+
+				billing.SiigoInvoiceURL = fullInvoiceURL
+				err = s.billingRepo.UpdateBilling(ctx, billing)
+				if err != nil {
+					fmt.Printf("[RegularAuction] ERROR: Failed to save billing %s with Siigo invoice URL: %v\n", billing.Id, err)
+				} else {
+					fmt.Printf("[RegularAuction] Billing %s saved successfully with Siigo invoice URL\n", billing.Id)
 				}
 			}
 		}
@@ -263,4 +281,24 @@ func (s *RegularAuctionStrategy) getCurrentExternalStock(
 	fmt.Printf("[RegularAuction] Fetched current stock from ecommerce: %d\n", currentStock)
 
 	return currentStock, nil
+}
+
+func (s *RegularAuctionStrategy) constructSiigoInvoiceURL(invoiceURL string, billingID string) string {
+	if invoiceURL == "" || invoiceURL == "null" {
+		fmt.Printf("[RegularAuction] Invoice URL is null or empty, returning empty string\n")
+		return ""
+	}
+
+	auctionsEnv := os.Getenv("AUCTIONS_ENV")
+	if auctionsEnv == "" {
+		fmt.Printf("[RegularAuction] WARNING: AUCTIONS_ENV not set, using invoiceURL as-is\n")
+		return invoiceURL
+	}
+
+	fullURL := fmt.Sprintf("%s/auctions/invoice-wait?invoiceUrl=%s&billingId=%s",
+		auctionsEnv,
+		url.QueryEscape(invoiceURL),
+		url.QueryEscape(billingID))
+
+	return fullURL
 }
