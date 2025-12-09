@@ -140,8 +140,8 @@ type WompiTransactionStatusResponse struct {
 		CustomerEmail     string      `json:"customer_email"`
 		Currency          string      `json:"currency"`
 		PaymentMethodType string      `json:"payment_method_type"`
-		PaymentMethod     string      `json:"payment_method"`
-		Status            string      `json:"status"` // APPROVED, DECLINED, PENDING, VOIDED, ERROR
+		PaymentMethod     interface{} `json:"payment_method"`
+		Status            string      `json:"status"`
 		StatusMessage     string      `json:"status_message,omitempty"`
 		BillingData       interface{} `json:"billing_data,omitempty"`
 		ShippingAddress   interface{} `json:"shipping_address,omitempty"`

@@ -390,6 +390,9 @@ func (s *OfferProcessingService) processItemSpecOrders(ctx context.Context, item
 		if err != nil {
 			fmt.Printf("Error updating winner order %s: %v\n", winner.OrderId, err)
 		}
+
+		winner.State = "Approved"
+		winner.IsWinner = true
 	}
 
 	for _, loser := range losers {
@@ -406,6 +409,9 @@ func (s *OfferProcessingService) processItemSpecOrders(ctx context.Context, item
 		if err != nil {
 			fmt.Printf("Error updating loser order %s: %v\n", loser.OrderId, err)
 		}
+
+		loser.State = "Rejected"
+		loser.IsWinner = false
 	}
 
 	fmt.Printf("\n=== WINNER/LOSER DETERMINATION COMPLETE ===\n")
@@ -622,6 +628,12 @@ func (s *OfferProcessingService) promoteLoserWithFailedPayments(
 
 	fmt.Printf("[Fallback] Freed availability: %d units from %d failed winners\n", freedAvailability, len(failedWinners))
 
+	fmt.Printf("[Fallback] DEBUG: Total losers in allLosers: %d\n", len(allLosers))
+	for i, loser := range allLosers {
+		fmt.Printf("[Fallback] DEBUG:   Loser %d: OrderId=%s | ItemSpec=%s | State=%s | Customer=%s\n",
+			i+1, loser.OrderId, loser.ItemSpecificationId, loser.State, loser.CustomerId)
+	}
+
 	var itemSpecLosers []*orderDomain.Order
 	for _, loser := range allLosers {
 		if loser.ItemSpecificationId == itemSpecId && loser.State == "Rejected" {
@@ -629,7 +641,7 @@ func (s *OfferProcessingService) promoteLoserWithFailedPayments(
 		}
 	}
 
-	fmt.Printf("[Fallback] Found %d losers for ItemSpec %s\n", len(itemSpecLosers), itemSpecId)
+	fmt.Printf("[Fallback] Found %d losers for ItemSpec %s with State=Rejected\n", len(itemSpecLosers), itemSpecId)
 
 	if len(itemSpecLosers) == 0 {
 		fmt.Printf("[Fallback] No losers available to promote\n")
