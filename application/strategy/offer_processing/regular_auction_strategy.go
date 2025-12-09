@@ -294,7 +294,7 @@ func (s *RegularAuctionStrategy) constructSiigoInvoiceURL(invoiceURL string, bil
 		return invoiceURL
 	}
 
-	fullURL := fmt.Sprintf("%s/auctions/invoice-wait?invoiceUrl=%s&billingId=%s",
+	fullURL := fmt.Sprintf("%s/invoice-wait?invoiceUrl=%s&billingId=%s",
 		auctionsEnv,
 		url.QueryEscape(invoiceURL),
 		url.QueryEscape(billingID))
