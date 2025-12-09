@@ -149,7 +149,7 @@ func (s *RegularAuctionStrategy) ProcessApprovedOrders(
 				fmt.Printf("[RegularAuction] Constructed full Siigo invoice URL: %s\n", fullInvoiceURL)
 
 				for _, order := range sourceOrders {
-					order.SiigoInvoicePublicURL = invoiceURL
+					order.SiigoInvoicePublicURL = fullInvoiceURL
 
 					err := s.orderRepo.UpdateOrder(ctx, order)
 					if err != nil {

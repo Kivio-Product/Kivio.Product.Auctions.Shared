@@ -164,7 +164,7 @@ func (s *QuickOfferStrategy) ProcessApprovedOrders(
 				fmt.Printf("[QuickOffer] Constructed full Siigo invoice URL: %s\n", fullInvoiceURL)
 
 				for _, order := range sourceOrders {
-					order.SiigoInvoicePublicURL = invoiceURL
+					order.SiigoInvoicePublicURL = fullInvoiceURL
 
 					err := s.orderRepo.UpdateOrder(ctx, order)
 					if err != nil {
