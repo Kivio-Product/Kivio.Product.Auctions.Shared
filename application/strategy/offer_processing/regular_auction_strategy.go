@@ -66,6 +66,7 @@ func (s *RegularAuctionStrategy) ProcessApprovedOrders(
 	}
 
 	ordersBySource := make(map[string][]*orderDomain.Order)
+	ordersToReduceStock := make(map[string]*orderDomain.Order)
 
 	for _, order := range orders {
 		itemSpec, err := s.itemSpecRepo.GetById(ctx, order.ItemSpecificationId)
@@ -82,13 +83,7 @@ func (s *RegularAuctionStrategy) ProcessApprovedOrders(
 		}
 
 		if state == "Approved" && order.State == "Approved" {
-			fmt.Printf("[RegularAuction] Reducing availability for order %s (ItemSpec: %s, Quantity: %d)\n",
-				order.OrderId, order.ItemSpecificationId, order.TotalQuantity)
-
-			err := s.reduceAvailability(ctx, itemSpec, order)
-			if err != nil {
-				fmt.Printf("[RegularAuction] ERROR reducing availability: %v\n", err)
-			}
+			ordersToReduceStock[order.OrderId] = order
 		}
 
 		if state == "Approved" && order.State == "Approved" && itemSpec.GetSource() != "" {
@@ -170,7 +165,29 @@ func (s *RegularAuctionStrategy) ProcessApprovedOrders(
 		}
 	}
 
-	fmt.Printf("[RegularAuction] Processed %d orders (created external orders without modifying local state)\n", result.ProcessedOrders)
+	if state == "Approved" && len(ordersToReduceStock) > 0 {
+		fmt.Printf("[RegularAuction] Reducing stock for %d orders after order creation\n", len(ordersToReduceStock))
+
+		for orderID, order := range ordersToReduceStock {
+			itemSpec, err := s.itemSpecRepo.GetById(ctx, order.ItemSpecificationId)
+			if err != nil {
+				fmt.Printf("[RegularAuction] ERROR: Could not fetch itemSpec %s for stock reduction: %v\n", order.ItemSpecificationId, err)
+				continue
+			}
+
+			fmt.Printf("[RegularAuction] Reducing availability for order %s (ItemSpec: %s, Quantity: %d)\n",
+				orderID, order.ItemSpecificationId, order.TotalQuantity)
+
+			err = s.reduceAvailability(ctx, itemSpec, order)
+			if err != nil {
+				fmt.Printf("[RegularAuction] ERROR reducing availability for order %s: %v\n", orderID, err)
+			} else {
+				fmt.Printf("[RegularAuction] Stock reduced successfully for order %s\n", orderID)
+			}
+		}
+	}
+
+	fmt.Printf("[RegularAuction] Processed %d orders (created external orders and reduced stock)\n", result.ProcessedOrders)
 
 	return result, nil
 }

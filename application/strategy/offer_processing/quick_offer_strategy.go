@@ -10,6 +10,7 @@ import (
 	strategyApp "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/strategy"
 	billingDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/billing"
 	itemDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
+	itemSpecDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item_specification"
 	orderDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 	domainStrategy "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/strategy"
 	billingInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/billing"
@@ -60,6 +61,7 @@ func (s *QuickOfferStrategy) ProcessApprovedOrders(
 	var offerID string
 
 	ordersBySource := make(map[string][]*orderDomain.Order)
+	itemSpecsToUpdate := make(map[string]*itemSpecDomain.ItemSpecification)
 
 	fmt.Printf("[QuickOffer] Processing %d orders\n", len(orders))
 
@@ -97,7 +99,8 @@ func (s *QuickOfferStrategy) ProcessApprovedOrders(
 		switch state {
 		case "Approved":
 			order.State = "Approved"
-			itemSpec.Availability--
+
+			itemSpecsToUpdate[order.OrderId] = itemSpec
 
 			if itemSpec.GetSource() != "" && item != nil {
 				orderCreationStrategy, err := s.orderCreationFactory.GetStrategy(ctx, string(itemSpec.GetSource()), order.PointOfSaleId)
@@ -125,15 +128,6 @@ func (s *QuickOfferStrategy) ProcessApprovedOrders(
 		err = s.orderRepo.UpdateOrder(ctx, order)
 		if err != nil {
 			return nil, fmt.Errorf("no se pudo actualizar la orden %s: %v", order.OrderId, err)
-		}
-
-		if itemSpec != nil {
-			itemSpecsAvailability = append(itemSpecsAvailability, itemSpec.Availability)
-
-			err = s.itemSpecRepo.UpdateItemSpec(ctx, itemSpec)
-			if err != nil {
-				return nil, fmt.Errorf("no se pudo actualizar el item specification %s: %v", order.ItemSpecificationId, err)
-			}
 		}
 
 		result.ProcessedOrders++
@@ -181,6 +175,26 @@ func (s *QuickOfferStrategy) ProcessApprovedOrders(
 				} else {
 					fmt.Printf("[QuickOffer] Billing %s saved successfully with Siigo invoice URL\n", billing.Id)
 				}
+			}
+		}
+	}
+
+	if state == "Approved" && len(itemSpecsToUpdate) > 0 {
+		fmt.Printf("[QuickOffer] Reducing stock for %d orders after order creation\n", len(itemSpecsToUpdate))
+
+		for orderID, itemSpec := range itemSpecsToUpdate {
+			fmt.Printf("[QuickOffer] Reducing availability for order %s (ItemSpec: %s)\n",
+				orderID, itemSpec.ItemId)
+
+			itemSpec.Availability--
+			itemSpecsAvailability = append(itemSpecsAvailability, itemSpec.Availability)
+
+			err := s.itemSpecRepo.UpdateItemSpec(ctx, itemSpec)
+			if err != nil {
+				fmt.Printf("[QuickOffer] ERROR: Failed to update itemSpec %s: %v\n", itemSpec.ItemId, err)
+			} else {
+				fmt.Printf("[QuickOffer] Stock reduced successfully for itemSpec %s (new availability: %d)\n",
+					itemSpec.ItemId, itemSpec.Availability)
 			}
 		}
 	}
