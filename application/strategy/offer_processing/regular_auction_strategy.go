@@ -286,7 +286,6 @@ func (s *RegularAuctionStrategy) getCurrentExternalStock(
 func (s *RegularAuctionStrategy) constructSiigoInvoiceURL(invoiceURL string, billingID string) string {
 	if invoiceURL == "" || invoiceURL == "null" {
 		fmt.Printf("[RegularAuction] Invoice URL is null or empty, returning empty string\n")
-		return ""
 	}
 
 	auctionsEnv := os.Getenv("AUCTIONS_ENV")
