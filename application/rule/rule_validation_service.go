@@ -66,7 +66,7 @@ func (s *ruleValidationService) validateSpecification(
 	case "availability", "StockQuantity":
 		return validateNumericSpecification(rules)
 
-	case "Price", "OldPrice":
+	case "Price", "OldPrice", "Weight":
 		return validateNumericValue(rules)
 
 	case "Published", "VisibleIndividually", "IsFreeShipping":
