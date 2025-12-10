@@ -314,6 +314,7 @@ type EcommerceService interface {
 	CountEcommerceItems(ctx context.Context, apiUrl, apiKey string, filters map[string]string) (int64, error)
 	UpdateOrderItemPrice(ctx context.Context, apiUrl, apiKey string, orderID, itemID int, orderItem *EcommerceOrderItem) error
 	UpdateOrder(ctx context.Context, apiUrl, apiKey string, orderID int, orderUpdate *EcommerceOrderUpdate) error
+	GetOrderByID(ctx context.Context, apiUrl, apiKey string, orderID int) (*EcommerceOrderResponse, error)
 	VerifyOrderTotal(ctx context.Context, items []ItemQuantity, apiUrl, apiKey string, minTotal float64) (*OrderVerificationResult, error)
 }
 
@@ -889,6 +890,65 @@ func (b *EcommerceBridge) UpdateOrder(ctx context.Context, apiUrl, apiKey string
 
 	fmt.Printf("[ECOMMERCE] SUCCESS: Order updated\n")
 	return nil
+}
+
+func (b *EcommerceBridge) GetOrderByID(ctx context.Context, apiUrl, apiKey string, orderID int) (*EcommerceOrderResponse, error) {
+	fmt.Printf("[ECOMMERCE] Getting order by ID: %d\n", orderID)
+
+	respBody, err := b.client.GetOrderByID(ctx, apiUrl, apiKey, orderID)
+	if err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to get order: %v\n", err)
+		return nil, fmt.Errorf("failed to get order: %w", err)
+	}
+
+	type OrderItemResponse struct {
+		ID               int     `json:"id"`
+		ProductID        int     `json:"product_id"`
+		UnitPriceInclTax float64 `json:"unit_price_incl_tax"`
+		UnitPriceExclTax float64 `json:"unit_price_excl_tax"`
+	}
+
+	type OrderResponse struct {
+		ID                    int                 `json:"id"`
+		OrderItems            []OrderItemResponse `json:"order_items"`
+		SiigoInvoicePublicURL string              `json:"siigo_invoice_public_url"`
+	}
+
+	type GetOrderResponse struct {
+		Orders []OrderResponse `json:"orders"`
+	}
+
+	var response GetOrderResponse
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to unmarshal order response: %v\n", err)
+		return nil, fmt.Errorf("failed to unmarshal order response: %w", err)
+	}
+
+	if len(response.Orders) == 0 {
+		fmt.Printf("[ECOMMERCE] ERROR: No order found with ID: %d\n", orderID)
+		return nil, fmt.Errorf("no order found with ID: %d", orderID)
+	}
+
+	order := response.Orders[0]
+	var orderItems []EcommerceOrderItemResponse
+	for _, item := range order.OrderItems {
+		orderItems = append(orderItems, EcommerceOrderItemResponse{
+			ID:               item.ID,
+			ProductID:        item.ProductID,
+			UnitPriceInclTax: item.UnitPriceInclTax,
+			UnitPriceExclTax: item.UnitPriceExclTax,
+		})
+	}
+
+	fmt.Printf("[ECOMMERCE] SUCCESS: Order retrieved with ID: %d, Invoice URL: %s\n", order.ID, order.SiigoInvoicePublicURL)
+
+	return &EcommerceOrderResponse{
+		ID:                    order.ID,
+		SiigoInvoicePublicURL: order.SiigoInvoicePublicURL,
+		OrderItems:            orderItems,
+		Success:               true,
+		Message:               "Order retrieved successfully",
+	}, nil
 }
 
 func (b *EcommerceBridge) VerifyOrderTotal(ctx context.Context, items []ItemQuantity, apiUrl, apiKey string, minTotal float64) (*OrderVerificationResult, error) {

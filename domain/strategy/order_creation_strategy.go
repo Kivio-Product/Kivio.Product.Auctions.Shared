@@ -22,7 +22,7 @@ type OrderCreationStrategy interface {
 		ctx context.Context,
 		billing *billingDomain.Billing,
 		orders []*orderDomain.Order,
-	) (string, error)
+	) (invoiceURL string, externalOrderID string, err error)
 
 	GetOrderType() string
 }

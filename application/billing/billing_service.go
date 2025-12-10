@@ -3,6 +3,8 @@ package services
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/billing"
 	orderDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
@@ -10,6 +12,7 @@ import (
 
 	billingHelpers "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/billing/helpers"
 	paymentConfirmation "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/billing/payment_confirmation"
+	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
 
 	billingInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/billing"
 	orderInfrastructure "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/infrastructure/persistence/dynamodb/order"
@@ -19,6 +22,7 @@ type BillingService interface {
 	CreateBilling(ctx context.Context, provider, posId, customerId string, customer *domain.Customer) (*domain.Billing, error)
 	GetAllBillings(ctx context.Context) ([]domain.Billing, error)
 	GetBillingById(ctx context.Context, id string) (*domain.Billing, error)
+	GetBillingByIdWithExternalData(ctx context.Context, id string) (*domain.Billing, error)
 	GetBillingByTransactionId(ctx context.Context, id string) (*domain.Billing, error)
 	ConfirmPayUResponse(ctx context.Context, res *paymentDomain.ConfirmationResponse, secretKey string) error
 	ConfirmWompiResponse(ctx context.Context, body []byte) error
@@ -27,11 +31,13 @@ type BillingService interface {
 }
 
 type billingService struct {
-	repo           billingInfrastructure.BillingRepository
-	billingFactory domain.BillingFactory
-	orderRepo      orderInfrastructure.OrderRepository
-	payuHandler    *paymentConfirmation.PayUConfirmationHandler
-	wompiHandler   *paymentConfirmation.WompiConfirmationHandler
+	repo             billingInfrastructure.BillingRepository
+	billingFactory   domain.BillingFactory
+	orderRepo        orderInfrastructure.OrderRepository
+	payuHandler      *paymentConfirmation.PayUConfirmationHandler
+	wompiHandler     *paymentConfirmation.WompiConfirmationHandler
+	ecommerceSvc     ecommerceService.EcommerceService
+	ecommerceCredSvc ecommerceService.EcommerceCredentialsService
 }
 
 func NewBillingService(
@@ -40,13 +46,17 @@ func NewBillingService(
 	orderRepo orderInfrastructure.OrderRepository,
 	payuHandler *paymentConfirmation.PayUConfirmationHandler,
 	wompiHandler *paymentConfirmation.WompiConfirmationHandler,
+	ecommerceSvc ecommerceService.EcommerceService,
+	ecommerceCredSvc ecommerceService.EcommerceCredentialsService,
 ) BillingService {
 	return &billingService{
-		repo:           repo,
-		billingFactory: billingFactory,
-		orderRepo:      orderRepo,
-		payuHandler:    payuHandler,
-		wompiHandler:   wompiHandler,
+		repo:             repo,
+		billingFactory:   billingFactory,
+		orderRepo:        orderRepo,
+		payuHandler:      payuHandler,
+		wompiHandler:     wompiHandler,
+		ecommerceSvc:     ecommerceSvc,
+		ecommerceCredSvc: ecommerceCredSvc,
 	}
 }
 
@@ -136,6 +146,79 @@ func (s *billingService) GetBillingById(ctx context.Context, id string) (*domain
 		return nil, err
 	}
 	return billing, nil
+}
+
+func (s *billingService) GetBillingByIdWithExternalData(ctx context.Context, id string) (*domain.Billing, error) {
+	billing, err := s.repo.GetBillingByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if billing.ExternalId == "" {
+		fmt.Printf("[BillingService] Billing %s has no ExternalId, returning as-is\n", id)
+		return billing, nil
+	}
+
+	orders, err := s.orderRepo.GetOrdersBillingByID(ctx, billing.Id)
+	if err != nil || len(orders) == 0 {
+		fmt.Printf("[BillingService] Could not get orders for billing %s: %v, returning billing as-is\n", id, err)
+		return billing, nil
+	}
+
+	posID := orders[0].PointOfSaleId
+
+	credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, posID)
+	if err != nil {
+		fmt.Printf("[BillingService] Could not get ecommerce credentials for POS %s: %v, returning billing as-is\n", posID, err)
+		return billing, nil
+	}
+
+	externalOrderID, err := strconv.Atoi(billing.ExternalId)
+	if err != nil {
+		fmt.Printf("[BillingService] Invalid ExternalId format %s: %v, returning billing as-is\n", billing.ExternalId, err)
+		return billing, nil
+	}
+
+	ecommerceOrder, err := s.ecommerceSvc.GetOrderByID(ctx, credentials.ApiURL, credentials.ApiKey, externalOrderID)
+	if err != nil {
+		fmt.Printf("[BillingService] Could not get order %d from ecommerce: %v, returning billing as-is\n", externalOrderID, err)
+		return billing, nil
+	}
+
+	if ecommerceOrder.SiigoInvoicePublicURL != "" && ecommerceOrder.SiigoInvoicePublicURL != "null" {
+		fmt.Printf("[BillingService] Found Siigo invoice URL from ecommerce: %s\n", ecommerceOrder.SiigoInvoicePublicURL)
+
+		if billing.SiigoInvoiceURL != "" {
+			updatedURL := s.updateInvoiceURLParameter(billing.SiigoInvoiceURL, ecommerceOrder.SiigoInvoicePublicURL)
+			billing.SiigoInvoiceURL = updatedURL
+			fmt.Printf("[BillingService] Updated billing SiigoInvoiceURL to: %s\n", updatedURL)
+
+			err = s.repo.UpdateBilling(ctx, billing)
+			if err != nil {
+				fmt.Printf("[BillingService] WARNING: Failed to update billing %s with new invoice URL: %v\n", id, err)
+			} else {
+				fmt.Printf("[BillingService] Successfully updated billing %s with new invoice URL\n", id)
+			}
+		}
+	} else {
+		fmt.Printf("[BillingService] Siigo invoice URL is null or empty in ecommerce order %d\n", externalOrderID)
+	}
+
+	return billing, nil
+}
+
+func (s *billingService) updateInvoiceURLParameter(currentURL, siigoInvoicePublicURL string) string {
+	parsedURL, err := url.Parse(currentURL)
+	if err != nil {
+		fmt.Printf("[BillingService] Error parsing URL %s: %v, returning as-is\n", currentURL, err)
+		return currentURL
+	}
+
+	query := parsedURL.Query()
+	query.Set("invoiceUrl", siigoInvoicePublicURL)
+	parsedURL.RawQuery = query.Encode()
+
+	return parsedURL.String()
 }
 
 func (s *billingService) GetBillingByTransactionId(ctx context.Context, id string) (*domain.Billing, error) {

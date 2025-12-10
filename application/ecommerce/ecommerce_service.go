@@ -32,6 +32,7 @@ type EcommerceService interface {
 	CountEcommerceItems(ctx context.Context, apiUrl, apiKey string, filters map[string]string) (int64, error)
 	UpdateOrderItemPrice(ctx context.Context, apiUrl, apiKey string, orderID, itemID int, orderItem *ecommerceBridge.EcommerceOrderItem) error
 	UpdateOrder(ctx context.Context, apiUrl, apiKey string, orderID int, orderUpdate *ecommerceBridge.EcommerceOrderUpdate) error
+	GetOrderByID(ctx context.Context, apiUrl, apiKey string, orderID int) (*ecommerceBridge.EcommerceOrderResponse, error)
 	VerifyOrderTotal(ctx context.Context, items []ecommerceBridge.ItemQuantity, apiUrl, apiKey string, minTotal float64) (*ecommerceBridge.OrderVerificationResult, error)
 }
 

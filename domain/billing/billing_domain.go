@@ -8,18 +8,19 @@ import (
 )
 
 type Billing struct {
-	Id                string         `json:"id" dynamodbav:"id"`
-	TransactionId     string         `json:"transactionId" dynamodbav:"transactionId"`
-	State             string         `json:"state" dynamodbav:"state"`
-	CreatedAt         time.Time      `json:"createdAt" dynamodbav:"createdAt"`
-	Provider          string         `json:"provider" dynamodbav:"provider"`
-	PayloadType       string         `json:"payloadType" dynamodbav:"payloadType"`
-	ConfirmedAt       time.Time      `json:"confirmedAt" dynamodbav:"confirmedAt"`
-	CustomerId        *string        `json:"customerId" dynamodbav:"customerId"`
-	Customer          *Customer      `json:"customer" dynamodbav:"customer"`
-	InvoiceConfig     *InvoiceConfig `json:"invoiceConfig" dynamodbav:"invoiceConfig"`
-	PointOfSaleId     string         `json:"pos_id" dynamodbav:"posId"`
-	SiigoInvoiceURL   string         `json:"siigoInvoiceUrl,omitempty" dynamodbav:"siigoInvoiceUrl,omitempty"`
+	Id              string         `json:"id" dynamodbav:"id"`
+	TransactionId   string         `json:"transactionId" dynamodbav:"transactionId"`
+	State           string         `json:"state" dynamodbav:"state"`
+	CreatedAt       time.Time      `json:"createdAt" dynamodbav:"createdAt"`
+	Provider        string         `json:"provider" dynamodbav:"provider"`
+	PayloadType     string         `json:"payloadType" dynamodbav:"payloadType"`
+	ConfirmedAt     time.Time      `json:"confirmedAt" dynamodbav:"confirmedAt"`
+	CustomerId      *string        `json:"customerId" dynamodbav:"customerId"`
+	Customer        *Customer      `json:"customer" dynamodbav:"customer"`
+	InvoiceConfig   *InvoiceConfig `json:"invoiceConfig" dynamodbav:"invoiceConfig"`
+	PointOfSaleId   string         `json:"pos_id" dynamodbav:"posId"`
+	SiigoInvoiceURL string         `json:"siigoInvoiceUrl,omitempty" dynamodbav:"siigoInvoiceUrl,omitempty"`
+	ExternalId      string         `json:"externalId,omitempty" dynamodbav:"externalId,omitempty"`
 }
 
 type BillingResponse struct {

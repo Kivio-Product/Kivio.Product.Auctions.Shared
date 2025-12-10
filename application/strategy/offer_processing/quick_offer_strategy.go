@@ -148,11 +148,11 @@ func (s *QuickOfferStrategy) ProcessApprovedOrders(
 			}
 
 			fmt.Printf("[QuickOffer] Finalizing %d orders for source %s\n", len(sourceOrders), source)
-			invoiceURL, err := orderCreationStrategy.FinalizeOrder(ctx, billing, sourceOrders)
+			invoiceURL, externalOrderID, err := orderCreationStrategy.FinalizeOrder(ctx, billing, sourceOrders)
 			if err != nil {
 				fmt.Printf("[QuickOffer] Error finalizing orders: %v\n", err)
 			} else {
-				fmt.Printf("[QuickOffer] Orders finalized successfully with invoice URL: %s\n", invoiceURL)
+				fmt.Printf("[QuickOffer] Orders finalized successfully with invoice URL: %s, External Order ID: %s\n", invoiceURL, externalOrderID)
 
 				fullInvoiceURL := s.constructSiigoInvoiceURL(invoiceURL, billing.Id)
 				fmt.Printf("[QuickOffer] Constructed full Siigo invoice URL: %s\n", fullInvoiceURL)
@@ -169,11 +169,12 @@ func (s *QuickOfferStrategy) ProcessApprovedOrders(
 				}
 
 				billing.SiigoInvoiceURL = fullInvoiceURL
+				billing.ExternalId = externalOrderID
 				err = s.billingRepo.UpdateBilling(ctx, billing)
 				if err != nil {
-					fmt.Printf("[QuickOffer] ERROR: Failed to save billing %s with Siigo invoice URL: %v\n", billing.Id, err)
+					fmt.Printf("[QuickOffer] ERROR: Failed to save billing %s with Siigo invoice URL and External ID: %v\n", billing.Id, err)
 				} else {
-					fmt.Printf("[QuickOffer] Billing %s saved successfully with Siigo invoice URL\n", billing.Id)
+					fmt.Printf("[QuickOffer] Billing %s saved successfully with Siigo invoice URL and External Order ID: %s\n", billing.Id, externalOrderID)
 				}
 			}
 		}
