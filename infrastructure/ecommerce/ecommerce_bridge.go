@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	customerDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/customer"
@@ -436,24 +437,39 @@ func (b *EcommerceBridge) GetCustomerByID(ctx context.Context, id, apiUrl, apiKe
 }
 
 func (b *EcommerceBridge) GetCustomerEmails(ctx context.Context, apiUrl, apiKey string) ([]string, error) {
+	log.Printf("[GET_CUSTOMER_EMAILS] Iniciando obtención de emails desde apiUrl: %s", apiUrl)
 	emailSet := make(map[string]struct{})
 
+	log.Printf("[GET_CUSTOMER_EMAILS] Llamando a GetCustomers...")
 	customers, err := b.client.GetCustomers(ctx, apiUrl, apiKey)
 	if err == nil {
+		log.Printf("[GET_CUSTOMER_EMAILS] GetCustomers exitoso: se obtuvieron %d clientes", len(customers))
+		emailsFromCustomers := 0
 		for _, c := range customers {
 			if c.Email != "" {
 				emailSet[c.Email] = struct{}{}
+				emailsFromCustomers++
 			}
 		}
+		log.Printf("[GET_CUSTOMER_EMAILS] Se agregaron %d emails desde clientes al emailSet", emailsFromCustomers)
+	} else {
+		log.Printf("[GET_CUSTOMER_EMAILS] ERROR en GetCustomers: %v", err)
 	}
 
+	log.Printf("[GET_CUSTOMER_EMAILS] Llamando a GetOrderEmails...")
 	orderEmails, err := b.client.GetOrderEmails(ctx, apiUrl, apiKey)
 	if err == nil {
+		log.Printf("[GET_CUSTOMER_EMAILS] GetOrderEmails exitoso: se obtuvieron %d emails de órdenes", len(orderEmails))
+		emailsFromOrders := 0
 		for _, email := range orderEmails {
 			if email != "" {
 				emailSet[email] = struct{}{}
+				emailsFromOrders++
 			}
 		}
+		log.Printf("[GET_CUSTOMER_EMAILS] Se agregaron %d emails desde órdenes al emailSet (pueden ser duplicados)", emailsFromOrders)
+	} else {
+		log.Printf("[GET_CUSTOMER_EMAILS] ERROR en GetOrderEmails: %v", err)
 	}
 
 	emails := make([]string, 0, len(emailSet))
@@ -461,6 +477,7 @@ func (b *EcommerceBridge) GetCustomerEmails(ctx context.Context, apiUrl, apiKey 
 		emails = append(emails, email)
 	}
 
+	log.Printf("[GET_CUSTOMER_EMAILS] Total de emails únicos a retornar: %d", len(emails))
 	return emails, nil
 }
 
