@@ -299,6 +299,7 @@ type EcommerceService interface {
 	GetItemByIDWithDetails(ctx context.Context, id, apiUrl, apiKey string) (*ItemWithDetails, error)
 	GetItemByIDRaw(ctx context.Context, id, apiUrl, apiKey string) ([]byte, error)
 	GetCustomers(ctx context.Context, apiUrl, apiKey string) ([]customerDomain.Customer, error)
+	GetAllCustomers(ctx context.Context, apiUrl, apiKey string) ([]customerDomain.Customer, error)
 	GetCustomerByID(ctx context.Context, id, apiUrl, apiKey string) (*customerDomain.Customer, error)
 	GetCustomerEmails(ctx context.Context, apiUrl, apiKey string) ([]string, error)
 	GetApiKey(ctx context.Context, username, password, tokenUrl string) (string, error)
@@ -432,6 +433,21 @@ func (b *EcommerceBridge) GetCustomers(ctx context.Context, apiUrl, apiKey strin
 	return result, nil
 }
 
+func (b *EcommerceBridge) GetAllCustomers(ctx context.Context, apiUrl, apiKey string) ([]customerDomain.Customer, error) {
+	customers, err := b.client.GetAllCustomers(ctx, apiUrl, apiKey)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]customerDomain.Customer, len(customers))
+	for i, c := range customers {
+		result[i] = customerDomain.Customer{
+			Email: c.Email,
+		}
+	}
+	return result, nil
+}
+
 func (b *EcommerceBridge) GetCustomerByID(ctx context.Context, id, apiUrl, apiKey string) (*customerDomain.Customer, error) {
 	return nil, fmt.Errorf("GetCustomerByID not implemented - customer domain structure changed")
 }
@@ -440,10 +456,10 @@ func (b *EcommerceBridge) GetCustomerEmails(ctx context.Context, apiUrl, apiKey 
 	log.Printf("[GET_CUSTOMER_EMAILS] Iniciando obtención de emails desde apiUrl: %s", apiUrl)
 	emailSet := make(map[string]struct{})
 
-	log.Printf("[GET_CUSTOMER_EMAILS] Llamando a GetCustomers...")
-	customers, err := b.client.GetCustomers(ctx, apiUrl, apiKey)
+	log.Printf("[GET_CUSTOMER_EMAILS] Llamando a GetAllCustomers (con paginación)...")
+	customers, err := b.client.GetAllCustomers(ctx, apiUrl, apiKey)
 	if err == nil {
-		log.Printf("[GET_CUSTOMER_EMAILS] GetCustomers exitoso: se obtuvieron %d clientes", len(customers))
+		log.Printf("[GET_CUSTOMER_EMAILS] GetAllCustomers exitoso: se obtuvieron %d clientes", len(customers))
 		emailsFromCustomers := 0
 		for _, c := range customers {
 			if c.Email != "" {
@@ -453,7 +469,7 @@ func (b *EcommerceBridge) GetCustomerEmails(ctx context.Context, apiUrl, apiKey 
 		}
 		log.Printf("[GET_CUSTOMER_EMAILS] Se agregaron %d emails desde clientes al emailSet", emailsFromCustomers)
 	} else {
-		log.Printf("[GET_CUSTOMER_EMAILS] ERROR en GetCustomers: %v", err)
+		log.Printf("[GET_CUSTOMER_EMAILS] ERROR en GetAllCustomers: %v", err)
 	}
 
 	log.Printf("[GET_CUSTOMER_EMAILS] Llamando a GetOrderEmails...")
