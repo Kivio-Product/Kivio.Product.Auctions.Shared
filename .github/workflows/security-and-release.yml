@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: read
 
 jobs:
   security-scan:
@@ -19,7 +18,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          submodules: recursive
+
+      - name: Checkout ecommerce-client repository
+        run: |
+          git clone https://github.com/Kivio-Product/Kivio.Product.Auctions.EcommerceClient.git ecommerce-client
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -59,7 +61,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          submodules: recursive
 
       - name: Get latest tag
         id: get_latest_tag
