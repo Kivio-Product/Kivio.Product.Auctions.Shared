@@ -1,11 +1,16 @@
 package payment_confirmation
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"os"
 
 	billingHelpers "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/billing/helpers"
 	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
+	offerDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/offer"
 	orderDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 	domainStrategy "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/strategy"
 )
@@ -71,6 +76,17 @@ func (o *PaymentConfirmationOrchestrator) ExecutePaymentConfirmation(
 		return fmt.Errorf("error processing orders with %s strategy: %w", offerProcessingStrategy.GetOfferType(), err)
 	}
 
+	if state == "Approved" {
+		offer, err := o.offerService.GetOfferById(ctx, result.OfferID)
+		if err != nil {
+			fmt.Printf("Error al obtener la oferta con ID %d: %v\n", result.OfferID, err)
+		}
+
+		if offer != nil {
+			o.sendEventAnalytics(offer, billing.UserId, result.TotalAmount)
+		}
+	}
+
 	fmt.Printf("[PaymentConfirmation] Processed %d orders with strategy: %s\n", result.ProcessedOrders, offerProcessingStrategy.GetOfferType())
 
 	o.notificationHelper.SendOrderNotificationGroupedByState(
@@ -109,4 +125,66 @@ func (o *PaymentConfirmationOrchestrator) getStrategyForOrders(ctx context.Conte
 
 	fmt.Printf("[PaymentConfirmation] Offer %s is %s - using Quick Offer strategy\n", offerID, offer.Type)
 	return o.quickOfferStrategy
+}
+
+func (o *PaymentConfirmationOrchestrator) sendEventAnalytics(offer *offerDomain.Offer, userId *string, totalAmount int64) {
+	var (
+		measurementID = os.Getenv("GA_MEASUREMENT_ID")
+		apiSecret     = os.Getenv("GA_API_SECRET")
+	)
+
+	type GAEvent struct {
+		Name   string                 `json:"name"`
+		Params map[string]interface{} `json:"params,omitempty"`
+	}
+
+	type GAPayload struct {
+		UserID string    `json:"user_id"`
+		Events []GAEvent `json:"events"`
+	}
+
+	payload := GAPayload{
+		UserID: *userId,
+		Events: []GAEvent{
+			{
+				Name: "payment_confirm",
+				Params: map[string]interface{}{
+					"value":      totalAmount,
+					"offer_id":   offer.OfferId,
+					"offer_type": offer.Type,
+					"offer_name": offer.Name,
+					"debug_mode": true,
+				},
+			},
+		},
+	}
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		panic(err)
+	}
+
+	url := fmt.Sprintf(
+		"https://www.google-analytics.com/mp/collect?measurement_id=%s&api_secret=%s",
+		measurementID, apiSecret,
+	)
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		panic(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	fmt.Println("Status Code:", resp.StatusCode)
+	if resp.StatusCode == 204 {
+		fmt.Println("Evento enviado correctamente a GA4")
+	} else {
+		fmt.Printf("Error al enviar evento a Analytics: %v\n", err)
+	}
 }

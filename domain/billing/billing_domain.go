@@ -16,6 +16,7 @@ type Billing struct {
 	PayloadType     string         `json:"payloadType" dynamodbav:"payloadType"`
 	ConfirmedAt     time.Time      `json:"confirmedAt" dynamodbav:"confirmedAt"`
 	CustomerId      *string        `json:"customerId" dynamodbav:"customerId"`
+	UserId          *string        `json:"userId" dynamodbav:"userId"`
 	Customer        *Customer      `json:"customer" dynamodbav:"customer"`
 	InvoiceConfig   *InvoiceConfig `json:"invoiceConfig" dynamodbav:"invoiceConfig"`
 	PointOfSaleId   string         `json:"pos_id" dynamodbav:"posId"`
