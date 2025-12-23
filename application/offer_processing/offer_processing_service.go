@@ -144,7 +144,7 @@ func (s *OfferProcessingService) ProcessOffer(ctx context.Context, offerId strin
 				i+1, loser.OrderId, loser.CustomerId, loser.ItemSpecificationId, loser.OfferedAmount, loser.TotalQuantity)
 		}
 	}
-	fmt.Println("=============================================\n")
+	fmt.Println("=============================================")
 
 	successfulPaymentCustomers := s.processPaymentsByCustomer(ctx, allWinners)
 

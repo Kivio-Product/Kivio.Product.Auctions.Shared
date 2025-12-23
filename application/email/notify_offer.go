@@ -13,7 +13,7 @@ import (
 	blackListService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email_black_list"
 	application "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/file_storage"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/repository"
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type NotifyOfferUseCase struct {
