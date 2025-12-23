@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 
 	billingHelpers "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/billing/helpers"
 	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
@@ -82,7 +83,7 @@ func (o *PaymentConfirmationOrchestrator) ExecutePaymentConfirmation(
 		}
 
 		if offer != nil {
-			o.sendEventAnalytics(offer, billing.UserId, result.TotalAmount);
+			o.sendEventAnalytics(offer, billing.UserId, result.TotalAmount)
 		}
 	}
 
@@ -126,17 +127,17 @@ func (o *PaymentConfirmationOrchestrator) getStrategyForOrders(ctx context.Conte
 	return o.quickOfferStrategy
 }
 
-func (o *PaymentConfirmationOrchestrator) sendEventAnalytics(offer *offerDomain.Offer, userId *string, totalAmount int64){
-	const (
-		measurementID = "G-BRK1FK8GVE"
-		apiSecret     = "SDFGT8iORXCQjuqJhEw40A" 
+func (o *PaymentConfirmationOrchestrator) sendEventAnalytics(offer *offerDomain.Offer, userId *string, totalAmount int64) {
+	var (
+		measurementID = os.Getenv("GA_MEASUREMENT_ID")
+		apiSecret     = os.Getenv("GA_API_SECRET")
 	)
 
 	type GAEvent struct {
 		Name   string                 `json:"name"`
 		Params map[string]interface{} `json:"params,omitempty"`
 	}
-	
+
 	type GAPayload struct {
 		UserID string    `json:"user_id"`
 		Events []GAEvent `json:"events"`
@@ -144,46 +145,46 @@ func (o *PaymentConfirmationOrchestrator) sendEventAnalytics(offer *offerDomain.
 
 	payload := GAPayload{
 		UserID: *userId,
-        Events: []GAEvent{
-            {
-                Name: "payment_confirm",
-                Params: map[string]interface{}{
-                    "value":   totalAmount,
-					"offer_id": offer.OfferId,      
+		Events: []GAEvent{
+			{
+				Name: "payment_confirm",
+				Params: map[string]interface{}{
+					"value":      totalAmount,
+					"offer_id":   offer.OfferId,
 					"offer_type": offer.Type,
 					"offer_name": offer.Name,
 					"debug_mode": true,
-                },
-            },
-        },
-    }
-    jsonData, err := json.Marshal(payload)
-    if err != nil {
-        panic(err)
-    }
+				},
+			},
+		},
+	}
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		panic(err)
+	}
 
-    url := fmt.Sprintf(
-        "https://www.google-analytics.com/mp/collect?measurement_id=%s&api_secret=%s",
-        measurementID, apiSecret,
-    )
+	url := fmt.Sprintf(
+		"https://www.google-analytics.com/mp/collect?measurement_id=%s&api_secret=%s",
+		measurementID, apiSecret,
+	)
 
-    req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-    if err != nil {
-        panic(err)
-    }
-    req.Header.Set("Content-Type", "application/json")
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		panic(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
 
-    client := &http.Client{}
-    resp, err := client.Do(req)
-    if err != nil {
-        panic(err)
-    }
-    defer resp.Body.Close()
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
 
-    fmt.Println("Status Code:", resp.StatusCode)
-    if resp.StatusCode == 204 {
-        fmt.Println("Evento enviado correctamente a GA4")
-    } else {
-        fmt.Printf("Error al enviar evento a Analytics: %v\n", err)
-    }
+	fmt.Println("Status Code:", resp.StatusCode)
+	if resp.StatusCode == 204 {
+		fmt.Println("Evento enviado correctamente a GA4")
+	} else {
+		fmt.Printf("Error al enviar evento a Analytics: %v\n", err)
+	}
 }
