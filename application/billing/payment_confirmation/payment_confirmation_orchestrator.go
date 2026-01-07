@@ -77,13 +77,14 @@ func (o *PaymentConfirmationOrchestrator) ExecutePaymentConfirmation(
 	}
 
 	if state == "Approved" {
+		fmt.Printf("[SendEventAnalytics] Data from event offerId from result: %s\n", result.OfferID)
 		offer, err := o.offerService.GetOfferById(ctx, result.OfferID)
 		if err != nil {
 			fmt.Printf("Error al obtener la oferta con ID %d: %v\n", result.OfferID, err)
 		}
 
 		if offer != nil {
-			o.sendEventAnalytics(offer, billing.UserId, result.TotalAmount)
+			o.sendEventAnalytics(offer, billing.UserId, billing.GaClienId, result.TotalAmount)
 		}
 	}
 
@@ -127,7 +128,16 @@ func (o *PaymentConfirmationOrchestrator) getStrategyForOrders(ctx context.Conte
 	return o.quickOfferStrategy
 }
 
-func (o *PaymentConfirmationOrchestrator) sendEventAnalytics(offer *offerDomain.Offer, userId *string, totalAmount int64) {
+func (o *PaymentConfirmationOrchestrator) sendEventAnalytics(offer *offerDomain.Offer, userId, gaClientId *string, totalAmount int64) {
+	fmt.Printf("[SendEventAnalytics] Start event to analytics")
+	fmt.Printf("[SendEventAnalytics] Data from event offerName: %s, totalAmount:%d\n", offer.Name, totalAmount)
+	
+	if userId != nil {
+		fmt.Printf("[SendEventAnalytics] Data from event userId: %s\n", *userId)
+	} 
+	if gaClientId != nil {
+		fmt.Printf("[SendEventAnalytics] Data from event gaClientId: %s\n", *gaClientId)
+	} 
 	var (
 		measurementID = os.Getenv("GA_MEASUREMENT_ID")
 		apiSecret     = os.Getenv("GA_API_SECRET")
@@ -139,11 +149,13 @@ func (o *PaymentConfirmationOrchestrator) sendEventAnalytics(offer *offerDomain.
 	}
 
 	type GAPayload struct {
-		UserID string    `json:"user_id"`
-		Events []GAEvent `json:"events"`
+		UserID   string    `json:"user_id"`
+		ClientID string    `json:"client_id"`
+		Events   []GAEvent `json:"events"`
 	}
 
 	payload := GAPayload{
+		ClientID: *gaClientId,
 		UserID: *userId,
 		Events: []GAEvent{
 			{
