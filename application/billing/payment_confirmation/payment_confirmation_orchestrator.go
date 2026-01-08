@@ -131,6 +131,11 @@ func (o *PaymentConfirmationOrchestrator) getStrategyForOrders(ctx context.Conte
 func (o *PaymentConfirmationOrchestrator) sendEventAnalytics(offer *offerDomain.Offer, userId string, gaClientId *string, totalAmount int64) {
 	fmt.Printf("[SendEventAnalytics] Start event to analytics")
 	fmt.Printf("[SendEventAnalytics] Data from event offerName: %s, userId: %s, totalAmount:%d\n", offer.Name, userId, totalAmount)
+	
+	if gaClientId == nil || *gaClientId == "" {
+        fmt.Println("[SendEventAnalytics] client_id missing, event not sent")
+        return
+    }
 
 	if gaClientId != nil {
 		fmt.Printf("[SendEventAnalytics] Data from event gaClientId: %s\n", *gaClientId)
@@ -146,14 +151,13 @@ func (o *PaymentConfirmationOrchestrator) sendEventAnalytics(offer *offerDomain.
 	}
 
 	type GAPayload struct {
-		UserID   string    `json:"user_id"`
+		UserID   string    `json:"user_id,omitempty"`
 		ClientID string    `json:"client_id"`
 		Events   []GAEvent `json:"events"`
 	}
 
 	payload := GAPayload{
 		ClientID: *gaClientId,
-		UserID: userId,
 		Events: []GAEvent{
 			{
 				Name: "payment_confirm",
@@ -167,6 +171,11 @@ func (o *PaymentConfirmationOrchestrator) sendEventAnalytics(offer *offerDomain.
 			},
 		},
 	}
+
+	if (userId != ""){
+		payload.UserID = userId
+	}
+
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
 		panic(err)
