@@ -68,7 +68,7 @@ func (s *billingService) CreateBilling(ctx context.Context, provider, posId, cus
 	}
 
 	billing.CustomerId = &customerId
-	billing.UserId = &userId
+	billing.UserId = userId
 	billing.GaClienId = &gaClienId
 
 	err = s.repo.SaveBilling(ctx, billing)

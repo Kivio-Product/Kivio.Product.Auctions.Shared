@@ -79,6 +79,10 @@ func (s *QuickOfferStrategy) ProcessApprovedOrders(
 			result.CustomerEmail = order.CustomerId
 		}
 
+		if result.OfferID == "" {
+			result.OfferID = order.OfferId
+		}
+
 		if offerID == "" {
 			offerID = order.OfferId
 		}
@@ -214,7 +218,6 @@ func (s *QuickOfferStrategy) ProcessApprovedOrders(
 			return nil, fmt.Errorf("no se pudo actualizar la oferta %s: %v", offerID, err)
 		}
 		result.ShouldCloseOffer = true
-		result.OfferID = offerID
 	}
 
 	return result, nil

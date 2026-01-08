@@ -83,7 +83,7 @@ func (o *PaymentConfirmationOrchestrator) ExecutePaymentConfirmation(
 			fmt.Printf("Error al obtener la oferta con ID %d: %v\n", result.OfferID, err)
 		}
 
-		if offer != nil {
+		if offer != nil && offer.OfferId != "" {
 			o.sendEventAnalytics(offer, billing.UserId, billing.GaClienId, result.TotalAmount)
 		}
 	}
@@ -128,13 +128,10 @@ func (o *PaymentConfirmationOrchestrator) getStrategyForOrders(ctx context.Conte
 	return o.quickOfferStrategy
 }
 
-func (o *PaymentConfirmationOrchestrator) sendEventAnalytics(offer *offerDomain.Offer, userId, gaClientId *string, totalAmount int64) {
+func (o *PaymentConfirmationOrchestrator) sendEventAnalytics(offer *offerDomain.Offer, userId string, gaClientId *string, totalAmount int64) {
 	fmt.Printf("[SendEventAnalytics] Start event to analytics")
-	fmt.Printf("[SendEventAnalytics] Data from event offerName: %s, totalAmount:%d\n", offer.Name, totalAmount)
-	
-	if userId != nil {
-		fmt.Printf("[SendEventAnalytics] Data from event userId: %s\n", *userId)
-	} 
+	fmt.Printf("[SendEventAnalytics] Data from event offerName: %s, userId: %s, totalAmount:%d\n", offer.Name, userId, totalAmount)
+
 	if gaClientId != nil {
 		fmt.Printf("[SendEventAnalytics] Data from event gaClientId: %s\n", *gaClientId)
 	} 
@@ -156,7 +153,7 @@ func (o *PaymentConfirmationOrchestrator) sendEventAnalytics(offer *offerDomain.
 
 	payload := GAPayload{
 		ClientID: *gaClientId,
-		UserID: *userId,
+		UserID: userId,
 		Events: []GAEvent{
 			{
 				Name: "payment_confirm",
