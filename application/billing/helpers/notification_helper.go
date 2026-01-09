@@ -40,6 +40,7 @@ func (h *NotificationHelper) SendOrderNotification(
 			strings.Join(itemNames, ", "),
 			posName,
 			"",
+			"",
 		)
 		if err != nil {
 			fmt.Printf("No se pudo enviar el correo: %s\n", err)
@@ -51,6 +52,7 @@ func (h *NotificationHelper) SendOrderNotificationGroupedByState(
 	ctx context.Context,
 	orders []*orderDomain.Order,
 	posName string,
+	paymentState string,
 ) {
 	if len(orders) == 0 {
 		return
@@ -61,22 +63,28 @@ func (h *NotificationHelper) SendOrderNotificationGroupedByState(
 		ordersByCustomer[order.CustomerId] = append(ordersByCustomer[order.CustomerId], order)
 	}
 
-	fmt.Printf("[NotificationHelper] Sending notifications for %d customers\n", len(ordersByCustomer))
+	fmt.Printf("[NotificationHelper] Sending notifications for %d customers with paymentState=%s\n", len(ordersByCustomer), paymentState)
 
 	for customerID, customerOrders := range ordersByCustomer {
 		approvedOrders := []*orderDomain.Order{}
 		rejectedOrders := []*orderDomain.Order{}
 
-		for _, order := range customerOrders {
-			if order.State == "Approved" {
-				approvedOrders = append(approvedOrders, order)
-			} else if order.State == "Rejected" {
-				rejectedOrders = append(rejectedOrders, order)
+		if paymentState == "Rejected" {
+			rejectedOrders = customerOrders
+			fmt.Printf("[NotificationHelper] Customer %s - PaymentState is Rejected, treating all %d orders as Rejected\n",
+				customerID, len(customerOrders))
+		} else {
+			for _, order := range customerOrders {
+				if order.State == "Approved" {
+					approvedOrders = append(approvedOrders, order)
+				} else if order.State == "Rejected" {
+					rejectedOrders = append(rejectedOrders, order)
+				}
 			}
-		}
 
-		fmt.Printf("[NotificationHelper] Customer %s - Approved: %d, Rejected: %d\n",
-			customerID, len(approvedOrders), len(rejectedOrders))
+			fmt.Printf("[NotificationHelper] Customer %s - Approved: %d, Rejected: %d\n",
+				customerID, len(approvedOrders), len(rejectedOrders))
+		}
 
 		if len(approvedOrders) > 0 {
 			h.sendNotificationForOrders(ctx, customerID, approvedOrders, "Approved", posName)
@@ -101,14 +109,19 @@ func (h *NotificationHelper) sendNotificationForOrders(
 
 	var itemNames []string
 	var totalAmount int64
+	var siigoInvoiceURL string
 
 	for _, order := range orders {
-		itemNames = append(itemNames, order.ExtraData)
+		itemInfo := fmt.Sprintf("%s %d UND", order.ExtraData, order.TotalQuantity)
+		itemNames = append(itemNames, itemInfo)
 		totalAmount += int64(order.OfferedAmount)
+		if siigoInvoiceURL == "" && order.SiigoInvoicePublicURL != "" {
+			siigoInvoiceURL = order.SiigoInvoicePublicURL
+		}
 	}
 
-	fmt.Printf("[NotificationHelper] Sending %s notification to %s for %d items (total: %d)\n",
-		state, customerEmail, len(itemNames), totalAmount)
+	fmt.Printf("[NotificationHelper] Sending %s notification to %s for %d items (total: %d, invoice URL: %s)\n",
+		state, customerEmail, len(itemNames), totalAmount, siigoInvoiceURL)
 
 	go func() {
 		err := h.emailService.NotifyOrder(
@@ -119,6 +132,7 @@ func (h *NotificationHelper) sendNotificationForOrders(
 			strings.Join(itemNames, ", "),
 			posName,
 			"",
+			siigoInvoiceURL,
 		)
 		if err != nil {
 			fmt.Printf("No se pudo enviar el correo de estado %s a %s: %s\n", state, customerEmail, err)

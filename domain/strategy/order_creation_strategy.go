@@ -71,7 +71,7 @@ type OrderCreationStrategy interface {
 		ctx context.Context,
 		billing *billingDomain.Billing,
 		orders []*orderDomain.Order,
-	) error
+	) (invoiceURL string, externalOrderID string, err error)
 
 	// GetOrderType returns the type identifier for this order creation strategy
 	//

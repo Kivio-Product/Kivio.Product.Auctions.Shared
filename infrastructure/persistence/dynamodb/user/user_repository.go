@@ -144,7 +144,7 @@ func (r *userRepository) AuthenticateUser(email, password string) (*AuthResponse
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := json.Marshal(map[string]string{"error": fmt.Sprintf("Authentication failed with status code: %d", resp.StatusCode)})
-		return nil, fmt.Errorf(string(bodyBytes))
+		return nil, fmt.Errorf("%s", string(bodyBytes))
 	}
 
 	var authResponse AuthResponse

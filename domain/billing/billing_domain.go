@@ -13,17 +13,21 @@ import (
 // including its state, provider, customer information, and invoice configuration.
 // It serves as the central record for payment processing and confirmation.
 type Billing struct {
-	Id            string         `json:"id" dynamodbav:"id"`
-	TransactionId string         `json:"transactionId" dynamodbav:"transactionId"`
-	State         string         `json:"state" dynamodbav:"state"`
-	CreatedAt     time.Time      `json:"createdAt" dynamodbav:"createdAt"`
-	Provider      string         `json:"provider" dynamodbav:"provider"`
-	PayloadType   string         `json:"payloadType" dynamodbav:"payloadType"`
-	ConfirmedAt   time.Time      `json:"confirmedAt" dynamodbav:"confirmedAt"`
-	CustomerId    *string        `json:"customerId" dynamodbav:"customerId"`
-	Customer      *Customer      `json:"customer" dynamodbav:"customer"`
-	InvoiceConfig *InvoiceConfig `json:"invoiceConfig" dynamodbav:"invoiceConfig"`
-	PointOfSaleId string         `json:"pos_id" dynamodbav:"posId"`
+	Id              string         `json:"id" dynamodbav:"id"`
+	TransactionId   string         `json:"transactionId" dynamodbav:"transactionId"`
+	State           string         `json:"state" dynamodbav:"state"`
+	CreatedAt       time.Time      `json:"createdAt" dynamodbav:"createdAt"`
+	Provider        string         `json:"provider" dynamodbav:"provider"`
+	PayloadType     string         `json:"payloadType" dynamodbav:"payloadType"`
+	ConfirmedAt     time.Time      `json:"confirmedAt" dynamodbav:"confirmedAt"`
+	CustomerId      *string        `json:"customerId" dynamodbav:"customerId"`
+	UserId          string         `json:"userId" dynamodbav:"userId"`
+	GaClienId       *string        `json:"gaClienId" dynamodbav:"gaClienId"`
+	Customer        *Customer      `json:"customer" dynamodbav:"customer"`
+	InvoiceConfig   *InvoiceConfig `json:"invoiceConfig" dynamodbav:"invoiceConfig"`
+	PointOfSaleId   string         `json:"pos_id" dynamodbav:"posId"`
+	SiigoInvoiceURL string         `json:"siigoInvoiceUrl,omitempty" dynamodbav:"siigoInvoiceUrl,omitempty"`
+	ExternalId      string         `json:"externalId,omitempty" dynamodbav:"externalId,omitempty"`
 }
 
 // BillingResponse represents a simplified billing response for API consumers
@@ -45,15 +49,16 @@ type BillingResponse struct {
 // This struct provides comprehensive billing information for detailed views,
 // including customer email and associated orders for complete transaction context.
 type BillingDetailResponse struct {
-	BillId        string      `json:"bill_id"`
-	TransactionId string      `json:"transaction_id"`
-	State         string      `json:"state"`
-	Provider      string      `json:"provider"`
-	PayloadType   string      `json:"payload_type"`
-	CreatedAt     time.Time   `json:"created_at"`
-	ConfirmedAt   time.Time   `json:"confirmed_at"`
-	UserEmail     string      `json:"user_email"`
-	Orders        []BillOrder `json:"orders"`
+	BillId          string      `json:"bill_id"`
+	TransactionId   string      `json:"transaction_id"`
+	State           string      `json:"state"`
+	Provider        string      `json:"provider"`
+	PayloadType     string      `json:"payload_type"`
+	CreatedAt       time.Time   `json:"created_at"`
+	ConfirmedAt     time.Time   `json:"confirmed_at"`
+	UserEmail       string      `json:"user_email"`
+	Orders          []BillOrder `json:"orders"`
+	SiigoInvoiceURL string      `json:"siigo_invoice_url,omitempty"`
 }
 
 // BillOrder represents an order within a billing transaction

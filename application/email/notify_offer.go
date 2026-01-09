@@ -13,7 +13,7 @@ import (
 	blackListService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email_black_list"
 	application "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/file_storage"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/repository"
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type NotifyOfferUseCase struct {
@@ -67,19 +67,32 @@ func (uc *NotifyOfferUseCase) Execute(ctx context.Context, auctionURL, unsubscri
 			}
 		}
 	} else {
+		log.Printf("[DEBUG] SHOULD_RETRIEVE_S3_EMAILS es false, obteniendo emails desde ecommerce para posID: %s", posID)
 		credentials, err := uc.ecommerceCredentialsSvc.GetCredentials(ctx, posID)
 		if err == nil {
-			customers, err := uc.ecommerceService.GetCustomers(credentials.Context, credentials.ApiURL, credentials.ApiKey)
+			log.Printf("[DEBUG] Credenciales obtenidas exitosamente para posID: %s", posID)
+			emails, err := uc.ecommerceService.GetCustomerEmails(credentials.Context, credentials.ApiURL, credentials.ApiKey)
 			if err == nil {
-				for _, customer := range customers {
-					email := strings.TrimSpace(customer.Email)
+				log.Printf("[DEBUG] Se obtuvieron %d emails desde ecommerce", len(emails))
+				emailsBeforeFilter := len(emails)
+				emailsFiltered := 0
+				for _, email := range emails {
+					email = strings.TrimSpace(email)
 					if email != "" {
 						if _, exists := blackListEmails[email]; !exists {
 							emailSet[email] = struct{}{}
+						} else {
+							emailsFiltered++
+							log.Printf("[DEBUG] Email filtrado por blacklist: %s", email)
 						}
 					}
 				}
+				log.Printf("[DEBUG] Emails procesados: %d total, %d filtrados por blacklist, %d agregados a emailSet", emailsBeforeFilter, emailsFiltered, len(emailSet))
+			} else {
+				log.Printf("[ERROR] Error al obtener emails desde ecommerce: %v", err)
 			}
+		} else {
+			log.Printf("[ERROR] Error al obtener credenciales para posID %s: %v", posID, err)
 		}
 	}
 
@@ -131,6 +144,10 @@ func (uc *NotifyOfferUseCase) Execute(ctx context.Context, auctionURL, unsubscri
 		expiration.Minute(),
 	)
 
+	log.Printf("[DEBUG] Iniciando envío de emails. Total de destinatarios en emailSet: %d", len(emailSet))
+	emailsSent := 0
+	emailsWithError := 0
+
 	for email := range emailSet {
 		finalURL := addCustomerIdParam(auctionURL, email)
 		finalUnsubscribeUrl := addCustomerIdParam(unsubscribeUrl, email)
@@ -149,9 +166,16 @@ func (uc *NotifyOfferUseCase) Execute(ctx context.Context, auctionURL, unsubscri
 
 		err := uc.notifier.SendTemplatedEmail(email, templateName, templateData)
 		if err != nil {
+			emailsWithError++
 			fmt.Printf("Error enviando a %s: %v\n", email, err)
+			log.Printf("[ERROR] Error enviando email a %s: %v", email, err)
+		} else {
+			emailsSent++
+			log.Printf("[DEBUG] Email enviado exitosamente a: %s", email)
 		}
 	}
+
+	log.Printf("[DEBUG] Resumen de envío: %d emails enviados exitosamente, %d emails con error, de un total de %d destinatarios", emailsSent, emailsWithError, len(emailSet))
 	return nil
 }
 

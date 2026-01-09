@@ -270,11 +270,11 @@ func (s *ruleVerificationService) evaluateRuleSpecifications(
 		if spec.Parameter == "offerType" {
 			continue
 		}
-		if s.verifySpecification(ctx, spec, itemSpecs, itemSpecId, posId) {
-			return true
+		if !s.verifySpecification(ctx, spec, itemSpecs, itemSpecId, posId) {
+			return false
 		}
 	}
-	return false
+	return true
 }
 
 func (s *ruleVerificationService) verifySpecification(
@@ -398,6 +398,11 @@ func (s *ruleVerificationService) verifySpecification(
 				return verifyNumericValue(stock, spec)
 			}
 			fmt.Printf("StockQuantity no encontrado o no es float64 para el artículo %s.\n", cleanItemID)
+		case "Weight":
+			if weight, ok := matchingItem["weight"].(float64); ok {
+				return verifyNumericValue(weight, spec)
+			}
+			fmt.Printf("Weight no encontrado o no es float64 para el artículo %s.\n", cleanItemID)
 		case "Price", "OldPrice":
 			if price, ok := matchingItem["price"].(float64); ok {
 				return verifyNumericValue(price, spec)

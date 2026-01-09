@@ -146,11 +146,117 @@ func (s *OfferProcessingService) ProcessOffer(ctx context.Context, offerId strin
 				i+1, loser.OrderId, loser.CustomerId, loser.ItemSpecificationId, loser.OfferedAmount, loser.TotalQuantity)
 		}
 	}
-	fmt.Println("=============================================\n")
+	fmt.Println("=============================================")
 
 	successfulPaymentCustomers := s.processPaymentsByCustomer(ctx, allWinners)
 
 	fmt.Println("SuccessfulPaymentCustomers", successfulPaymentCustomers)
+
+	fmt.Printf("\n========== FALLBACK: PROMOTING LOSERS FOR FAILED PAYMENTS ==========\n")
+	maxFallbackIterations := 3
+	for iteration := 1; iteration <= maxFallbackIterations; iteration++ {
+		fmt.Printf("\n[Fallback] Iteration %d/%d\n", iteration, maxFallbackIterations)
+
+		failedWinners := s.identifyFailedPaymentWinners(allWinners, successfulPaymentCustomers)
+		if len(failedWinners) == 0 {
+			fmt.Printf("[Fallback] No failed payment winners in iteration %d - exiting fallback loop\n", iteration)
+			break
+		}
+
+		fmt.Printf("[Fallback] Found %d winners with failed payments\n", len(failedWinners))
+
+		failedWinnersByItemSpec := s.groupOrdersByItemSpec(failedWinners)
+
+		var allPromotedWinners []*orderDomain.Order
+		hasPromotions := false
+
+		for itemSpecId, itemSpecFailedWinners := range failedWinnersByItemSpec {
+			fmt.Printf("\n[Fallback] Processing ItemSpec %s with %d failed winners\n", itemSpecId, len(itemSpecFailedWinners))
+
+			promotedWinners, err := s.promoteLoserWithFailedPayments(ctx, itemSpecFailedWinners, allLosers, itemSpecId)
+			if err != nil {
+				fmt.Printf("[Fallback] Error promoting losers for ItemSpec %s: %v\n", itemSpecId, err)
+				continue
+			}
+
+			if len(promotedWinners) > 0 {
+				hasPromotions = true
+
+				err = s.updateOrderStatesAfterPromotion(ctx, promotedWinners, itemSpecFailedWinners)
+				if err != nil {
+					fmt.Printf("[Fallback] Error updating order states: %v\n", err)
+					continue
+				}
+
+				allPromotedWinners = append(allPromotedWinners, promotedWinners...)
+
+				var updatedAllWinners []*orderDomain.Order
+				for _, w := range allWinners {
+					isFailed := false
+					for _, fw := range itemSpecFailedWinners {
+						if w.OrderId == fw.OrderId {
+							isFailed = true
+							break
+						}
+					}
+					if !isFailed {
+						updatedAllWinners = append(updatedAllWinners, w)
+					}
+				}
+				allWinners = updatedAllWinners
+
+				allWinners = append(allWinners, promotedWinners...)
+
+				var updatedAllLosers []*orderDomain.Order
+				for _, l := range allLosers {
+					isPromoted := false
+					for _, pw := range promotedWinners {
+						if l.OrderId == pw.OrderId {
+							isPromoted = true
+							break
+						}
+					}
+					if !isPromoted {
+						updatedAllLosers = append(updatedAllLosers, l)
+					}
+				}
+				allLosers = updatedAllLosers
+			}
+		}
+
+		if !hasPromotions {
+			fmt.Printf("[Fallback] No promotions possible in iteration %d - exiting fallback loop\n", iteration)
+			break
+		}
+
+		fmt.Printf("\n[Fallback] Processing payments for %d promoted winners\n", len(allPromotedWinners))
+		newSuccessfulCustomers := s.processPaymentsByCustomer(ctx, allPromotedWinners)
+		successfulPaymentCustomers = append(successfulPaymentCustomers, newSuccessfulCustomers...)
+
+		fmt.Printf("[Fallback] Iteration %d complete: %d new successful payments\n", iteration, len(newSuccessfulCustomers))
+	}
+	fmt.Printf("====================================================================\n\n")
+
+	winnersByCustomer := make(map[string][]*orderDomain.Order)
+	var losersWithoutBillingApproved []*orderDomain.Order
+
+	for _, winner := range allWinners {
+		winnersByCustomer[winner.CustomerId] = append(winnersByCustomer[winner.CustomerId], winner)
+	}
+
+	for _, loser := range allLosers {
+		winners, exists := winnersByCustomer[loser.CustomerId]
+		if !exists || len(winners) == 0 {
+			losersWithoutBillingApproved = append(losersWithoutBillingApproved, loser)
+		}
+	}
+
+	err = s.sendEmailsGroupedByCustomer(ctx, losersWithoutBillingApproved, "Rejected", offer.PosId)
+	if err != nil {
+		fmt.Printf("Error sending emails for offer %s: %v\n", offerId, err)
+	}
+
+	s.updateBillingState(ctx, losersWithoutBillingApproved, "Rejected")
 
 	err = s.closeOffer(ctx, offer)
 	if err != nil {
@@ -290,6 +396,9 @@ func (s *OfferProcessingService) processItemSpecOrders(ctx context.Context, item
 		if err != nil {
 			fmt.Printf("Error updating winner order %s: %v\n", winner.OrderId, err)
 		}
+
+		winner.State = "Approved"
+		winner.IsWinner = true
 	}
 
 	for _, loser := range losers {
@@ -306,63 +415,14 @@ func (s *OfferProcessingService) processItemSpecOrders(ctx context.Context, item
 		if err != nil {
 			fmt.Printf("Error updating loser order %s: %v\n", loser.OrderId, err)
 		}
+
+		loser.State = "Rejected"
+		loser.IsWinner = false
 	}
 
-	totalQuantityToReduce := 0
-	for _, winner := range winners {
-		totalQuantityToReduce += winner.TotalQuantity
-	}
-
-	fmt.Printf("\n=== ACTUALIZANDO AVAILABILITY ===\n")
-	fmt.Printf("Availability actual: %d\n", availability)
-	fmt.Printf("Total quantity a reducir (ganadoras): %d\n", totalQuantityToReduce)
-
-	if itemSpec.IsExternal {
-		if totalQuantityToReduce > 0 {
-			newStock := availability - totalQuantityToReduce
-			fmt.Printf("Calculando nuevo stock EXTERNO: %d - %d = %d\n", availability, totalQuantityToReduce, newStock)
-			fmt.Printf("⚠️  ALERTA: newStock = %d %s\n", newStock, func() string {
-				if newStock < 0 {
-					return "(NEGATIVO - POSIBLE ERROR)"
-				}
-				return "(OK)"
-			}())
-			err := s.updateExternalItemStock(ctx, posId, itemSpec.ItemId, newStock)
-			if err != nil {
-				fmt.Printf("❌ Error updating external stock for item %s: %v\n", itemSpec.ItemId, err)
-			} else {
-				fmt.Printf("✓ Stock externo actualizado exitosamente a %d\n", newStock)
-			}
-		}
-	} else {
-		newAvailability := availability - totalQuantityToReduce
-		fmt.Printf("Calculando nuevo availability LOCAL: %d - %d = %d\n", availability, totalQuantityToReduce, newAvailability)
-		fmt.Printf("⚠️  ALERTA: newAvailability = %d %s\n", newAvailability, func() string {
-			if newAvailability < 0 {
-				return "(NEGATIVO - POSIBLE ERROR)"
-			}
-			return "(OK)"
-		}())
-
-		fmt.Printf("Ejecutando itemSpecService.Update con:\n")
-		fmt.Printf("  - ItemSpecId: %s\n", itemSpec.Id)
-		fmt.Printf("  - Currency: %s\n", itemSpec.Currency)
-		fmt.Printf("  - OfferId: %s\n", itemSpec.OfferId)
-		fmt.Printf("  - ItemId: %s\n", itemSpec.ItemId)
-		fmt.Printf("  - PointOfSaleId: %s\n", itemSpec.PointOfSaleId)
-		fmt.Printf("  - Amount: %d\n", itemSpec.Amount)
-		fmt.Printf("  - NEW Availability: %d (era %d)\n", newAvailability, itemSpec.Availability)
-		fmt.Printf("  - ExpireAt: %v\n", itemSpec.ExpireAt)
-
-		err := s.itemSpecService.Update(ctx, itemSpec.Id, itemSpec.Currency, itemSpec.OfferId, itemSpec.ItemId, itemSpec.PointOfSaleId, itemSpec.Amount, int64(newAvailability), itemSpec.ExpireAt)
-		if err != nil {
-			fmt.Printf("❌ Error updating item spec availability %s: %v\n", itemSpecId, err)
-		} else {
-			fmt.Printf("✓ Availability actualizado exitosamente de %d a %d\n", itemSpec.Availability, newAvailability)
-		}
-	}
-
-	fmt.Printf("=================================\n\n")
+	fmt.Printf("\n=== WINNER/LOSER DETERMINATION COMPLETE ===\n")
+	fmt.Printf("Winners: %d | Losers: %d\n", len(winners), len(losers))
+	fmt.Printf("===========================================\n\n")
 
 	return winners, losers, nil
 }
@@ -418,19 +478,13 @@ func (s *OfferProcessingService) sendEmailsGroupedByCustomer(ctx context.Context
 	for customerId, customerOrders := range groupedByCustomer {
 		itemCounts := make(map[string]int)
 		var totalOfferedAmount int64
+		var itemNames []string
 
 		for _, order := range customerOrders {
+			itemInfo := fmt.Sprintf("%s %d UND", order.ExtraData, order.TotalQuantity)
+			itemNames = append(itemNames, itemInfo)
 			itemCounts[order.ExtraData] += order.TotalQuantity
 			totalOfferedAmount += order.OfferedAmount
-		}
-
-		var itemNames []string
-		for itemName, totalQuantity := range itemCounts {
-			if totalQuantity > 1 {
-				itemNames = append(itemNames, fmt.Sprintf("%s x%d unds", itemName, totalQuantity))
-			} else {
-				itemNames = append(itemNames, itemName)
-			}
 		}
 
 		notification := processingDomain.EmailNotification{
@@ -440,6 +494,7 @@ func (s *OfferProcessingService) sendEmailsGroupedByCustomer(ctx context.Context
 			ConcatenatedNames: joinStrings(itemNames, ", "),
 			PointOfSaleId:     pos.Name,
 		}
+		fmt.Println("ITEMnAMES CONCATENATED", itemNames)
 
 		err := s.sendEmailNotification(ctx, notification)
 		if err != nil {
@@ -552,4 +607,129 @@ func joinStrings(strs []string, sep string) string {
 		result += sep + strs[i]
 	}
 	return result
+}
+
+func (s *OfferProcessingService) identifyFailedPaymentWinners(
+	allWinners []*orderDomain.Order,
+	successfulCustomers []string,
+) []*orderDomain.Order {
+	successfulMap := make(map[string]bool)
+	for _, customerId := range successfulCustomers {
+		successfulMap[customerId] = true
+	}
+
+	var failedWinners []*orderDomain.Order
+	for _, winner := range allWinners {
+		if !successfulMap[winner.CustomerId] {
+			failedWinners = append(failedWinners, winner)
+		}
+	}
+
+	return failedWinners
+}
+
+func (s *OfferProcessingService) promoteLoserWithFailedPayments(
+	ctx context.Context,
+	failedWinners []*orderDomain.Order,
+	allLosers []*orderDomain.Order,
+	itemSpecId string,
+) ([]*orderDomain.Order, error) {
+	fmt.Printf("\n[Fallback] Promoting losers for ItemSpec: %s\n", itemSpecId)
+
+	freedAvailability := 0
+	for _, failed := range failedWinners {
+		freedAvailability += failed.TotalQuantity
+	}
+
+	fmt.Printf("[Fallback] Freed availability: %d units from %d failed winners\n", freedAvailability, len(failedWinners))
+
+	fmt.Printf("[Fallback] DEBUG: Total losers in allLosers: %d\n", len(allLosers))
+	for i, loser := range allLosers {
+		fmt.Printf("[Fallback] DEBUG:   Loser %d: OrderId=%s | ItemSpec=%s | State=%s | Customer=%s\n",
+			i+1, loser.OrderId, loser.ItemSpecificationId, loser.State, loser.CustomerId)
+	}
+
+	var itemSpecLosers []*orderDomain.Order
+	for _, loser := range allLosers {
+		if loser.ItemSpecificationId == itemSpecId && loser.State == "Rejected" {
+			itemSpecLosers = append(itemSpecLosers, loser)
+		}
+	}
+
+	fmt.Printf("[Fallback] Found %d losers for ItemSpec %s with State=Rejected\n", len(itemSpecLosers), itemSpecId)
+
+	if len(itemSpecLosers) == 0 {
+		fmt.Printf("[Fallback] No losers available to promote\n")
+		return nil, nil
+	}
+
+	sort.Slice(itemSpecLosers, func(i, j int) bool {
+		return itemSpecLosers[i].OfferedAmount > itemSpecLosers[j].OfferedAmount
+	})
+
+	var promotedWinners []*orderDomain.Order
+	allocatedQuantity := 0
+
+	for _, loser := range itemSpecLosers {
+		if allocatedQuantity+loser.TotalQuantity <= freedAvailability {
+			promotedWinners = append(promotedWinners, loser)
+			allocatedQuantity += loser.TotalQuantity
+			fmt.Printf("[Fallback] ✓ Promoting loser %s (Customer: %s, Amount: %d, Quantity: %d)\n",
+				loser.OrderId, loser.CustomerId, loser.OfferedAmount, loser.TotalQuantity)
+		} else {
+			fmt.Printf("[Fallback] ✗ Cannot promote loser %s (needs %d, only %d available)\n",
+				loser.OrderId, loser.TotalQuantity, freedAvailability-allocatedQuantity)
+		}
+	}
+
+	fmt.Printf("[Fallback] Promoted %d losers using %d/%d freed units\n",
+		len(promotedWinners), allocatedQuantity, freedAvailability)
+
+	return promotedWinners, nil
+}
+
+func (s *OfferProcessingService) updateOrderStatesAfterPromotion(
+	ctx context.Context,
+	promotedWinners []*orderDomain.Order,
+	failedWinners []*orderDomain.Order,
+) error {
+	fmt.Printf("\n[Fallback] Updating order states after promotion\n")
+
+	for _, promoted := range promotedWinners {
+		input := orderDomain.OrderInput{
+			OrderId:             promoted.OrderId,
+			CustomerId:          promoted.CustomerId,
+			ExternalId:          promoted.ExternalId,
+			ItemSpecificationId: promoted.ItemSpecificationId,
+			State:               "Approved",
+			OfferedAmount:       promoted.OfferedAmount,
+			IsWinner:            true,
+		}
+		err := s.orderService.UpdateOrder(ctx, input)
+		if err != nil {
+			fmt.Printf("[Fallback] Error updating promoted winner %s: %v\n", promoted.OrderId, err)
+			return err
+		}
+		fmt.Printf("[Fallback] ✓ Updated promoted winner %s to Approved\n", promoted.OrderId)
+	}
+
+	for _, failed := range failedWinners {
+		input := orderDomain.OrderInput{
+			OrderId:             failed.OrderId,
+			CustomerId:          failed.CustomerId,
+			ExternalId:          failed.ExternalId,
+			ItemSpecificationId: failed.ItemSpecificationId,
+			State:               "Rejected",
+			OfferedAmount:       failed.OfferedAmount,
+			IsWinner:            false,
+		}
+		err := s.orderService.UpdateOrder(ctx, input)
+		if err != nil {
+			fmt.Printf("[Fallback] Error updating failed winner %s: %v\n", failed.OrderId, err)
+			return err
+		}
+		fmt.Printf("[Fallback] ✓ Updated failed winner %s to Rejected\n", failed.OrderId)
+	}
+
+	return nil
 }

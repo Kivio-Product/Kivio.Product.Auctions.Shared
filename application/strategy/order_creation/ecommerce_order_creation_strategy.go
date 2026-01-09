@@ -119,6 +119,12 @@ func (s *EcommerceOrderCreationStrategy) CreateExternalOrder(
 	productID := s.extractCleanProductID(itemSpec.ItemId)
 	fmt.Printf("[EcommerceOrderCreation] Extracted clean product ID: %d from itemSpec.ItemId: %s\n", productID, itemSpec.ItemId)
 
+	fmt.Printf("[EcommerceOrderCreation] Deleting existing shopping cart for customer %d\n", customerResponse.ID)
+	err = s.ecommerceSvc.DeleteEcommerceShoppingCart(ctx, credentials.ApiURL, credentials.ApiKey, customerResponse.ID)
+	if err != nil {
+		fmt.Printf("[EcommerceOrderCreation] WARNING: Failed to delete shopping cart: %v (continuing anyway)\n", err)
+	}
+
 	ecommerceShoppingCartItem := s.createEcommerceShoppingCartItem(order, customerResponse.ID, productID)
 
 	cartResponse, err := s.ecommerceSvc.CreateEcommerceShoppingCartItem(ctx, credentials.ApiURL, credentials.ApiKey, ecommerceShoppingCartItem)
@@ -136,22 +142,22 @@ func (s *EcommerceOrderCreationStrategy) FinalizeOrder(
 	ctx context.Context,
 	billing *billingDomain.Billing,
 	orders []*orderDomain.Order,
-) error {
+) (string, string, error) {
 	if len(orders) == 0 {
-		return fmt.Errorf("no orders provided for finalization")
+		return "", "", fmt.Errorf("no orders provided for finalization")
 	}
 
 	posID := orders[0].PointOfSaleId
 	credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, posID)
 	if err != nil {
-		return fmt.Errorf("error getting ecommerce credentials for POS %s: %w", posID, err)
+		return "", "", fmt.Errorf("error getting ecommerce credentials for POS %s: %w", posID, err)
 	}
 
 	fmt.Printf("[EcommerceOrderFinalization] Finalizing order for %d items\n", len(orders))
 
 	storesResponse, err := s.ecommerceSvc.GetStores(ctx, credentials.ApiURL, credentials.ApiKey)
 	if err != nil {
-		return fmt.Errorf("error getting stores: %w", err)
+		return "", "", fmt.Errorf("error getting stores: %w", err)
 	}
 
 	var bidmaxStoreID int
@@ -164,17 +170,17 @@ func (s *EcommerceOrderCreationStrategy) FinalizeOrder(
 	}
 
 	if bidmaxStoreID == 0 {
-		return fmt.Errorf("Bidmax store not found")
+		return "", "", fmt.Errorf("Bidmax store not found")
 	}
 
 	customer, err := s.customerService.GetOrCreateCustomer(ctx, billing.Customer.Email)
 	if err != nil {
-		return fmt.Errorf("error getting customer: %w", err)
+		return "", "", fmt.Errorf("error getting customer: %w", err)
 	}
 
 	customerID, err := strconv.Atoi(customer.ExternalCustomerID)
 	if err != nil {
-		return fmt.Errorf("invalid external customer ID: %w", err)
+		return "", "", fmt.Errorf("invalid external customer ID: %w", err)
 	}
 
 	var billingAddressID int
@@ -215,11 +221,11 @@ func (s *EcommerceOrderCreationStrategy) FinalizeOrder(
 
 	orderResponse, err := s.ecommerceSvc.CreateEcommerceSimpleOrder(ctx, credentials.ApiURL, credentials.ApiKey, ecommerceOrder)
 	if err != nil {
-		return fmt.Errorf("error creating order in ecommerce: %w", err)
+		return "", "", fmt.Errorf("error creating order in ecommerce: %w", err)
 	}
 
-	fmt.Printf("[EcommerceOrderFinalization] Order created successfully with ID: %d, Order Items: %d\n",
-		orderResponse.ID, orderResponse.OrderItemsCount)
+	fmt.Printf("[EcommerceOrderFinalization] Order created successfully with ID: %d, Order Items: %d, Invoice URL: %s\n",
+		orderResponse.ID, orderResponse.OrderItemsCount, orderResponse.SiigoInvoicePublicURL)
 
 	if len(orderResponse.OrderItems) > 0 && len(orderResponse.OrderItems) == len(orders) {
 		fmt.Printf("[EcommerceOrderFinalization] Updating prices for %d order items\n", len(orderResponse.OrderItems))
@@ -230,13 +236,7 @@ func (s *EcommerceOrderCreationStrategy) FinalizeOrder(
 		for i, orderItem := range orderResponse.OrderItems {
 			correspondingOrder := orders[i]
 
-			itemSpec, err := s.itemSpecRepo.GetById(ctx, correspondingOrder.ItemSpecificationId)
-			if err != nil {
-				fmt.Printf("[EcommerceOrderFinalization] WARNING: Could not get itemSpec for order %s: %v\n", correspondingOrder.OrderId, err)
-				continue
-			}
-
-			unitPriceInclTax := float64(itemSpec.Amount)
+			unitPriceInclTax := float64(correspondingOrder.OfferedAmount) / float64(correspondingOrder.TotalQuantity)
 			originalUnitPriceInclTax := orderItem.UnitPriceInclTax
 			originalUnitPriceExclTax := orderItem.UnitPriceExclTax
 
@@ -301,7 +301,8 @@ func (s *EcommerceOrderCreationStrategy) FinalizeOrder(
 			len(orderResponse.OrderItems), len(orders))
 	}
 
-	return nil
+	externalOrderID := fmt.Sprintf("%d", orderResponse.ID)
+	return orderResponse.SiigoInvoicePublicURL, externalOrderID, nil
 }
 
 func (s *EcommerceOrderCreationStrategy) GetOrderType() string {

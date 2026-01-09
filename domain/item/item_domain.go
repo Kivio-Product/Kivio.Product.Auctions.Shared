@@ -10,6 +10,7 @@ type Item struct {
 	PointOfSaleId string
 	Url           string
 	Source        string
+	StockQuantity int64
 }
 
 // Update modifies the item's properties with new values, validating required fields

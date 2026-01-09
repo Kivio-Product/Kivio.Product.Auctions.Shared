@@ -154,3 +154,52 @@ func (c *WompiClient) CreateNequiToken(phoneNumber, acceptanceToken, acceptanceP
 	}
 	return &result, nil
 }
+
+func (c *WompiClient) GetNequiTokenStatus(tokenID string) (*domain.WompiNequiTokenResponse, error) {
+	url := fmt.Sprintf("%s/tokens/nequi/%s", c.BaseURL, tokenID)
+	httpReq, _ := http.NewRequest("GET", url, nil)
+	httpReq.Header.Set("Authorization", "Bearer "+c.PublicKey)
+
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var errBody bytes.Buffer
+		errBody.ReadFrom(resp.Body)
+		return nil, fmt.Errorf("error en /tokens/nequi/%s: status %d, body: %s", tokenID, resp.StatusCode, errBody.String())
+	}
+
+	var result domain.WompiNequiTokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func (c *WompiClient) GetTransactionStatus(transactionID string) (*domain.WompiTransactionStatusResponse, error) {
+	url := fmt.Sprintf("%s/transactions/%s", c.BaseURL, transactionID)
+	httpReq, _ := http.NewRequest("GET", url, nil)
+	httpReq.Header.Set("Authorization", "Bearer "+c.PublicKey)
+
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("error connecting to Wompi API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var errBody bytes.Buffer
+		errBody.ReadFrom(resp.Body)
+		return nil, fmt.Errorf("error en /transactions/%s: status %d, body: %s", transactionID, resp.StatusCode, errBody.String())
+	}
+
+	var result domain.WompiTransactionStatusResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("error parsing transaction status response: %w", err)
+	}
+
+	return &result, nil
+}

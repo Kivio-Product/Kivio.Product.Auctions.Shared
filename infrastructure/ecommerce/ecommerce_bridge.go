@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	customerDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/customer"
@@ -196,12 +197,13 @@ type EcommerceOrderItemResponse struct {
 }
 
 type EcommerceOrderResponse struct {
-	ID              int                          `json:"id"`
-	OrderItemID     int                          `json:"order_item_id"`
-	OrderItemsCount int                          `json:"order_items_count"`
-	OrderItems      []EcommerceOrderItemResponse `json:"order_items"`
-	Success         bool                         `json:"success"`
-	Message         string                       `json:"message"`
+	ID                    int                          `json:"id"`
+	OrderItemID           int                          `json:"order_item_id"`
+	OrderItemsCount       int                          `json:"order_items_count"`
+	OrderItems            []EcommerceOrderItemResponse `json:"order_items"`
+	SiigoInvoicePublicURL string                       `json:"siigo_invoice_public_url"`
+	Success               bool                         `json:"success"`
+	Message               string                       `json:"message"`
 }
 
 type EcommerceSimpleAddress struct {
@@ -266,11 +268,11 @@ type ItemVerificationDetail struct {
 }
 
 type OrderVerificationResult struct {
-	IsValid      bool                     `json:"is_valid"`
-	TotalItems   int                      `json:"total_items"`
-	GrandTotal   float64                  `json:"grand_total"`
-	Details      []ItemVerificationDetail `json:"details"`
-	MinTotal     float64                  `json:"min_total"`
+	IsValid    bool                     `json:"is_valid"`
+	TotalItems int                      `json:"total_items"`
+	GrandTotal float64                  `json:"grand_total"`
+	Details    []ItemVerificationDetail `json:"details"`
+	MinTotal   float64                  `json:"min_total"`
 }
 
 type EcommerceBridge struct {
@@ -291,12 +293,15 @@ type ItemWithDetails struct {
 
 type EcommerceService interface {
 	GetItems(ctx context.Context, apiUrl, apiKey string, page, limit int) ([]itemDomain.Item, error)
+	GetItemsWithLastItem(ctx context.Context, apiUrl, apiKey string, lastItemID string, limit int, filters map[string]string) ([]itemDomain.Item, string, error)
 	GetItemsRaw(ctx context.Context, apiUrl, apiKey string, page, limit int, publishedStatus bool) ([]byte, error)
 	GetItemByID(ctx context.Context, id, apiUrl, apiKey string) (*itemDomain.Item, error)
 	GetItemByIDWithDetails(ctx context.Context, id, apiUrl, apiKey string) (*ItemWithDetails, error)
 	GetItemByIDRaw(ctx context.Context, id, apiUrl, apiKey string) ([]byte, error)
 	GetCustomers(ctx context.Context, apiUrl, apiKey string) ([]customerDomain.Customer, error)
+	GetAllCustomers(ctx context.Context, apiUrl, apiKey string) ([]customerDomain.Customer, error)
 	GetCustomerByID(ctx context.Context, id, apiUrl, apiKey string) (*customerDomain.Customer, error)
+	GetCustomerEmails(ctx context.Context, apiUrl, apiKey string) ([]string, error)
 	GetApiKey(ctx context.Context, username, password, tokenUrl string) (string, error)
 	UpdateItemStock(ctx context.Context, apiUrl, apiKey, itemId string, newStock int) error
 	GetAllItemsRaw(ctx context.Context, apiUrl, apiKey string) ([]byte, error)
@@ -304,11 +309,14 @@ type EcommerceService interface {
 	CreateEcommerceCustomer(ctx context.Context, apiUrl, apiKey string, customer *EcommerceCustomer) (*EcommerceCustomerResponse, error)
 	CreateEcommerceBillingAddress(ctx context.Context, apiUrl, apiKey string, customerID int, address *EcommerceAddress) (*EcommerceBillingAddressResponse, error)
 	CreateEcommerceShippingAddress(ctx context.Context, apiUrl, apiKey string, customerID int, address *EcommerceAddress) (*EcommerceShippingAddressResponse, error)
+	DeleteEcommerceShoppingCart(ctx context.Context, apiUrl, apiKey string, customerID int) error
 	CreateEcommerceShoppingCartItem(ctx context.Context, apiUrl, apiKey string, cartItem *EcommerceShoppingCartItem) (*EcommerceShoppingCartItemResponse, error)
 	CreateEcommerceOrder(ctx context.Context, apiUrl, apiKey string, order *EcommerceOrder) (*EcommerceOrderResponse, error)
 	CreateEcommerceSimpleOrder(ctx context.Context, apiUrl, apiKey string, order *EcommerceSimpleOrder) (*EcommerceOrderResponse, error)
+	CountEcommerceItems(ctx context.Context, apiUrl, apiKey string, filters map[string]string) (int64, error)
 	UpdateOrderItemPrice(ctx context.Context, apiUrl, apiKey string, orderID, itemID int, orderItem *EcommerceOrderItem) error
 	UpdateOrder(ctx context.Context, apiUrl, apiKey string, orderID int, orderUpdate *EcommerceOrderUpdate) error
+	GetOrderByID(ctx context.Context, apiUrl, apiKey string, orderID int) (*EcommerceOrderResponse, error)
 	VerifyOrderTotal(ctx context.Context, items []ItemQuantity, apiUrl, apiKey string, minTotal float64) (*OrderVerificationResult, error)
 }
 
@@ -331,6 +339,37 @@ func (b *EcommerceBridge) GetItems(ctx context.Context, apiUrl, apiKey string, p
 		}
 	}
 	return result, nil
+}
+
+func (b *EcommerceBridge) CountEcommerceItems(ctx context.Context, apiUrl, apiKey string, filters map[string]string) (int64, error) {
+	total, err := b.client.CountEcommerceItems(ctx, apiUrl, apiKey, filters)
+	if err != nil {
+		return 0, err
+	}
+
+	return total, nil
+}
+
+func (b *EcommerceBridge) GetItemsWithLastItem(ctx context.Context, apiUrl, apiKey string, lastItemID string, limit int, filters map[string]string) ([]itemDomain.Item, string, error) {
+	items, nextItemID, err := b.client.GetItemsWithLastItem(ctx, apiUrl, apiKey, lastItemID, limit, filters)
+	if err != nil {
+		return nil, "", err
+	}
+
+	result := make([]itemDomain.Item, len(items))
+	for i, item := range items {
+		result[i] = itemDomain.Item{
+			ItemId:        item.ItemId,
+			Name:          item.Name,
+			Description:   item.Description,
+			ExternalId:    item.ExternalId,
+			PointOfSaleId: item.PointOfSaleId,
+			Url:           item.Url,
+			Source:        item.Source,
+			StockQuantity: item.StockQuantity,
+		}
+	}
+	return result, nextItemID, nil
 }
 
 func (b *EcommerceBridge) GetItemsRaw(ctx context.Context, apiUrl, apiKey string, page, limit int, publishedStatus bool) ([]byte, error) {
@@ -380,13 +419,82 @@ func (b *EcommerceBridge) GetItemByIDRaw(ctx context.Context, id, apiUrl, apiKey
 }
 
 func (b *EcommerceBridge) GetCustomers(ctx context.Context, apiUrl, apiKey string) ([]customerDomain.Customer, error) {
-	// TODO: Implement customer mapping when needed
-	return nil, fmt.Errorf("GetCustomers not implemented - customer domain structure changed")
+	customers, err := b.client.GetCustomers(ctx, apiUrl, apiKey)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]customerDomain.Customer, len(customers))
+	for i, c := range customers {
+		result[i] = customerDomain.Customer{
+			Email: c.Email,
+		}
+	}
+	return result, nil
+}
+
+func (b *EcommerceBridge) GetAllCustomers(ctx context.Context, apiUrl, apiKey string) ([]customerDomain.Customer, error) {
+	customers, err := b.client.GetAllCustomers(ctx, apiUrl, apiKey)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]customerDomain.Customer, len(customers))
+	for i, c := range customers {
+		result[i] = customerDomain.Customer{
+			Email: c.Email,
+		}
+	}
+	return result, nil
 }
 
 func (b *EcommerceBridge) GetCustomerByID(ctx context.Context, id, apiUrl, apiKey string) (*customerDomain.Customer, error) {
-	// TODO: Implement customer mapping when needed
 	return nil, fmt.Errorf("GetCustomerByID not implemented - customer domain structure changed")
+}
+
+func (b *EcommerceBridge) GetCustomerEmails(ctx context.Context, apiUrl, apiKey string) ([]string, error) {
+	log.Printf("[GET_CUSTOMER_EMAILS] Iniciando obtención de emails desde apiUrl: %s", apiUrl)
+	emailSet := make(map[string]struct{})
+
+	log.Printf("[GET_CUSTOMER_EMAILS] Llamando a GetAllCustomers (con paginación)...")
+	customers, err := b.client.GetAllCustomers(ctx, apiUrl, apiKey)
+	if err == nil {
+		log.Printf("[GET_CUSTOMER_EMAILS] GetAllCustomers exitoso: se obtuvieron %d clientes", len(customers))
+		emailsFromCustomers := 0
+		for _, c := range customers {
+			if c.Email != "" {
+				emailSet[c.Email] = struct{}{}
+				emailsFromCustomers++
+			}
+		}
+		log.Printf("[GET_CUSTOMER_EMAILS] Se agregaron %d emails desde clientes al emailSet", emailsFromCustomers)
+	} else {
+		log.Printf("[GET_CUSTOMER_EMAILS] ERROR en GetAllCustomers: %v", err)
+	}
+
+	log.Printf("[GET_CUSTOMER_EMAILS] Llamando a GetOrderEmails...")
+	orderEmails, err := b.client.GetOrderEmails(ctx, apiUrl, apiKey)
+	if err == nil {
+		log.Printf("[GET_CUSTOMER_EMAILS] GetOrderEmails exitoso: se obtuvieron %d emails de órdenes", len(orderEmails))
+		emailsFromOrders := 0
+		for _, email := range orderEmails {
+			if email != "" {
+				emailSet[email] = struct{}{}
+				emailsFromOrders++
+			}
+		}
+		log.Printf("[GET_CUSTOMER_EMAILS] Se agregaron %d emails desde órdenes al emailSet (pueden ser duplicados)", emailsFromOrders)
+	} else {
+		log.Printf("[GET_CUSTOMER_EMAILS] ERROR en GetOrderEmails: %v", err)
+	}
+
+	emails := make([]string, 0, len(emailSet))
+	for email := range emailSet {
+		emails = append(emails, email)
+	}
+
+	log.Printf("[GET_CUSTOMER_EMAILS] Total de emails únicos a retornar: %d", len(emails))
+	return emails, nil
 }
 
 func (b *EcommerceBridge) GetApiKey(ctx context.Context, username, password, tokenUrl string) (string, error) {
@@ -534,6 +642,19 @@ func (b *EcommerceBridge) CreateEcommerceShippingAddress(ctx context.Context, ap
 	}, nil
 }
 
+func (b *EcommerceBridge) DeleteEcommerceShoppingCart(ctx context.Context, apiUrl, apiKey string, customerID int) error {
+	fmt.Printf("[ECOMMERCE] Deleting shopping cart for customer %d\n", customerID)
+
+	err := b.client.DeleteEcommerceShoppingCart(ctx, apiUrl, apiKey, customerID)
+	if err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to delete shopping cart: %v\n", err)
+		return fmt.Errorf("failed to delete shopping cart: %w", err)
+	}
+
+	fmt.Printf("[ECOMMERCE] SUCCESS: Shopping cart deleted for customer %d\n", customerID)
+	return nil
+}
+
 func (b *EcommerceBridge) CreateEcommerceShoppingCartItem(ctx context.Context, apiUrl, apiKey string, cartItem *EcommerceShoppingCartItem) (*EcommerceShoppingCartItemResponse, error) {
 	fmt.Printf("[ECOMMERCE] Creating shopping cart item - CustomerID: %d, ProductID: %d\n", cartItem.CustomerID, cartItem.ProductID)
 
@@ -677,8 +798,9 @@ func (b *EcommerceBridge) CreateEcommerceSimpleOrder(ctx context.Context, apiUrl
 	}
 
 	type OrderResponse struct {
-		ID         int                 `json:"id"`
-		OrderItems []OrderItemResponse `json:"order_items"`
+		ID                    int                 `json:"id"`
+		OrderItems            []OrderItemResponse `json:"order_items"`
+		SiigoInvoicePublicURL string              `json:"siigo_invoice_public_url"`
 	}
 
 	type SimpleOrderCreationResponse struct {
@@ -720,12 +842,13 @@ func (b *EcommerceBridge) CreateEcommerceSimpleOrder(ctx context.Context, apiUrl
 	}
 
 	return &EcommerceOrderResponse{
-		ID:              orderID,
-		OrderItemID:     firstOrderItemID,
-		Success:         true,
-		Message:         "Simple order created successfully",
-		OrderItemsCount: len(response.Orders[0].OrderItems),
-		OrderItems:      orderItems,
+		ID:                    orderID,
+		OrderItemID:           firstOrderItemID,
+		Success:               true,
+		Message:               "Simple order created successfully",
+		OrderItemsCount:       len(response.Orders[0].OrderItems),
+		OrderItems:            orderItems,
+		SiigoInvoicePublicURL: response.Orders[0].SiigoInvoicePublicURL,
 	}, nil
 }
 
@@ -800,6 +923,65 @@ func (b *EcommerceBridge) UpdateOrder(ctx context.Context, apiUrl, apiKey string
 
 	fmt.Printf("[ECOMMERCE] SUCCESS: Order updated\n")
 	return nil
+}
+
+func (b *EcommerceBridge) GetOrderByID(ctx context.Context, apiUrl, apiKey string, orderID int) (*EcommerceOrderResponse, error) {
+	fmt.Printf("[ECOMMERCE] Getting order by ID: %d\n", orderID)
+
+	respBody, err := b.client.GetOrderByID(ctx, apiUrl, apiKey, orderID)
+	if err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to get order: %v\n", err)
+		return nil, fmt.Errorf("failed to get order: %w", err)
+	}
+
+	type OrderItemResponse struct {
+		ID               int     `json:"id"`
+		ProductID        int     `json:"product_id"`
+		UnitPriceInclTax float64 `json:"unit_price_incl_tax"`
+		UnitPriceExclTax float64 `json:"unit_price_excl_tax"`
+	}
+
+	type OrderResponse struct {
+		ID                    int                 `json:"id"`
+		OrderItems            []OrderItemResponse `json:"order_items"`
+		SiigoInvoicePublicURL string              `json:"siigo_invoice_public_url"`
+	}
+
+	type GetOrderResponse struct {
+		Orders []OrderResponse `json:"orders"`
+	}
+
+	var response GetOrderResponse
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to unmarshal order response: %v\n", err)
+		return nil, fmt.Errorf("failed to unmarshal order response: %w", err)
+	}
+
+	if len(response.Orders) == 0 {
+		fmt.Printf("[ECOMMERCE] ERROR: No order found with ID: %d\n", orderID)
+		return nil, fmt.Errorf("no order found with ID: %d", orderID)
+	}
+
+	order := response.Orders[0]
+	var orderItems []EcommerceOrderItemResponse
+	for _, item := range order.OrderItems {
+		orderItems = append(orderItems, EcommerceOrderItemResponse{
+			ID:               item.ID,
+			ProductID:        item.ProductID,
+			UnitPriceInclTax: item.UnitPriceInclTax,
+			UnitPriceExclTax: item.UnitPriceExclTax,
+		})
+	}
+
+	fmt.Printf("[ECOMMERCE] SUCCESS: Order retrieved with ID: %d, Invoice URL: %s\n", order.ID, order.SiigoInvoicePublicURL)
+
+	return &EcommerceOrderResponse{
+		ID:                    order.ID,
+		SiigoInvoicePublicURL: order.SiigoInvoicePublicURL,
+		OrderItems:            orderItems,
+		Success:               true,
+		Message:               "Order retrieved successfully",
+	}, nil
 }
 
 func (b *EcommerceBridge) VerifyOrderTotal(ctx context.Context, items []ItemQuantity, apiUrl, apiKey string, minTotal float64) (*OrderVerificationResult, error) {

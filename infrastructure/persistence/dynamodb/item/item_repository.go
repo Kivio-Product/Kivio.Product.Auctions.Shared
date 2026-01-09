@@ -19,7 +19,7 @@ type ItemRepository interface {
 	GetAllItems() ([]domain.Item, error)
 	GetItemById(ctx context.Context, itemId string) (*domain.Item, error)
 	DeleteItem(ctx context.Context, itemId string) error
-	GetItemsByPosId(id string, filters map[string]string) ([]domain.Item, error)
+	GetItemsByPosId(id string, filters map[string]string) ([]domain.Item, int64, error)
 	GetItemsByUserID(userID string) ([]domain.Item, error)
 	BatchGetItemsByIds(ctx context.Context, itemIds []string) ([]domain.Item, error)
 	GetItemsByPosIdPaged(ctx context.Context, posID string, limit int, lastEvaluatedKey map[string]*dynamodb.AttributeValue) ([]domain.Item, map[string]*dynamodb.AttributeValue, error)
@@ -125,7 +125,7 @@ func (r *itemRepository) GetItemById(ctx context.Context, itemId string) (*domai
 	return &item, nil
 }
 
-func (r *itemRepository) GetItemsByPosId(posId string, filters map[string]string) ([]domain.Item, error) {
+func (r *itemRepository) GetItemsByPosId(posId string, filters map[string]string) ([]domain.Item, int64, error) {
 	exprAttrNames := map[string]*string{}
 	exprAttrValues := map[string]*dynamodb.AttributeValue{}
 	var filterExpr []string
@@ -156,16 +156,25 @@ func (r *itemRepository) GetItemsByPosId(posId string, filters map[string]string
 
 	result, err := r.client.Query(input)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query items for PosId %s: %w", posId, err)
+		return nil, 0, fmt.Errorf("failed to query items for PosId %s: %w", posId, err)
 	}
 
 	var items []domain.Item
 	err = dynamodbattribute.UnmarshalListOfMaps(result.Items, &items)
 	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal items: %w", err)
+		return nil, 0, fmt.Errorf("failed to unmarshal items: %w", err)
 	}
 
-	return items, nil
+	countInput := *input
+	countInput.Limit = nil
+	countInput.ExclusiveStartKey = nil
+	countInput.Select = aws.String("COUNT")
+
+	countResult, err := r.client.Query(&countInput)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to count items: %w", err)
+	}
+	return items, *countResult.Count, nil
 }
 
 func (r *itemRepository) GetItemsByUserID(userID string) ([]domain.Item, error) {

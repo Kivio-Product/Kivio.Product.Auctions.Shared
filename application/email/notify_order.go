@@ -18,15 +18,16 @@ func NewNotifyOrderUseCase(notifier domain.Notifier) *NotifyOrderUseCase {
 	}
 }
 
-func (uc *NotifyOrderUseCase) Execute(state string, customerEmail string, concatenatedItemNames string, firstOrderAmount int64, concatenatedItemDescriptions string, posName, orderStatusUrl string) error {
+func (uc *NotifyOrderUseCase) Execute(state string, customerEmail string, concatenatedItemNames string, firstOrderAmount int64, concatenatedItemDescriptions string, posName, orderStatusUrl string, siigoInvoiceURL string) error {
 	templateName := getTemplateName(state) + posName
 	p := message.NewPrinter(language.Spanish)
 	formattedAmount := p.Sprintf("%d", firstOrderAmount)
 	templateData := map[string]string{
-		"ITEM_NAME":        concatenatedItemNames,
-		"AMOUNT":           formattedAmount,
-		"ITEM_DESCRIPTION": concatenatedItemDescriptions,
-		"ORDER_STATUS_URL": orderStatusUrl,
+		"ITEM_NAME":         concatenatedItemNames,
+		"AMOUNT":            formattedAmount,
+		"ITEM_DESCRIPTION":  concatenatedItemDescriptions,
+		"ORDER_STATUS_URL":  orderStatusUrl,
+		"SIIGO_INVOICE_URL": siigoInvoiceURL,
 	}
 
 	return uc.notifier.SendTemplatedEmail(customerEmail, templateName, templateData)
