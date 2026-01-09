@@ -40,6 +40,7 @@ type OfferProcessingService struct {
 	billingRepo      billingInfrastructure.BillingRepository
 }
 
+// NewOfferProcessingService creates a new instance of OfferProcessingService with all required dependencies
 func NewOfferProcessingService(
 	offerService offerService.IOfferService,
 	orderService orderService.OrderService,
@@ -68,6 +69,7 @@ func NewOfferProcessingService(
 	}
 }
 
+// ProcessOffer processes a complete offer by evaluating orders, determining winners/losers, processing payments, and sending notifications
 func (s *OfferProcessingService) ProcessOffer(ctx context.Context, offerId string) (*processingDomain.ProcessOfferResponse, error) {
 	offer, err := s.offerService.GetOfferById(ctx, offerId)
 	if err != nil {
@@ -272,6 +274,7 @@ func (s *OfferProcessingService) ProcessOffer(ctx context.Context, offerId strin
 	}, nil
 }
 
+// getOrdersByOffer retrieves all orders associated with a specific offer ID
 func (s *OfferProcessingService) getOrdersByOffer(ctx context.Context, offerId string) ([]*orderDomain.Order, error) {
 	domainOrders, err := s.orderService.GetOrderByOfferId(ctx, offerId)
 	if err != nil {
@@ -286,6 +289,7 @@ func (s *OfferProcessingService) getOrdersByOffer(ctx context.Context, offerId s
 	return orders, nil
 }
 
+// groupOrdersByItemSpec groups orders by their item specification ID for processing
 func (s *OfferProcessingService) groupOrdersByItemSpec(orders []*orderDomain.Order) map[string][]*orderDomain.Order {
 	grouped := make(map[string][]*orderDomain.Order)
 	for _, order := range orders {
@@ -294,6 +298,7 @@ func (s *OfferProcessingService) groupOrdersByItemSpec(orders []*orderDomain.Ord
 	return grouped
 }
 
+// filterPendingOrders filters orders to only include those with "Pending" state
 func (s *OfferProcessingService) filterPendingOrders(orders []*orderDomain.Order) []*orderDomain.Order {
 	var pending []*orderDomain.Order
 	for _, order := range orders {
@@ -304,6 +309,7 @@ func (s *OfferProcessingService) filterPendingOrders(orders []*orderDomain.Order
 	return pending
 }
 
+// processItemSpecOrders processes orders for a specific item specification, determining winners and losers based on availability
 func (s *OfferProcessingService) processItemSpecOrders(ctx context.Context, itemSpecId string, orders []*orderDomain.Order, posId string) ([]*orderDomain.Order, []*orderDomain.Order, error) {
 	fmt.Printf("\n>>> processItemSpecOrders - ItemSpecId: %s <<<\n", itemSpecId)
 
@@ -421,6 +427,7 @@ func (s *OfferProcessingService) processItemSpecOrders(ctx context.Context, item
 	return winners, losers, nil
 }
 
+// updateExternalItemStock updates the stock quantity for an external item in the ecommerce system
 func (s *OfferProcessingService) updateExternalItemStock(ctx context.Context, posId, itemId string, newStock int) error {
 	creds, err := s.ecommerceCredSvc.GetCredentials(ctx, posId)
 	if err != nil {
@@ -432,6 +439,7 @@ func (s *OfferProcessingService) updateExternalItemStock(ctx context.Context, po
 	return s.ecommerceService.UpdateItemStock(ctx, creds.ApiURL, creds.ApiKey, itemId, newStock)
 }
 
+// updateBillingState updates the billing state for orders grouped by billing ID
 func (s *OfferProcessingService) updateBillingState(ctx context.Context, orders []*orderDomain.Order, status string) {
 	groupedByBilling := make(map[string][]*orderDomain.Order)
 	for _, order := range orders {
@@ -454,6 +462,7 @@ func (s *OfferProcessingService) updateBillingState(ctx context.Context, orders 
 	}
 }
 
+// sendEmailsGroupedByCustomer sends email notifications to customers grouped by their orders
 func (s *OfferProcessingService) sendEmailsGroupedByCustomer(ctx context.Context, orders []*orderDomain.Order, status, posId string) error {
 	groupedByCustomer := make(map[string][]*orderDomain.Order)
 	for _, order := range orders {
@@ -496,6 +505,7 @@ func (s *OfferProcessingService) sendEmailsGroupedByCustomer(ctx context.Context
 	return nil
 }
 
+// sendEmailNotification sends a single email notification to a customer about their order status
 func (s *OfferProcessingService) sendEmailNotification(ctx context.Context, notification processingDomain.EmailNotification) error {
 	return s.emailSender.NotifyOrderStatus(ctx,
 		notification.CustomerId,
@@ -507,10 +517,12 @@ func (s *OfferProcessingService) sendEmailNotification(ctx context.Context, noti
 	)
 }
 
+// closeOffer updates the offer state to "Closed" after processing is complete
 func (s *OfferProcessingService) closeOffer(ctx context.Context, offer *offerDomain.Offer) error {
 	return s.offerService.UpdateOfferState(ctx, offer.OfferId, "Closed")
 }
 
+// processPaymentsByCustomer processes payments for winning orders grouped by customer
 func (s *OfferProcessingService) processPaymentsByCustomer(ctx context.Context, allWinners []*orderDomain.Order) []string {
 	winnersByCustomer := make(map[string][]*orderDomain.Order)
 	var successfulCustomers []string
@@ -535,6 +547,7 @@ func (s *OfferProcessingService) processPaymentsByCustomer(ctx context.Context, 
 	return successfulCustomers
 }
 
+// filterWinnersBySuccessfulPayment separates winners into those with successful payments and those with failed payments
 func (s *OfferProcessingService) filterWinnersBySuccessfulPayment(allWinners []*orderDomain.Order, successfulCustomers []string) ([]*orderDomain.Order, []*orderDomain.Order) {
 	successfulCustomersMap := make(map[string]bool)
 	for _, customerId := range successfulCustomers {
@@ -555,6 +568,7 @@ func (s *OfferProcessingService) filterWinnersBySuccessfulPayment(allWinners []*
 	return winnersWithSuccessfulPayment, winnersWithUnsuccessfulPayment
 }
 
+// createInvoiceForSuccessfulPayment creates an invoice for orders with successful payments
 func (s *OfferProcessingService) createInvoiceForSuccessfulPayment(ctx context.Context, orders []*orderDomain.Order, customerId string) {
 	if len(orders) == 0 {
 		fmt.Printf("No orders provided for invoice creation for customer %s\n", customerId)
@@ -579,6 +593,7 @@ func (s *OfferProcessingService) createInvoiceForSuccessfulPayment(ctx context.C
 	}
 }
 
+// joinStrings joins a slice of strings with a separator
 func joinStrings(strs []string, sep string) string {
 	if len(strs) == 0 {
 		return ""

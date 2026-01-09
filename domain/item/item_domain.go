@@ -13,6 +13,7 @@ type Item struct {
 	StockQuantity int64
 }
 
+// Update modifies the item's properties with new values, validating required fields
 func (o *Item) Update(name, description, externalId, pointOfSaleId, url string) error {
 
 	if name == "" {

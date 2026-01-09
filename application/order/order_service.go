@@ -55,6 +55,7 @@ type orderService struct {
 	eventLogger    *logging.DomainEventLogger
 }
 
+// NewOrderService creates a new instance of OrderService with all required dependencies and logging setup
 func NewOrderService(repo orderInfrastructure.OrderRepository, orderFactory domain.OrderFactory, itemSpecRepo itemSpecInfrastructure.ItemSpecificationRepository, itemRepo itemInfrastructure.ItemRepository, emailService emailservices.EmailServiceInterface, offerService offerService.IOfferService, wompiService payment.WompiService, billingService billing.BillingService) OrderService {
 	loggerRepo := infrastructureLogging.GetLoggerRepository()
 	serviceLogger := applicationLogging.NewServiceLogger(loggerRepo, "OrderService")
@@ -74,6 +75,7 @@ func NewOrderService(repo orderInfrastructure.OrderRepository, orderFactory doma
 	}
 }
 
+// CreateOrder creates a new single-item order with the provided details and saves it to the repository
 func (s *orderService) CreateOrder(ctx context.Context, input domain.OrderInput) (*domain.Order, error) {
 	start := time.Now()
 	s.serviceLogger.LogServiceStart(ctx, "CreateOrder", map[string]interface{}{
@@ -136,6 +138,7 @@ func (s *orderService) CreateOrder(ctx context.Context, input domain.OrderInput)
 	return order, nil
 }
 
+// CreateMultipleItemsOrder creates a new order with multiple items, validating availability and permissions
 func (s *orderService) CreateMultipleItemsOrder(ctx context.Context, input domain.OrderInput) (*domain.Order, error) {
 
 	if len(input.Items) > 1 {
@@ -224,6 +227,7 @@ func (s *orderService) CreateMultipleItemsOrder(ctx context.Context, input domai
 	return order, nil
 }
 
+// GetOrders retrieves all orders from the repository
 func (s *orderService) GetOrders(ctx context.Context) ([]domain.Order, error) {
 	orders, err := s.repo.GetAllOrders(ctx)
 	if err != nil {
@@ -232,6 +236,7 @@ func (s *orderService) GetOrders(ctx context.Context) ([]domain.Order, error) {
 	return orders, nil
 }
 
+// UpdateOrder updates an existing order with new details and saves the changes
 func (s *orderService) UpdateOrder(ctx context.Context, input domain.OrderInput) error {
 	order, err := s.repo.GetIdOrder(ctx, input.OrderId)
 	if err != nil {
@@ -253,6 +258,7 @@ func (s *orderService) UpdateOrder(ctx context.Context, input domain.OrderInput)
 	return s.repo.SaveOrder(ctx, order)
 }
 
+// UpdateOrderState updates the state of an order and logs the state change
 func (s *orderService) UpdateOrderState(ctx context.Context, orderId string, state string) error {
 	start := time.Now()
 	s.serviceLogger.LogServiceStart(ctx, "UpdateOrderState", map[string]interface{}{
@@ -301,6 +307,7 @@ func (s *orderService) UpdateOrderState(ctx context.Context, orderId string, sta
 	return nil
 }
 
+// GetAllOrdersWithDetails retrieves all orders with enriched details including item information
 func (s *orderService) GetAllOrdersWithDetails(ctx context.Context) ([]domain.OrderDetail, error) {
 	orders, err := s.repo.GetAllOrders(ctx)
 	if err != nil {
@@ -334,6 +341,7 @@ func (s *orderService) GetAllOrdersWithDetails(ctx context.Context) ([]domain.Or
 	return orderDetails, nil
 }
 
+// GetOrderById retrieves a specific order by its ID from the repository
 func (s *orderService) GetOrderById(ctx context.Context, id string) (*domain.Order, error) {
 	items, err := s.repo.GetIdOrder(ctx, id)
 	if err != nil {
@@ -342,6 +350,7 @@ func (s *orderService) GetOrderById(ctx context.Context, id string) (*domain.Ord
 	return items, nil
 }
 
+// GetOrderByItemSpecificationId retrieves all orders associated with a specific item specification ID
 func (s *orderService) GetOrderByItemSpecificationId(ctx context.Context, id string) ([]domain.Order, error) {
 	order, err := s.repo.GetItemSpecificationOrder(id)
 	if err != nil {
@@ -350,6 +359,7 @@ func (s *orderService) GetOrderByItemSpecificationId(ctx context.Context, id str
 	return order, nil
 }
 
+// GetOrderByOfferId retrieves all orders associated with a specific offer ID
 func (s *orderService) GetOrderByOfferId(ctx context.Context, id string) ([]domain.Order, error) {
 	order, err := s.repo.GetOfferOrder(id)
 	if err != nil {
@@ -358,11 +368,13 @@ func (s *orderService) GetOrderByOfferId(ctx context.Context, id string) ([]doma
 	return order, nil
 }
 
+// DeleteOrderById deletes an order by its ID from the repository
 func (s *orderService) DeleteOrderById(ctx context.Context, id string) error {
 	err := s.repo.DeleteOrder(ctx, id)
 	return err
 }
 
+// GetPaginatedOrdersWithDetails retrieves orders with pagination support and enriched details
 func (s *orderService) GetPaginatedOrdersWithDetails(ctx context.Context, params domain.PaginationParams, filters map[string]string) (*domain.PaginatedOrdersResponse, error) {
 	if params.PageSize < 1 {
 		params.PageSize = 10
@@ -400,6 +412,7 @@ func (s *orderService) GetPaginatedOrdersWithDetails(ctx context.Context, params
 	}, nil
 }
 
+// GetOrdersBillingByID retrieves all orders associated with a specific billing ID
 func (s *orderService) GetOrdersBillingByID(ctx context.Context, id string) ([]domain.Order, error) {
 	order, err := s.repo.GetOrdersBillingByID(ctx, id)
 	if err != nil {
@@ -408,6 +421,7 @@ func (s *orderService) GetOrdersBillingByID(ctx context.Context, id string) ([]d
 	return order, nil
 }
 
+// NotifyAndCloseApprovedOrdersByPointOfSaleId generates a PDF report of approved orders, sends it via email, and closes the orders
 func (s *orderService) NotifyAndCloseApprovedOrdersByPointOfSaleId(ctx context.Context, pointOfSaleId string, adminEmail string) error {
 	orders, err := s.repo.GetOrdersByPointOfSaleId(ctx, pointOfSaleId)
 	if err != nil {
@@ -508,6 +522,7 @@ func (s *orderService) NotifyAndCloseApprovedOrdersByPointOfSaleId(ctx context.C
 	return nil
 }
 
+// cp1252 converts a string to Windows-1252 encoding for PDF generation
 func cp1252(s string) string {
 	encoded, err := charmap.Windows1252.NewEncoder().String(s)
 	if err != nil {

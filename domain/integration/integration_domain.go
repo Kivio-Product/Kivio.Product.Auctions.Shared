@@ -2,8 +2,14 @@ package domain
 
 import "time"
 
+// IntegrationStatus represents the current state of an integration
+// 
+// This type defines the lifecycle states that an integration can be in,
+// controlling its operational status and determining how it behaves
+// within the auction system.
 type IntegrationStatus string
 
+// Predefined integration statuses for lifecycle management
 const (
 	Active    IntegrationStatus = "Active"
 	Inactive  IntegrationStatus = "Inactive"
@@ -11,6 +17,11 @@ const (
 	Connected IntegrationStatus = "Connected"
 )
 
+// Integration represents a connection to an external system or service
+// 
+// An Integration entity defines how the auction system connects to external
+// systems like e-commerce platforms, payment providers, or other services.
+// It contains configuration, status tracking, and synchronization information.
 type Integration struct {
 	IntegrationID string              `json:"integrationId" dynamodbav:"integrationId"`
 	Name          string              `json:"name" dynamodbav:"name"`
