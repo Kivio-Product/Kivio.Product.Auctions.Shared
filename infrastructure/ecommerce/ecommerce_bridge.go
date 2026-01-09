@@ -226,6 +226,53 @@ type EcommerceSimpleOrderRequest struct {
 	Order EcommerceSimpleOrder `json:"order"`
 }
 
+type EcommerceStore struct {
+	Name       string `json:"name"`
+	URL        string `json:"url"`
+	SSLEnabled bool   `json:"ssl_enabled"`
+	ID         int    `json:"id"`
+}
+
+type EcommerceStoresResponse struct {
+	Stores []EcommerceStore `json:"stores"`
+}
+
+type EcommerceOrderUpdate struct {
+	OrderTotal           float64                 `json:"order_total"`
+	OrderSubtotalInclTax float64                 `json:"order_subtotal_incl_tax"`
+	OrderSubtotalExclTax float64                 `json:"order_subtotal_excl_tax"`
+	ID                   int                     `json:"id"`
+	CustomerID           int                     `json:"customer_id"`
+	BillingAddress       *EcommerceSimpleAddress `json:"billing_address"`
+	ShippingAddress      *EcommerceSimpleAddress `json:"shipping_address"`
+}
+
+type EcommerceOrderUpdateRequest struct {
+	ObjectPropertyNameValuePairs map[string]interface{} `json:"ObjectPropertyNameValuePairs"`
+	Order                        EcommerceOrderUpdate   `json:"order"`
+}
+
+type ItemQuantity struct {
+	ItemID   string `json:"item_id"`
+	Quantity int    `json:"quantity"`
+}
+
+type ItemVerificationDetail struct {
+	ItemID   string  `json:"item_id"`
+	Price    float64 `json:"price"`
+	Quantity int     `json:"quantity"`
+	Subtotal float64 `json:"subtotal"`
+	ItemName string  `json:"item_name"`
+}
+
+type OrderVerificationResult struct {
+	IsValid      bool                     `json:"is_valid"`
+	TotalItems   int                      `json:"total_items"`
+	GrandTotal   float64                  `json:"grand_total"`
+	Details      []ItemVerificationDetail `json:"details"`
+	MinTotal     float64                  `json:"min_total"`
+}
+
 type EcommerceBridge struct {
 	client ecommerceClient.EcommerceService
 }
@@ -236,16 +283,24 @@ func NewEcommerceBridge() *EcommerceBridge {
 	}
 }
 
+type ItemWithDetails struct {
+	itemDomain.Item
+	Availability int     `json:"availability"`
+	Price        float64 `json:"price"`
+}
+
 type EcommerceService interface {
 	GetItems(ctx context.Context, apiUrl, apiKey string, page, limit int) ([]itemDomain.Item, error)
 	GetItemsRaw(ctx context.Context, apiUrl, apiKey string, page, limit int, publishedStatus bool) ([]byte, error)
 	GetItemByID(ctx context.Context, id, apiUrl, apiKey string) (*itemDomain.Item, error)
+	GetItemByIDWithDetails(ctx context.Context, id, apiUrl, apiKey string) (*ItemWithDetails, error)
 	GetItemByIDRaw(ctx context.Context, id, apiUrl, apiKey string) ([]byte, error)
 	GetCustomers(ctx context.Context, apiUrl, apiKey string) ([]customerDomain.Customer, error)
 	GetCustomerByID(ctx context.Context, id, apiUrl, apiKey string) (*customerDomain.Customer, error)
 	GetApiKey(ctx context.Context, username, password, tokenUrl string) (string, error)
 	UpdateItemStock(ctx context.Context, apiUrl, apiKey, itemId string, newStock int) error
 	GetAllItemsRaw(ctx context.Context, apiUrl, apiKey string) ([]byte, error)
+	GetStores(ctx context.Context, apiUrl, apiKey string) (*EcommerceStoresResponse, error)
 	CreateEcommerceCustomer(ctx context.Context, apiUrl, apiKey string, customer *EcommerceCustomer) (*EcommerceCustomerResponse, error)
 	CreateEcommerceBillingAddress(ctx context.Context, apiUrl, apiKey string, customerID int, address *EcommerceAddress) (*EcommerceBillingAddressResponse, error)
 	CreateEcommerceShippingAddress(ctx context.Context, apiUrl, apiKey string, customerID int, address *EcommerceAddress) (*EcommerceShippingAddressResponse, error)
@@ -253,6 +308,8 @@ type EcommerceService interface {
 	CreateEcommerceOrder(ctx context.Context, apiUrl, apiKey string, order *EcommerceOrder) (*EcommerceOrderResponse, error)
 	CreateEcommerceSimpleOrder(ctx context.Context, apiUrl, apiKey string, order *EcommerceSimpleOrder) (*EcommerceOrderResponse, error)
 	UpdateOrderItemPrice(ctx context.Context, apiUrl, apiKey string, orderID, itemID int, orderItem *EcommerceOrderItem) error
+	UpdateOrder(ctx context.Context, apiUrl, apiKey string, orderID int, orderUpdate *EcommerceOrderUpdate) error
+	VerifyOrderTotal(ctx context.Context, items []ItemQuantity, apiUrl, apiKey string, minTotal float64) (*OrderVerificationResult, error)
 }
 
 func (b *EcommerceBridge) GetItems(ctx context.Context, apiUrl, apiKey string, page, limit int) ([]itemDomain.Item, error) {
@@ -294,6 +351,27 @@ func (b *EcommerceBridge) GetItemByID(ctx context.Context, id, apiUrl, apiKey st
 		PointOfSaleId: item.PointOfSaleId,
 		Url:           item.Url,
 		Source:        item.Source,
+	}, nil
+}
+
+func (b *EcommerceBridge) GetItemByIDWithDetails(ctx context.Context, id, apiUrl, apiKey string) (*ItemWithDetails, error) {
+	itemDetails, err := b.client.GetItemByIDWithDetails(ctx, id, apiUrl, apiKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ItemWithDetails{
+		Item: itemDomain.Item{
+			ItemId:        itemDetails.Item.ItemId,
+			Name:          itemDetails.Item.Name,
+			Description:   itemDetails.Item.Description,
+			ExternalId:    itemDetails.Item.ExternalId,
+			PointOfSaleId: itemDetails.Item.PointOfSaleId,
+			Url:           itemDetails.Item.Url,
+			Source:        itemDetails.Item.Source,
+		},
+		Availability: itemDetails.Availability,
+		Price:        itemDetails.Price,
 	}, nil
 }
 
@@ -678,6 +756,95 @@ func (b *EcommerceBridge) UpdateOrderItemPrice(ctx context.Context, apiUrl, apiK
 
 	fmt.Printf("[ECOMMERCE] SUCCESS: Order item price updated\n")
 	return nil
+}
+
+func (b *EcommerceBridge) GetStores(ctx context.Context, apiUrl, apiKey string) (*EcommerceStoresResponse, error) {
+	fmt.Printf("[ECOMMERCE] Getting stores from %s\n", apiUrl)
+
+	respBody, err := b.client.GetStores(ctx, apiUrl, apiKey)
+	if err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to get stores: %v\n", err)
+		return nil, fmt.Errorf("failed to get stores: %w", err)
+	}
+
+	var response EcommerceStoresResponse
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to unmarshal stores response: %v\n", err)
+		return nil, fmt.Errorf("failed to unmarshal stores response: %w", err)
+	}
+
+	fmt.Printf("[ECOMMERCE] SUCCESS: Retrieved %d stores\n", len(response.Stores))
+	return &response, nil
+}
+
+func (b *EcommerceBridge) UpdateOrder(ctx context.Context, apiUrl, apiKey string, orderID int, orderUpdate *EcommerceOrderUpdate) error {
+	fmt.Printf("[ECOMMERCE] Updating order %d - Total: %.2f, SubtotalInclTax: %.2f, SubtotalExclTax: %.2f\n",
+		orderID, orderUpdate.OrderTotal, orderUpdate.OrderSubtotalInclTax, orderUpdate.OrderSubtotalExclTax)
+
+	updateRequest := EcommerceOrderUpdateRequest{
+		ObjectPropertyNameValuePairs: map[string]interface{}{},
+		Order:                        *orderUpdate,
+	}
+
+	orderData, err := json.Marshal(updateRequest)
+	if err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to marshal order update data: %v\n", err)
+		return fmt.Errorf("failed to marshal order update data: %w", err)
+	}
+
+	err = b.client.UpdateOrder(ctx, apiUrl, apiKey, orderID, orderData)
+	if err != nil {
+		fmt.Printf("[ECOMMERCE] ERROR: Failed to update order: %v\n", err)
+		return fmt.Errorf("failed to update order: %w", err)
+	}
+
+	fmt.Printf("[ECOMMERCE] SUCCESS: Order updated\n")
+	return nil
+}
+
+func (b *EcommerceBridge) VerifyOrderTotal(ctx context.Context, items []ItemQuantity, apiUrl, apiKey string, minTotal float64) (*OrderVerificationResult, error) {
+	fmt.Printf("[ECOMMERCE] Verifying order total for %d items with minimum total: %.2f\n", len(items), minTotal)
+
+	result := &OrderVerificationResult{
+		IsValid:    false,
+		TotalItems: len(items),
+		GrandTotal: 0,
+		Details:    make([]ItemVerificationDetail, 0, len(items)),
+		MinTotal:   minTotal,
+	}
+
+	for _, item := range items {
+		itemDetails, err := b.GetItemByIDWithDetails(ctx, item.ItemID, apiUrl, apiKey)
+		if err != nil {
+			fmt.Printf("[ECOMMERCE] ERROR: Failed to get item details for ID %s: %v\n", item.ItemID, err)
+			return nil, fmt.Errorf("failed to get item details for ID %s: %w", item.ItemID, err)
+		}
+
+		subtotal := itemDetails.Price * float64(item.Quantity)
+		detail := ItemVerificationDetail{
+			ItemID:   item.ItemID,
+			Price:    itemDetails.Price,
+			Quantity: item.Quantity,
+			Subtotal: subtotal,
+			ItemName: itemDetails.Name,
+		}
+
+		result.Details = append(result.Details, detail)
+		result.GrandTotal += subtotal
+
+		fmt.Printf("[ECOMMERCE] Item %s (%s) - Price: %.2f × Quantity: %d = Subtotal: %.2f\n",
+			item.ItemID, itemDetails.Name, itemDetails.Price, item.Quantity, subtotal)
+	}
+
+	result.IsValid = result.GrandTotal > minTotal
+
+	if result.IsValid {
+		fmt.Printf("[ECOMMERCE] Verification PASSED - Grand Total: %.2f (minimum: %.2f)\n", result.GrandTotal, minTotal)
+	} else {
+		fmt.Printf("[ECOMMERCE] Verification FAILED - Grand Total: %.2f (minimum: %.2f)\n", result.GrandTotal, minTotal)
+	}
+
+	return result, nil
 }
 
 func NewEcommerceService() EcommerceService {

@@ -149,6 +149,24 @@ func (s *EcommerceOrderCreationStrategy) FinalizeOrder(
 
 	fmt.Printf("[EcommerceOrderFinalization] Finalizing order for %d items\n", len(orders))
 
+	storesResponse, err := s.ecommerceSvc.GetStores(ctx, credentials.ApiURL, credentials.ApiKey)
+	if err != nil {
+		return fmt.Errorf("error getting stores: %w", err)
+	}
+
+	var bidmaxStoreID int
+	for _, store := range storesResponse.Stores {
+		if store.Name == "Bidmax" {
+			bidmaxStoreID = store.ID
+			fmt.Printf("[EcommerceOrderFinalization] Found Bidmax store with ID: %d\n", bidmaxStoreID)
+			break
+		}
+	}
+
+	if bidmaxStoreID == 0 {
+		return fmt.Errorf("Bidmax store not found")
+	}
+
 	customer, err := s.customerService.GetOrCreateCustomer(ctx, billing.Customer.Email)
 	if err != nil {
 		return fmt.Errorf("error getting customer: %w", err)
@@ -182,7 +200,7 @@ func (s *EcommerceOrderCreationStrategy) FinalizeOrder(
 
 	now := time.Now()
 	ecommerceOrder := &ecommerceInfra.EcommerceSimpleOrder{
-		StoreID:                 1,
+		StoreID:                 bidmaxStoreID,
 		PaymentMethodSystemName: "Payments.CashOnDelivery",
 		CustomerCurrencyCode:    "COP",
 		CurrencyRate:            1,
@@ -205,6 +223,9 @@ func (s *EcommerceOrderCreationStrategy) FinalizeOrder(
 
 	if len(orderResponse.OrderItems) > 0 && len(orderResponse.OrderItems) == len(orders) {
 		fmt.Printf("[EcommerceOrderFinalization] Updating prices for %d order items\n", len(orderResponse.OrderItems))
+
+		var orderTotalInclTax float64
+		var orderTotalExclTax float64
 
 		for i, orderItem := range orderResponse.OrderItems {
 			correspondingOrder := orders[i]
@@ -249,7 +270,29 @@ func (s *EcommerceOrderCreationStrategy) FinalizeOrder(
 				fmt.Printf("[EcommerceOrderFinalization] WARNING: Failed to update order item %d (ID: %d): %v\n", i, orderItem.ID, err)
 			} else {
 				fmt.Printf("[EcommerceOrderFinalization] Order item %d (ID: %d) price updated successfully\n", i, orderItem.ID)
+				orderTotalInclTax += priceCalc.PriceInclTax
+				orderTotalExclTax += priceCalc.PriceExclTax
 			}
+		}
+
+		fmt.Printf("[EcommerceOrderFinalization] Updating order totals - Total: %.2f, SubtotalInclTax: %.2f, SubtotalExclTax: %.2f\n",
+			orderTotalInclTax, orderTotalInclTax, orderTotalExclTax)
+
+		orderUpdate := &ecommerceInfra.EcommerceOrderUpdate{
+			OrderTotal:           orderTotalInclTax,
+			OrderSubtotalInclTax: orderTotalInclTax,
+			OrderSubtotalExclTax: orderTotalExclTax,
+			ID:                   orderResponse.ID,
+			CustomerID:           customerID,
+			BillingAddress:       &ecommerceInfra.EcommerceSimpleAddress{ID: billingAddressID},
+			ShippingAddress:      &ecommerceInfra.EcommerceSimpleAddress{ID: shippingAddressID},
+		}
+
+		err = s.ecommerceSvc.UpdateOrder(ctx, credentials.ApiURL, credentials.ApiKey, orderResponse.ID, orderUpdate)
+		if err != nil {
+			fmt.Printf("[EcommerceOrderFinalization] WARNING: Failed to update order totals: %v\n", err)
+		} else {
+			fmt.Printf("[EcommerceOrderFinalization] Order totals updated successfully\n")
 		}
 	} else if len(orderResponse.OrderItems) == 0 {
 		fmt.Printf("[EcommerceOrderFinalization] WARNING: Order created but no order item details in response. Cannot calculate tax rate.\n")
