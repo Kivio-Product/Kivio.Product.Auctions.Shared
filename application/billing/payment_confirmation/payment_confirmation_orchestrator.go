@@ -146,6 +146,13 @@ func (o *PaymentConfirmationOrchestrator) sendEventAnalytics(offer *offerDomain.
 		apiSecret     = os.Getenv("GA_API_SECRET")
 	)
 
+	offerType := "unknown"
+	if offer.Type == "Quick offer" {
+		offerType = "quick"
+	} else if offer.Type == "Regular auction" {
+		offerType = "regular"
+	}
+
 	payload := gaDomain.GAPayload{
 		ClientID: *gaClientId,
 		Events: []gaDomain.GAEvent{
@@ -155,7 +162,7 @@ func (o *PaymentConfirmationOrchestrator) sendEventAnalytics(offer *offerDomain.
 					"value":      totalAmount,
 					"currency":   "COP",
 					"offer_id":   offer.OfferId,
-					"offer_type": offer.Type,
+					"offer_type": offerType,
 					"offer_name": offer.Name,
 					"debug_mode": true,
 					"items":      gaItems,

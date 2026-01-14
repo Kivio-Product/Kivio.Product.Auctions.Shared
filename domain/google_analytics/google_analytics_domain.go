@@ -12,8 +12,8 @@ type GAPayload struct {
 }
 
 type GAItem struct {
-	ItemID   string `json:"item_id"`
-	ItemName string `json:"item_name"`
-	Quantity int    `json:"quantity"`
-	Price    int64  `json:"price"`
+	ItemID   string  `json:"item_id"`
+	ItemName string  `json:"item_name"`
+	Quantity int     `json:"quantity"`
+	Price    float64 `json:"price"`
 }

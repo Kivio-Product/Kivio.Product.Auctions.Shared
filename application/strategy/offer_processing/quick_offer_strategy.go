@@ -229,11 +229,12 @@ func (s *QuickOfferStrategy) ProcessApprovedOrders(
 					fmt.Printf("[RegularAuction] Error getting item from %s source: %v\n", itemSourceStrategy.GetSourceType(), err)
 				}
 				if item != nil {
+					unitPrice := float64(order.OfferedAmount) / float64(order.TotalQuantity)
 					result.GAItems = append(result.GAItems, gaDomain.GAItem{
 						ItemID:   itemSpec.ItemId,
 						ItemName: item.Name,
 						Quantity: order.TotalQuantity,
-						Price:    order.OfferedAmount,
+						Price:    unitPrice,
 					})
 				}
 			}
