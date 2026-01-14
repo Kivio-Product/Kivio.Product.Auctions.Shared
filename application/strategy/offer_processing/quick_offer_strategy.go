@@ -2,6 +2,7 @@ package offer_processing
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
@@ -9,6 +10,7 @@ import (
 	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
 	strategyApp "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/strategy"
 	billingDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/billing"
+	gaDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/google_analytics"
 	itemDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
 	itemSpecDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item_specification"
 	orderDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
@@ -61,6 +63,7 @@ func (s *QuickOfferStrategy) ProcessApprovedOrders(
 	var offerID string
 
 	ordersBySource := make(map[string][]*orderDomain.Order)
+	ordersToReduceStock := make(map[string]*orderDomain.Order)
 	itemSpecsToUpdate := make(map[string]*itemSpecDomain.ItemSpecification)
 
 	fmt.Printf("[QuickOffer] Processing %d orders\n", len(orders))
@@ -73,7 +76,6 @@ func (s *QuickOfferStrategy) ProcessApprovedOrders(
 		}
 
 		result.ItemNames = append(result.ItemNames, order.ExtraData)
-		result.TotalAmount += int64(order.OfferedAmount)
 
 		if result.CustomerEmail == "" {
 			result.CustomerEmail = order.CustomerId
@@ -103,6 +105,9 @@ func (s *QuickOfferStrategy) ProcessApprovedOrders(
 		switch state {
 		case "Approved":
 			order.State = "Approved"
+
+			result.TotalAmount += int64(order.OfferedAmount)
+			ordersToReduceStock[order.OrderId] = order
 
 			itemSpecsToUpdate[order.OrderId] = itemSpec
 
@@ -203,6 +208,40 @@ func (s *QuickOfferStrategy) ProcessApprovedOrders(
 			}
 		}
 	}
+	if state == "Approved" && len(ordersToReduceStock) > 0 {
+		fmt.Printf("[RegularAuction] Reducing stock for %d orders after order creation\n", len(ordersToReduceStock))
+
+		var item *itemDomain.Item
+
+		for _, order := range ordersToReduceStock {
+			itemSpec, err := s.itemSpecRepo.GetById(ctx, order.ItemSpecificationId)
+			if err != nil {
+				fmt.Printf("[RegularAuction] ERROR: Could not fetch itemSpec %s for stock reduction: %v\n", order.ItemSpecificationId, err)
+				continue
+			}
+
+			itemSourceStrategy, err := s.itemSourceFactory.GetStrategyByItemSpec(ctx, string(itemSpec.GetSource()), order.PointOfSaleId)
+			if err != nil {
+				fmt.Printf("[RegularAuction] Error getting item source strategy: %v\n", err)
+			} else {
+				item, err = itemSourceStrategy.GetItemByID(ctx, itemSpec.ItemId)
+				if err != nil {
+					fmt.Printf("[RegularAuction] Error getting item from %s source: %v\n", itemSourceStrategy.GetSourceType(), err)
+				}
+				if item != nil {
+					result.GAItems = append(result.GAItems, gaDomain.GAItem{
+						ItemID:   itemSpec.ItemId,
+						ItemName: item.Name,
+						Quantity: order.TotalQuantity,
+						Price:    order.OfferedAmount,
+					})
+				}
+			}
+		}
+	}
+
+	bytes, _ := json.MarshalIndent(result.GAItems, "", "  ")
+	fmt.Printf("[QuickOffer] GAItems for event:\n%s\n", string(bytes))
 
 	allZero := true
 	for _, availability := range itemSpecsAvailability {

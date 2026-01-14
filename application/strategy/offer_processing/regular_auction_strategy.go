@@ -11,6 +11,7 @@ import (
 	ecommerceService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
 	strategyApp "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/strategy"
 	billingDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/billing"
+	gaDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/google_analytics"
 	itemDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item"
 	itemSpecDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/item_specification"
 	orderDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
@@ -76,14 +77,18 @@ func (s *RegularAuctionStrategy) ProcessApprovedOrders(
 		}
 
 		result.ItemNames = append(result.ItemNames, order.ExtraData)
-		result.TotalAmount += int64(order.OfferedAmount)
 
 		if result.CustomerEmail == "" {
 			result.CustomerEmail = order.CustomerId
 		}
 
+		if result.OfferID == "" {
+			result.OfferID = order.OfferId
+		}
+
 		if state == "Approved" && order.State == "Approved" {
 			ordersToReduceStock[order.OrderId] = order
+			result.TotalAmount += int64(order.OfferedAmount)
 		}
 
 		if state == "Approved" && order.State == "Approved" && itemSpec.GetSource() != "" {
@@ -169,6 +174,8 @@ func (s *RegularAuctionStrategy) ProcessApprovedOrders(
 	if state == "Approved" && len(ordersToReduceStock) > 0 {
 		fmt.Printf("[RegularAuction] Reducing stock for %d orders after order creation\n", len(ordersToReduceStock))
 
+		var item *itemDomain.Item
+
 		for orderID, order := range ordersToReduceStock {
 			itemSpec, err := s.itemSpecRepo.GetById(ctx, order.ItemSpecificationId)
 			if err != nil {
@@ -185,10 +192,31 @@ func (s *RegularAuctionStrategy) ProcessApprovedOrders(
 			} else {
 				fmt.Printf("[RegularAuction] Stock reduced successfully for order %s\n", orderID)
 			}
+
+			itemSourceStrategy, err := s.itemSourceFactory.GetStrategyByItemSpec(ctx, string(itemSpec.GetSource()), order.PointOfSaleId)
+			if err != nil {
+				fmt.Printf("[RegularAuction] Error getting item source strategy: %v\n", err)
+			} else {
+				item, err = itemSourceStrategy.GetItemByID(ctx, itemSpec.ItemId)
+				if err != nil {
+					fmt.Printf("[RegularAuction] Error getting item from %s source: %v\n", itemSourceStrategy.GetSourceType(), err)
+				}
+				if item != nil {
+					result.GAItems = append(result.GAItems, gaDomain.GAItem{
+						ItemID:   itemSpec.ItemId,
+						ItemName: item.Name,
+						Quantity: order.TotalQuantity,
+						Price:    order.OfferedAmount,
+					})
+				}
+			}
 		}
 	}
 
 	fmt.Printf("[RegularAuction] Processed %d orders (created external orders and reduced stock)\n", result.ProcessedOrders)
+
+	bytes, _ := json.MarshalIndent(result.GAItems, "", "  ")
+	fmt.Printf("[RegularAuction] GAItems for event:\n%s\n", string(bytes))
 
 	return result, nil
 }
