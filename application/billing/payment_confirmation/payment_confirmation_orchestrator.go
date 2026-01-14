@@ -10,6 +10,7 @@ import (
 
 	billingHelpers "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/billing/helpers"
 	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
+	gaDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/google_analytics"
 	offerDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/offer"
 	orderDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 	domainStrategy "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/strategy"
@@ -84,7 +85,7 @@ func (o *PaymentConfirmationOrchestrator) ExecutePaymentConfirmation(
 		}
 
 		if offer != nil && offer.OfferId != "" {
-			o.sendEventAnalytics(offer, billing.UserId, billing.GaClienId, result.TotalAmount)
+			o.sendEventAnalytics(offer, billing.UserId, billing.GaClienId, result.TotalAmount, result.GAItems)
 		}
 	}
 
@@ -128,51 +129,42 @@ func (o *PaymentConfirmationOrchestrator) getStrategyForOrders(ctx context.Conte
 	return o.quickOfferStrategy
 }
 
-func (o *PaymentConfirmationOrchestrator) sendEventAnalytics(offer *offerDomain.Offer, userId string, gaClientId *string, totalAmount int64) {
+func (o *PaymentConfirmationOrchestrator) sendEventAnalytics(offer *offerDomain.Offer, userId string, gaClientId *string, totalAmount int64, gaItems []gaDomain.GAItem) {
 	fmt.Printf("[SendEventAnalytics] Start event to analytics")
 	fmt.Printf("[SendEventAnalytics] Data from event offerName: %s, userId: %s, totalAmount:%d\n", offer.Name, userId, totalAmount)
-	
+
 	if gaClientId == nil || *gaClientId == "" {
-        fmt.Println("[SendEventAnalytics] client_id missing, event not sent")
-        return
-    }
+		fmt.Println("[SendEventAnalytics] client_id missing, event not sent")
+		return
+	}
 
 	if gaClientId != nil {
 		fmt.Printf("[SendEventAnalytics] Data from event gaClientId: %s\n", *gaClientId)
-	} 
+	}
 	var (
 		measurementID = os.Getenv("GA_MEASUREMENT_ID")
 		apiSecret     = os.Getenv("GA_API_SECRET")
 	)
 
-	type GAEvent struct {
-		Name   string                 `json:"name"`
-		Params map[string]interface{} `json:"params,omitempty"`
-	}
-
-	type GAPayload struct {
-		UserID   string    `json:"user_id,omitempty"`
-		ClientID string    `json:"client_id"`
-		Events   []GAEvent `json:"events"`
-	}
-
-	payload := GAPayload{
+	payload := gaDomain.GAPayload{
 		ClientID: *gaClientId,
-		Events: []GAEvent{
+		Events: []gaDomain.GAEvent{
 			{
-				Name: "payment_confirm",
+				Name: "purchase",
 				Params: map[string]interface{}{
 					"value":      totalAmount,
+					"currency":   "COP",
 					"offer_id":   offer.OfferId,
 					"offer_type": offer.Type,
 					"offer_name": offer.Name,
 					"debug_mode": true,
+					"items":      gaItems,
 				},
 			},
 		},
 	}
 
-	if (userId != ""){
+	if userId != "" {
 		payload.UserID = userId
 	}
 

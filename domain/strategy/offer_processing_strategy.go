@@ -4,6 +4,7 @@ import (
 	"context"
 
 	billingDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/billing"
+	gaDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/google_analytics"
 	orderDomain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/order"
 )
 
@@ -36,6 +37,10 @@ type OfferProcessingResult struct {
 	// OfferID is the unique identifier of the offer being processed
 	// This links the processing result back to the specific offer
 	OfferID string
+
+	// GAItems is the collection of GA items related to this event
+	// This links the analytics purchase event to the specific products involved
+	GAItems []gaDomain.GAItem
 }
 
 // OfferProcessingStrategy defines the contract for offer processing operations
