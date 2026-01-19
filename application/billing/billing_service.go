@@ -19,7 +19,7 @@ import (
 )
 
 type BillingService interface {
-	CreateBilling(ctx context.Context, provider, posId, customerId, userId, gaClienId string, customer *domain.Customer) (*domain.Billing, error)
+	CreateBilling(ctx context.Context, provider, posId, customerId, userId, gaClienId, gaSessionId string, customer *domain.Customer) (*domain.Billing, error)
 	GetAllBillings(ctx context.Context) ([]domain.Billing, error)
 	GetBillingById(ctx context.Context, id string) (*domain.Billing, error)
 	GetBillingByIdWithExternalData(ctx context.Context, id string) (*domain.Billing, error)
@@ -60,7 +60,7 @@ func NewBillingService(
 	}
 }
 
-func (s *billingService) CreateBilling(ctx context.Context, provider, posId, customerId, userId, gaClienId string, customer *domain.Customer) (*domain.Billing, error) {
+func (s *billingService) CreateBilling(ctx context.Context, provider, posId, customerId, userId, gaClienId, gaSessionId string, customer *domain.Customer) (*domain.Billing, error) {
 	invoiceConfig := billingHelpers.GetInvoiceConfigFromEnv()
 	billing, err := s.billingFactory.CreateBilling(provider, posId, customer, invoiceConfig)
 	if err != nil {
@@ -69,6 +69,7 @@ func (s *billingService) CreateBilling(ctx context.Context, provider, posId, cus
 
 	billing.CustomerId = &customerId
 	billing.UserId = userId
+	billing.GaSessionId = gaSessionId
 	billing.GaClienId = &gaClienId
 
 	err = s.repo.SaveBilling(ctx, billing)

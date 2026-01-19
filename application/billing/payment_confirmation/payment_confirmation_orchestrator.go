@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 
 	billingHelpers "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/billing/helpers"
 	offerService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/offer"
@@ -85,7 +86,7 @@ func (o *PaymentConfirmationOrchestrator) ExecutePaymentConfirmation(
 		}
 
 		if offer != nil && offer.OfferId != "" {
-			o.sendEventAnalytics(offer, billing.UserId, billing.GaClienId, result.TotalAmount, result.GAItems)
+			o.sendEventAnalytics(offer, billing.UserId, billing.GaSessionId, billing.GaClienId, result.TotalAmount, result.GAItems)
 		}
 	}
 
@@ -129,9 +130,9 @@ func (o *PaymentConfirmationOrchestrator) getStrategyForOrders(ctx context.Conte
 	return o.quickOfferStrategy
 }
 
-func (o *PaymentConfirmationOrchestrator) sendEventAnalytics(offer *offerDomain.Offer, userId string, gaClientId *string, totalAmount int64, gaItems []gaDomain.GAItem) {
+func (o *PaymentConfirmationOrchestrator) sendEventAnalytics(offer *offerDomain.Offer, userId, gaSessionId string, gaClientId *string, totalAmount int64, gaItems []gaDomain.GAItem) {
 	fmt.Printf("[SendEventAnalytics] Start event to analytics")
-	fmt.Printf("[SendEventAnalytics] Data from event offerName: %s, userId: %s, totalAmount:%d\n", offer.Name, userId, totalAmount)
+	fmt.Printf("[SendEventAnalytics] Data from event offerName: %s, userId: %s, gaSessionId: %s, totalAmount:%d\n", offer.Name, userId, gaSessionId, totalAmount)
 
 	if gaClientId == nil || *gaClientId == "" {
 		fmt.Println("[SendEventAnalytics] client_id missing, event not sent")
@@ -153,20 +154,28 @@ func (o *PaymentConfirmationOrchestrator) sendEventAnalytics(offer *offerDomain.
 		offerType = "regular"
 	}
 
+	params := map[string]interface{}{
+		"value":      totalAmount,
+		"currency":   "COP",
+		"offer_id":   offer.OfferId,
+		"offer_type": offerType,
+		"offer_name": offer.Name,
+		"debug_mode": true,
+		"items":      gaItems,
+	}
+
+	if gaSessionId != "" {
+		parsed, _ := strconv.ParseInt(gaSessionId, 10, 64)
+		fmt.Printf("[SendEventAnalytics] Parsed sessionId: %d", parsed)
+		params["session_id"] = parsed
+	}
+
 	payload := gaDomain.GAPayload{
 		ClientID: *gaClientId,
 		Events: []gaDomain.GAEvent{
 			{
-				Name: "purchase",
-				Params: map[string]interface{}{
-					"value":      totalAmount,
-					"currency":   "COP",
-					"offer_id":   offer.OfferId,
-					"offer_type": offerType,
-					"offer_name": offer.Name,
-					"debug_mode": true,
-					"items":      gaItems,
-				},
+				Name:   "purchase",
+				Params: params,
 			},
 		},
 	}
