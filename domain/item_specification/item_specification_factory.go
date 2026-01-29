@@ -8,7 +8,7 @@ import (
 )
 
 // ItemSpecificationFactory defines the contract for creating new ItemSpecification instances
-// 
+//
 // The factory pattern is used here to encapsulate the complex creation logic
 // of ItemSpecification entities, ensuring proper initialization and validation.
 // This interface allows for different implementations of item specification creation strategies.
@@ -17,14 +17,14 @@ type ItemSpecificationFactory interface {
 }
 
 // DefaultItemSpecificationFactory provides the standard implementation of ItemSpecificationFactory
-// 
+//
 // This concrete implementation handles the creation of ItemSpecification entities with
 // standard business rules and validation. It automatically generates unique IDs,
 // sets default values, and applies proper initialization for new item specifications.
 type DefaultItemSpecificationFactory struct{}
 
 // NewItemSpecificationFactory creates a new instance of the default item specification factory
-// 
+//
 // This constructor function returns a concrete implementation of the ItemSpecificationFactory
 // interface. It follows the factory pattern by providing a clean way to instantiate
 // the factory without exposing implementation details.
@@ -36,7 +36,7 @@ func NewItemSpecificationFactory() ItemSpecificationFactory {
 }
 
 // CreateItemSpecification creates a new ItemSpecification instance with comprehensive validation and initialization
-// 
+//
 // This method is the core factory method that creates new ItemSpecification entities following
 // the domain's business rules. It performs validation on all required parameters,
 // generates a unique identifier, sets default values, and applies proper initialization
@@ -93,22 +93,22 @@ func (f *DefaultItemSpecificationFactory) CreateItemSpecification(currency, offe
 	}
 
 	return &ItemSpecification{
-		Id:            generateUUID(),
-		Amount:        amount,
-		Currency:      currency,
-		ExpireAt:      expireAt,
-		OfferId:       offerId,
-		ItemId:        itemId,
-		Availability:  availability,
-		IsExternal:    isExternal,
-		PointOfSaleId: pointOfSaleId,
-		State:         StateAvailable,
-		ReservedAt:    nil,
+		Id:                 generateUUID(),
+		Amount:             amount,
+		Currency:           currency,
+		ExpireAt:           expireAt,
+		OfferId:            offerId,
+		ItemId:             itemId,
+		Availability:       availability,
+		IsExternal:         isExternal,
+		PointOfSaleId:      pointOfSaleId,
+		State:              StateAvailable,
+		ReservedAt:         nil,
 	}, nil
 }
 
 // generateUUID creates a new unique identifier string using Google's UUID library
-// 
+//
 // This helper function encapsulates the UUID generation logic, providing a clean
 // abstraction for creating unique identifiers. It uses the google/uuid package
 // to generate RFC 4122 compliant UUIDs that are guaranteed to be unique.

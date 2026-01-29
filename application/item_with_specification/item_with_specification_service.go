@@ -24,6 +24,7 @@ type ItemWithSpecification struct {
 	Availability       int64
 	State              string
 	AllowMultipleItems bool
+	MaxPricePercentage float64
 
 	Item *itemDomain.Item
 }
@@ -117,6 +118,7 @@ func (s *itemWithSpecificationService) GetItemsWithSpecificationsByOfferId(
 			Availability:       spec.Availability,
 			State:              string(spec.State),
 			AllowMultipleItems: spec.AllowMultipleItems,
+			MaxPricePercentage: spec.MaxPricePercentage,
 			Item:               item,
 		})
 	}
