@@ -19,6 +19,7 @@ type ItemSpecificationService interface {
 	GetById(ctx context.Context, id string) (*domain.ItemSpecification, error)
 	Update(ctx context.Context, id, currency, offerId, itemId, pointOfSaleId string, amount, availability int64, expireAt time.Time) error
 	UpdateState(ctx context.Context, id string, state domain.ItemSpecificationState) error
+	UpdateMaxPercentage(ctx context.Context, id string, maxPricePercentage float64) error
 	UpdateAllowMultipleItems(ctx context.Context, id string, allowMultiple bool) error
 	Delete(ctx context.Context, id string) error
 	GetItemSpecByOfferId(ctx context.Context, id string, pointOfSaleId string) ([]domain.ItemSpecification, error)
@@ -118,6 +119,16 @@ func (s *itemSpecificationService) UpdateState(ctx context.Context, id string, s
 	if err != nil {
 		return err
 	}
+	return s.repo.Save(ctx, item)
+}
+
+func (s *itemSpecificationService) UpdateMaxPercentage(ctx context.Context, id string, maxPricePercentage float64) error{
+	item, err := s.repo.GetById(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	item.UpdateMaxPercentage(maxPricePercentage)
 	return s.repo.Save(ctx, item)
 }
 

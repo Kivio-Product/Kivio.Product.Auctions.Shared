@@ -6,16 +6,17 @@ import (
 )
 
 type Offer struct {
-	OfferId     string
-	CreatedAt   time.Time
-	Description string
-	Name        string
-	PosId       string
-	State       string
-	Type        string
-	AuctionTime int64
-	SortKey     string
-	OfferTime   *time.Time
+	OfferId       string
+	CreatedAt     time.Time
+	Description   string
+	Name          string
+	PosId         string
+	State         string
+	Type          string
+	AuctionTime   int64
+	PriceIncrease int64
+	SortKey       string
+	OfferTime     *time.Time
 }
 
 var (
@@ -24,7 +25,7 @@ var (
 )
 
 // Update modifies the core details of an offer with comprehensive validation
-// 
+//
 // This function allows updating the essential information of an offer including
 // its name, description, and auction duration. It performs validation to ensure
 // data integrity and automatically sets the SortKey to "ACTIVE" to indicate
@@ -65,7 +66,7 @@ func (o *Offer) Update(name, description string, auctionTime int64) error {
 }
 
 // UpdateState changes the current state of the offer
-// 
+//
 // This function is used to transition offers between different lifecycle states
 // in the auction system. State transitions are crucial for controlling auction flow
 // and determining when offers can be processed or modified.
@@ -93,7 +94,7 @@ func (o *Offer) UpdateState(state string) error {
 }
 
 // SetOfferTime sets the specific time when the offer becomes active
-// 
+//
 // This function allows to set the exact moment when an offer transitions a state.
 //
 // Parameters:

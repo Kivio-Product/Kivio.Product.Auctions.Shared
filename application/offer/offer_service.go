@@ -25,7 +25,7 @@ import (
 )
 
 type IOfferService interface {
-	GenerateOffer(ctx context.Context, name, description, posId, typer string, auctionTime int64) (*domain.Offer, error)
+	GenerateOffer(ctx context.Context, name, description, posId, typer string, auctionTime, priceIncrease int64) (*domain.Offer, error)
 	UpdateOffer(ctx context.Context, offerId, description, name string, auctionTime int64) error
 	UpdateOfferState(ctx context.Context, offerId, state string) error
 	GetOffers(ctx context.Context) ([]domain.Offer, error)
@@ -139,16 +139,17 @@ func (s *OfferService) SendOfferEmail(ctx context.Context, auctionURL, unsubscri
 	return nil
 }
 
-func (s *OfferService) GenerateOffer(ctx context.Context, name, description, posId, typer string, auctionTime int64) (*domain.Offer, error) {
+func (s *OfferService) GenerateOffer(ctx context.Context, name, description, posId, typer string, auctionTime, priceIncrease int64) (*domain.Offer, error) {
 	start := time.Now()
 	s.serviceLogger.LogServiceStart(ctx, "GenerateOffer", map[string]interface{}{
 		"offer_name":   name,
 		"pos_id":       posId,
 		"offer_type":   typer,
 		"auction_time": auctionTime,
+		"price_increase": priceIncrease,
 	})
 
-	offers, err := s.offerFactory.CreateOffer(name, description, posId, typer, auctionTime)
+	offers, err := s.offerFactory.CreateOffer(name, description, posId, typer, auctionTime, priceIncrease)
 	if err != nil {
 		s.serviceLogger.LogServiceError(ctx, "GenerateOffer", err, map[string]interface{}{
 			"offer_name": name,

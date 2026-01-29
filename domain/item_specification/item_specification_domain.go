@@ -6,7 +6,7 @@ import (
 )
 
 // ItemSpecificationState represents the current availability state of an item specification
-// 
+//
 // This type defines the lifecycle states that an item specification can be in,
 // controlling when items can be reserved, purchased, or are unavailable.
 type ItemSpecificationState string
@@ -19,7 +19,7 @@ const (
 )
 
 // ItemSource represents the origin of an item in the auction system
-// 
+//
 // This type defines where items come from, which affects how they are managed,
 // priced, and integrated with external systems like e-commerce platforms.
 type ItemSource string
@@ -30,7 +30,7 @@ const (
 )
 
 // ItemSpecification represents a specific item configuration within an auction offer
-// 
+//
 // An ItemSpecification defines the details of a particular item that can be auctioned,
 // including its pricing, availability, expiration, and source. It's linked to both an
 // Offer and a specific Item, providing the auction-specific configuration for that item.
@@ -48,10 +48,11 @@ type ItemSpecification struct {
 	State              ItemSpecificationState
 	ReservedAt         *time.Time
 	AllowMultipleItems bool
+	MaxPricePercentage float64
 }
 
 // Update modifies the core details of an item specification with comprehensive validation
-// 
+//
 // This method allows updating the essential information of an item specification including
 // pricing, availability, expiration, and relationships. It performs validation to ensure
 // data integrity and proper configuration for auction processing.
@@ -108,7 +109,7 @@ func (o *ItemSpecification) Update(currency, offerId, itemId, pointOfSaleId stri
 }
 
 // UpdateAllowMultipleItems sets whether multiple units of this item can be purchased together
-// 
+//
 // This method controls the purchasing behavior for this item specification, determining
 // whether customers can buy multiple units in a single order or must purchase them
 // individually. This affects order processing and inventory management.
@@ -130,7 +131,7 @@ func (o *ItemSpecification) UpdateAllowMultipleItems(allowMultiple bool) {
 }
 
 // UpdateState changes the availability state of the item specification with strict validation
-// 
+//
 // This method manages the lifecycle state transitions of an item specification, enforcing
 // business rules about which state transitions are allowed. It automatically manages
 // reservation timestamps and ensures state consistency throughout the auction process.
@@ -149,9 +150,9 @@ func (o *ItemSpecification) UpdateAllowMultipleItems(allowMultiple bool) {
 // Business Rules:
 //   - Only valid states are allowed: available, reserved, noavailable
 //   - State transitions follow strict rules:
-//     * available → reserved (only allowed transition from available)
-//     * reserved → available or noavailable (allowed transitions from reserved)
-//     * noavailable → no transitions allowed (final state)
+//   - available → reserved (only allowed transition from available)
+//   - reserved → available or noavailable (allowed transitions from reserved)
+//   - noavailable → no transitions allowed (final state)
 //   - ReservedAt is automatically managed based on state
 func (o *ItemSpecification) UpdateState(state ItemSpecificationState) error {
 	if state != StateAvailable && state != StateReserved && state != StateNoAvailable {
@@ -185,8 +186,13 @@ func (o *ItemSpecification) UpdateState(state ItemSpecificationState) error {
 	return nil
 }
 
+func (o *ItemSpecification) UpdateMaxPercentage(maxPricePercentage float64) {
+	o.MaxPricePercentage = maxPricePercentage
+}
+
+
 // IsReservationExpired checks if the current reservation has exceeded the time limit
-// 
+//
 // This method determines whether a reserved item specification has been held for too long
 // and should be automatically released back to available status. It implements a 20-minute
 // reservation timeout to prevent indefinite holds on items.
@@ -209,7 +215,7 @@ func (o *ItemSpecification) IsReservationExpired() bool {
 }
 
 // CheckAndUpdateExpiredReservation automatically releases expired reservations
-// 
+//
 // This method checks if the current reservation has expired and automatically
 // transitions the item back to "available" state if the timeout has been exceeded.
 // It's designed to be called periodically to clean up expired reservations.
@@ -234,7 +240,7 @@ func (o *ItemSpecification) CheckAndUpdateExpiredReservation() error {
 }
 
 // CheckAndUpdateAvailabilityState automatically updates state based on availability
-// 
+//
 // This method monitors the availability count and automatically transitions the item
 // to "noavailable" state when inventory reaches zero. It ensures state consistency
 // between availability count and state, preventing overselling scenarios.
@@ -259,7 +265,7 @@ func (o *ItemSpecification) CheckAndUpdateAvailabilityState() error {
 }
 
 // GetSource returns the source of the item, with intelligent fallback logic
-// 
+//
 // This method determines the actual source of the item specification, using
 // intelligent fallback logic when the Source field is not explicitly set.
 // It provides backward compatibility and automatic source detection.
@@ -288,7 +294,7 @@ func (o *ItemSpecification) GetSource() ItemSource {
 }
 
 // SetSource explicitly sets the source of the item and updates related fields
-// 
+//
 // This method sets the source of the item specification and automatically
 // updates the IsExternal field to maintain consistency between the two
 // source-related fields. It ensures data integrity across source tracking.
