@@ -26,7 +26,7 @@ import (
 
 type IOfferService interface {
 	GenerateOffer(ctx context.Context, name, description, posId, typer string, auctionTime, priceIncrease int64) (*domain.Offer, error)
-	UpdateOffer(ctx context.Context, offerId, description, name string, auctionTime int64) error
+	UpdateOffer(ctx context.Context, offerId, description, name string, auctionTime, priceIncrease int64) error
 	UpdateOfferState(ctx context.Context, offerId, state string) error
 	GetOffers(ctx context.Context) ([]domain.Offer, error)
 	GetOfferById(ctx context.Context, id string) (*domain.Offer, error)
@@ -188,9 +188,9 @@ func (s *OfferService) GenerateOffer(ctx context.Context, name, description, pos
 	return offers, nil
 }
 
-func (s *OfferService) UpdateOffer(ctx context.Context, offerId, description, name string, auctionTime int64) error {
+func (s *OfferService) UpdateOffer(ctx context.Context, offerId, description, name string, auctionTime, priceIncrease int64) error {
 	offer, err := s.repo.GetOfferById(ctx, offerId)
-	err = offer.Update(name, description, auctionTime)
+	err = offer.Update(name, description, auctionTime, priceIncrease)
 	if err != nil {
 		return err
 	}

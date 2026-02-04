@@ -48,7 +48,7 @@ var (
 //   - Description cannot be empty (required for user understanding)
 //   - AuctionTime must be positive (prevents invalid auction durations)
 //   - SortKey is automatically set to "ACTIVE" to enable auction processing
-func (o *Offer) Update(name, description string, auctionTime int64) error {
+func (o *Offer) Update(name, description string, auctionTime, priceIncrease int64) error {
 	if name == "" {
 		return errors.New("El nombre no puede estar vacío")
 	}
@@ -58,9 +58,13 @@ func (o *Offer) Update(name, description string, auctionTime int64) error {
 	if auctionTime < 0 {
 		return errors.New("el auctionTime debe ser mayor a cero")
 	}
+	if priceIncrease < 0 {
+		return errors.New("el auctionTime debe ser mayor a cero")
+	}
 	o.Name = name
 	o.Description = description
 	o.AuctionTime = auctionTime
+	o.PriceIncrease = priceIncrease
 	o.SortKey = "ACTIVE"
 	return nil
 }
