@@ -168,26 +168,29 @@ func (s *itemSpecificationService) GetItemSpecByItemId(ctx context.Context, id s
 	if err != nil {
 		return nil, err
 	}
-
-	credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, pointOfSaleId)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get ecommerce credentials: %w", err)
-	}
-
 	var stockQuantity int64
-	itemId := strings.TrimPrefix(id, "kivio-ecommerce∼")
-	itemRaw, err := s.ecommerceSvc.GetItemByIDRaw(ctx, itemId, credentials.ApiURL, credentials.ApiKey)
 
-	if err == nil && itemRaw != nil {
-		var extResp struct {
-			Products []struct {
-				StockQuantity int64 `json:"stock_quantity"`
-			} `json:"products"`
+	if strings.HasPrefix(id, "kivio-ecommerce∼") {
+		credentials, err := s.ecommerceCredSvc.GetCredentials(ctx, pointOfSaleId)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get ecommerce credentials: %w", err)
 		}
-		if jsonErr := json.Unmarshal(itemRaw, &extResp); jsonErr == nil && len(extResp.Products) > 0 {
-			stockQuantity = extResp.Products[0].StockQuantity
+
+		itemId := strings.TrimPrefix(id, "kivio-ecommerce∼")
+		itemRaw, err := s.ecommerceSvc.GetItemByIDRaw(ctx, itemId, credentials.ApiURL, credentials.ApiKey)
+
+		if err == nil && itemRaw != nil {
+			var extResp struct {
+				Products []struct {
+					StockQuantity int64 `json:"stock_quantity"`
+				} `json:"products"`
+			}
+			if jsonErr := json.Unmarshal(itemRaw, &extResp); jsonErr == nil && len(extResp.Products) > 0 {
+				stockQuantity = extResp.Products[0].StockQuantity
+			}
 		}
 	}
+
 
 	if len(itemSpecs) == 0 && stockQuantity > 0 {
 		itemSpecs = append(itemSpecs, domain.ItemSpecification{
