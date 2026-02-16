@@ -53,7 +53,7 @@ func (uc *NotifyOfferUseCase) Execute(ctx context.Context, auctionURL, unsubscri
 
 	for _, integration := range integrations {
 		if integration.Name == "Kivio Ecommerce" {
-			hasEcommerce = false
+			hasEcommerce = true
 			break
 		}
 	}
