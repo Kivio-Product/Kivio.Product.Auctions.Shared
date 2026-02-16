@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"log"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
 	services "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/ecommerce"
 	blackListService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/email_black_list"
 	application "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/file_storage"
+	integrationsService "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/application/integration"
 	domain "github.com/Kivio-Product/Kivio.Product.Auctions.Shared/domain/repository"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -22,6 +22,7 @@ type NotifyOfferUseCase struct {
 	ecommerceService        services.EcommerceService
 	ecommerceCredentialsSvc services.EcommerceCredentialsService
 	emailBlackListService   blackListService.EmailBlackListService
+	integrationsService     integrationsService.IntegrationService
 }
 
 func NewNotifyOfferUseCase(
@@ -30,6 +31,7 @@ func NewNotifyOfferUseCase(
 	ecommerceService services.EcommerceService,
 	ecommerceCredentialsSvc services.EcommerceCredentialsService,
 	emailBlackListService blackListService.EmailBlackListService,
+	integrationsService integrationsService.IntegrationService,
 ) *NotifyOfferUseCase {
 	return &NotifyOfferUseCase{
 		notifier:                notifier,
@@ -37,36 +39,31 @@ func NewNotifyOfferUseCase(
 		ecommerceService:        ecommerceService,
 		ecommerceCredentialsSvc: ecommerceCredentialsSvc,
 		emailBlackListService:   emailBlackListService,
+		integrationsService:     integrationsService,
 	}
 }
 
 func (uc *NotifyOfferUseCase) Execute(ctx context.Context, auctionURL, unsubscribeUrl, offerName, posID, posName string) error {
-	retrieveS3Emails := os.Getenv("SHOULD_RETRIEVE_S3_EMAILS")
 	emailSet := make(map[string]struct{})
+	integrations, err := uc.integrationsService.GetIntegrationsByPosID(ctx, posID)
+	if err != nil {
+		log.Printf("error al obtener integraciones: %v", err)
+	}
+	hasEcommerce := false
+
+	for _, integration := range integrations {
+		if integration.Name == "Kivio Ecommerce" {
+			hasEcommerce = false
+			break
+		}
+	}
 
 	blackListEmails, err := uc.emailBlackListService.GetBlackListEmails()
 	if err != nil {
 		log.Printf("error al obtener emails desde dynamo: %v", err)
 	}
 
-	if retrieveS3Emails == "true" {
-		s3Key := os.Getenv("S3_EMAILS_FILE")
-		if s3Key == "" {
-			return fmt.Errorf("S3_EMAILS_FILE env variable is required")
-		}
-		content, err := uc.fileStorageService.ReadFile(ctx, s3Key)
-		if err != nil {
-			return err
-		}
-		for _, line := range strings.Split(content, "\n") {
-			email := strings.TrimSpace(line)
-			if email != "" {
-				if _, exists := blackListEmails[email]; !exists {
-					emailSet[email] = struct{}{}
-				}
-			}
-		}
-	} else {
+	if hasEcommerce == true {
 		log.Printf("[DEBUG] SHOULD_RETRIEVE_S3_EMAILS es false, obteniendo emails desde ecommerce para posID: %s", posID)
 		credentials, err := uc.ecommerceCredentialsSvc.GetCredentials(ctx, posID)
 		if err == nil {
@@ -93,6 +90,46 @@ func (uc *NotifyOfferUseCase) Execute(ctx context.Context, auctionURL, unsubscri
 			}
 		} else {
 			log.Printf("[ERROR] Error al obtener credenciales para posID %s: %v", posID, err)
+		}
+
+	} else {
+		cleanName := strings.ReplaceAll(posName, " ", "-")
+		s3Key := fmt.Sprintf("files/customers-%s.csv", cleanName)
+
+		content, err := uc.fileStorageService.ReadFile(ctx, s3Key)
+		if err != nil {
+			return err
+		}
+		for i, line := range strings.Split(content, "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+
+			if i == 0 {
+				continue
+			}
+
+			var columns []string
+			if strings.Contains(line, ";") {
+				columns = strings.Split(line, ";")
+			} else {
+				columns = strings.Split(line, ",")
+			}
+			if len(columns) == 0 {
+				continue
+			}
+
+			email := strings.TrimSpace(columns[1])
+			if email == "" {
+				continue
+			}
+
+			if _, blacklisted := blackListEmails[email]; blacklisted {
+				continue
+			}
+
+			emailSet[email] = struct{}{}
 		}
 	}
 
